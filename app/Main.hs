@@ -1,24 +1,27 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Main where
 
 import Lib
 import Pipes.Concurrent
 import Pipes.Network.TCP
-import Pipes.ByteString
+import Pipes.ByteString as BS
+import Pipes.Text.IO as PT
+import Pipes.Text.Encoding as TE (encodeUtf8)
+import Pipes.Prelude as PP (map)
 import Pipes
 import Data.Monoid
-import System.IO (openFile, IOMode(WriteMode), hClose)
+import System.IO as SIO (withFile, IOMode(WriteMode))
 
 main :: IO ()
-main = do (socket, addr) <- connectSock "bylins.su" "4000"
-          (outLog, inLog) <- bsBox
-          (outConsole, inConsole) <- bsBox
-          logFile <- openFile "log" WriteMode
-          forkIO $ do runEffect $ fromSocket socket (2^15) >-> toOutput (outConsole <> outLog)
-                      performGC
-          forkIO $ do runEffect $ fromInput inConsole >-> stdout
-          forkIO $ do runEffect $ fromInput inLog >-> toHandle logFile
-          runEffect $ stdin >-> toSocket socket
-          hClose logFile
-
-bsBox :: IO (Output ByteString, Input ByteString)
-bsBox = spawn unbounded
+main = SIO.withFile "log" WriteMode $ \logFile ->
+          do (socket, addr) <- connectSock "bylins.su" "4000"
+             (outLog, inLog) <- spawn unbounded
+             (outConsole, inConsole) <- spawn unbounded
+             forkIO $ do runEffect $ fromSocket socket (2^15) >-> toOutput (outConsole <> outLog)
+                         performGC
+             forkIO $ do runEffect $ fromInput inConsole >-> BS.stdout
+                         performGC
+             forkIO $ do runEffect $ fromInput inLog >-> BS.toHandle logFile
+                         performGC
+             runEffect $ BS.stdin >-> toSocket socket

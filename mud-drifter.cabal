@@ -27,6 +27,7 @@ executable mud-drifter
                      , mud-drifter
                      , pipes-network
                      , pipes-bytestring
+                     , pipes-text
                      , pipes-concurrency
                      , pipes
   default-language:    Haskell2010
