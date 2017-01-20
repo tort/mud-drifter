@@ -18,14 +18,13 @@ import System.IO as SIO (withFile, IOMode(WriteMode))
 
 main :: IO ()
 main = SIO.withFile "log" WriteMode $ \logFile ->
-          do (socket, addr) <- connectSock "bylins.su" "4000"
-             (outLog, inLog) <- spawn unbounded
-             (outConsole, inConsole) <- spawn unbounded
-             forkIO $ do runEffect $ fromSocket socket (2^15) >-> toOutput (outConsole <> outLog)
-                         performGC
-             forkIO $ do runEffect $ fromInput inConsole >-> BS.stdout
-                         performGC
-             forkIO $ do runEffect $ fromInput inLog >-> BS.toHandle logFile
-                         performGC
-             runEffect $ Text.stdinLn >-> PP.takeWhile(/= ":quit") >-> PP.map (\x -> append x "\n") >-> PP.map encodeUtf8  >-> toSocket socket
-             closeSock socket
+            connect "bylins.su" "4000" $ \(socket, addr) ->
+            do (outLog, inLog) <- spawn unbounded
+               (outConsole, inConsole) <- spawn unbounded
+               forkIO $ do runEffect $ fromSocket socket (2^15) >-> toOutput (outConsole <> outLog)
+                           performGC
+               forkIO $ do runEffect $ fromInput inConsole >-> BS.stdout
+                           performGC
+               forkIO $ do runEffect $ fromInput inLog >-> BS.toHandle logFile
+                           performGC
+               runEffect $ Text.stdinLn >-> PP.takeWhile(/= ":quit") >-> PP.map (\x -> append x "\n") >-> PP.map encodeUtf8  >-> toSocket socket
