@@ -3,12 +3,15 @@
 module Main where
 
 import Lib
+import Control.Applicative ((<$))
 import Pipes.Concurrent
 import Pipes.Network.TCP
 import Pipes.ByteString as BS
 import Pipes.Text.IO as PT
-import Pipes.Text.Encoding as TE (encodeUtf8)
-import Pipes.Prelude as PP (map)
+import Data.Text.Encoding (encodeUtf8)
+import Data.Text as TE
+import qualified Pipes.Prelude as PP
+import Pipes.Prelude.Text as Text (stdinLn)
 import Pipes
 import Data.Monoid
 import System.IO as SIO (withFile, IOMode(WriteMode))
@@ -24,4 +27,5 @@ main = SIO.withFile "log" WriteMode $ \logFile ->
                          performGC
              forkIO $ do runEffect $ fromInput inLog >-> BS.toHandle logFile
                          performGC
-             runEffect $ BS.stdin >-> toSocket socket
+             runEffect $ Text.stdinLn >-> PP.takeWhile(/= ":quit") >-> PP.map (\x -> append x "\n") >-> PP.map encodeUtf8  >-> toSocket socket
+             closeSock socket
