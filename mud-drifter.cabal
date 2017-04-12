@@ -37,6 +37,8 @@ executable mud-drifter
                      , attoparsec
                      , bytestring
                      , word8
+                     , network
+                     , network-simple
                      , lens-family-core
   default-language:    Haskell2010
 
