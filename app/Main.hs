@@ -59,19 +59,6 @@ sendToServer :: Socket -> TE.Text -> IO ()
 sendToServer socket text = do count <- NBS.send socket (encodeUtf8 text)
                               return ()
 
-oldMain :: IO ()
-oldMain = SIO.withFile "log" WriteMode $ \logFile ->
-            PNT.connect "bylins.su" "4000" $ \(socket, addr) ->
-            do (outLog, inLog) <- spawn unbounded
-               (outConsole, inConsole) <- spawn unbounded
-               forkIO $ do runEffect $ fromSocket socket (2^15) >-> toOutput (outConsole <> outLog)
-                           performGC
-               forkIO $ do runEffect $ fromInput inConsole >-> stdout
-                           performGC
-               forkIO $ do runEffect $ fromInput inLog >-> toHandle logFile
-                           performGC
-               runEffect $ stdinLn >-> PPR.takeWhile(/= ":quit") >-> PPR.map (\x -> TE.append x "\n") >-> PPR.map encodeUtf8  >-> toSocket socket
-
 codepagePromptParser :: Parser ByteString 
 codepagePromptParser = do
     _ <- manyTill (skip (\x -> True)) (string "Select one :")
