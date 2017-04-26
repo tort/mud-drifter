@@ -19,6 +19,7 @@ import System.IO as SIO (Handle, withFile, IOMode(WriteMode))
 import Person
 import qualified Network.Socket.ByteString as NBS
 import qualified Network.Simple.TCP as NST
+import qualified Network.Socket as NS
 import Data.Maybe
 
 main :: IO ()
@@ -51,7 +52,8 @@ personHandleInput mbsocket persToConsOut _ = do liftIO $ putStrLn "cannot execut
 
 connectToServer :: Output ByteString -> IO PNT.Socket
 connectToServer persToConsOut = do (sock, addr) <- NST.connectSock "bylins.su" "4000"
-                                   forkIO $ do runEffect $ fromSocket sock (2^15) >-> toOutput persToConsOut
+                                   let closeSockOnEof = NST.closeSock sock
+                                   forkIO $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput persToConsOut
                                                performGC
                                    return sock
 
