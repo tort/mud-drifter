@@ -15,7 +15,7 @@ import Pipes.Prelude.Text (stdinLn)
 import qualified Pipes.Attoparsec as PA
 import Pipes
 import Data.Monoid
-import System.IO as SIO (Handle, withFile, IOMode(WriteMode))
+import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
 import Person
 import qualified Network.Socket.ByteString as NBS
 import qualified Network.Simple.TCP as NST
@@ -23,10 +23,10 @@ import qualified Network.Socket as NS
 import Data.Maybe
 
 main :: IO ()
-main = SIO.withFile "log" WriteMode $ runWithLog
+main = runWithLog
 
-runWithLog :: Handle -> IO ()
-runWithLog logFile = do 
+runWithLog :: IO ()
+runWithLog = do 
     (consToPersOut, consToPersIn) <- spawn unbounded
     (persToConsOut, persToConsIn) <- spawn unbounded
     forkIO $ do runEffect $ fromInput consToPersIn >-> person Nothing persToConsOut
@@ -52,8 +52,13 @@ personHandleInput mbsocket persToConsOut _ = do liftIO $ putStrLn "cannot execut
 
 connectToServer :: Output ByteString -> IO PNT.Socket
 connectToServer persToConsOut = do (sock, addr) <- NST.connectSock "bylins.su" "4000"
+                                   logFile <- openFile "log" WriteMode
+                                   (persToLogOut, persToLogIn) <- spawn unbounded
                                    let closeSockOnEof = NST.closeSock sock
-                                   forkIO $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput persToConsOut
+                                   let closeLogFile = liftIO $ hClose logFile
+                                   forkIO $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof >> closeLogFile) >-> toOutput (persToConsOut <> persToLogOut)
+                                               performGC
+                                   forkIO $ do runEffect $ fromInput persToLogIn >-> toHandle logFile
                                                performGC
                                    return sock
 
