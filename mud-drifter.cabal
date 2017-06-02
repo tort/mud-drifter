@@ -22,6 +22,7 @@ library
                      , fgl
                      , bytestring
                      , mtl
+                     , reactive-banana
   default-language:    Haskell2010
 
 executable mud-drifter
