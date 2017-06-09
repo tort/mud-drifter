@@ -12,15 +12,10 @@ import Data.Text
 import Reactive.Banana
 import Reactive.Banana.Frameworks
 import Data.Maybe
-import Pipes.Concurrent
 import Data.ByteString.Char8
 import Prelude hiding (putStrLn)
-import Pipes
 import Control.Monad
 import Data.Monoid
-import Pipes.Network.TCP
-import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
-import Pipes.ByteString (ByteString, stdout, toHandle)
 
 newtype GoCommand = GoCommand [ByteString]
 data StopCommand = StopCommand
