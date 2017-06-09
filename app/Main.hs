@@ -3,24 +3,23 @@
 module Main where
 
 import Control.Applicative ((<$), (<|>))
-import Pipes.Concurrent as PC
+import Pipes.Concurrent
 import Pipes.Network.TCP as PNT
 import Pipes.ByteString (ByteString, stdout, toHandle)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Text as TE
 import Data.Attoparsec.ByteString
-import qualified Pipes.Prelude as PPR
 import qualified Pipes.Parse as PP
 import Pipes.Prelude.Text (stdinLn, stdoutLn)
 import qualified Pipes.Attoparsec as PA
 import Pipes
 import Data.Monoid
 import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
-import Person
 import qualified Network.Socket.ByteString as NBS
 import qualified Network.Socket as NS
 import Data.Maybe
 import Person
+import Console
 import Reactive.Banana
 import Reactive.Banana.Frameworks
 import qualified Network.Simple.TCP as NST
@@ -38,7 +37,7 @@ runWithLog = do
     actuate network
     forkIO $ do runEffect $ fromInput persToConsIn >-> stdout
                 performGC
-    runEffect $ stdinLn >-> PPR.takeWhile(/= ":quit") >-> sendToPerson keepConnectionEventSource consToPersOut
+    runConsole keepConnectionEventSource consToPersOut
 
 connectToServer :: Handler DisconnectEvent -> Input ByteString -> Output ByteString -> IO ()
 connectToServer fireDisconnection consToPersIn persToConsOut = do 
@@ -55,16 +54,6 @@ connectToServer fireDisconnection consToPersIn persToConsOut = do
     forkIO $ do runEffect $ fromInput consToPersIn >-> toSocket sock
                 performGC
     return ()
-
-sendToPerson :: EventSource KeepConnectionCommand -> Output ByteString -> Consumer TE.Text IO ()
-sendToPerson keepConnectionEventSource consToPersOut = do
-  text <- await
-  toCommand text
-  sendToPerson keepConnectionEventSource consToPersOut
-  where toCommand ":conn" = liftIO $ fire keepConnectionEventSource $ KeepConnectionCommand True
-        toCommand ":disconn" = liftIO $ fire keepConnectionEventSource $ KeepConnectionCommand False
-        toCommand txt = liftIO $ do atomically $ PC.send consToPersOut (encodeUtf8 (TE.snoc txt '\n'))
-                                    return ()
 
 person :: Maybe Socket -> Output ByteString -> Consumer TE.Text IO ()
 person socket persToConsOut = do

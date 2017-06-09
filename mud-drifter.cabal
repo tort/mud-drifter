@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Person
                      , Mapper
+                     , Console
   build-depends:       base >= 4.7 && < 5
                      , text
                      , fgl
@@ -28,6 +29,7 @@ library
                      , pipes-concurrency
                      , pipes-network
                      , pipes-bytestring
+                     , pipes-text
   default-language:    Haskell2010
 
 executable mud-drifter
