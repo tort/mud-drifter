@@ -1,27 +1,48 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Person (
-  personHandle
-  , personBot
+  keepConnectedTask
+  , KeepConnectionCommand(..)
+  , fire
+  , EventSource
+  , DisconnectEvent(..)
 ) where
 
 import Data.Text
 import Reactive.Banana
 import Reactive.Banana.Frameworks
 import Data.Maybe
+import Pipes.Concurrent
+import Data.ByteString.Char8
+import Prelude hiding (putStrLn)
+import Pipes
+import Control.Monad
+import Data.Monoid
+import Pipes.Network.TCP
+import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
+import Pipes.ByteString (ByteString, stdout, toHandle)
 
-newtype GoCommand = GoCommand [String]
+newtype GoCommand = GoCommand [ByteString]
 data StopCommand = StopCommand
 newtype EnterLocationEvent = EnterLocationEvent Int
 data PulseEvent = PulseEvent
-newtype GoDirectionAction = GoDirectionAction String
+newtype GoDirectionAction = GoDirectionAction ByteString
 
-personHandle :: Text -> Text
-personHandle ":connect" = ":connected"
-personHandle text = text
+newtype KeepConnectionCommand = KeepConnectionCommand Bool
+data DisconnectEvent = DisconnectEvent
+type EventSource a = (AddHandler a, a -> IO ())
+newtype UserInput = UserInput ByteString 
 
-personBot :: IO ()
-personBot = do 
+keepConnectedTask :: EventSource KeepConnectionCommand -> EventSource DisconnectEvent -> IO () -> MomentIO ()
+keepConnectedTask keepConnectionEventSource disconnectEventSource connectToMud = do
+    disconnectionEvent <- fromAddHandler $ fst disconnectEventSource
+    keepConnectionCommand <- fromAddHandler $ fst keepConnectionEventSource
+
+    reactimate $ connectToMud <$ keepConnectionCommand
+    reactimate $ connectToMud <$ disconnectionEvent
+
+personBotTest :: IO ()
+personBotTest = do 
     (addGoCommandHandler, fireGoCommand) <- newAddHandler
     (addStopCommandHandler, fireStopCommand) <- newAddHandler
     (addEnterLocationHandler, fireEnterLocationEvent) <- newAddHandler
@@ -62,15 +83,17 @@ personBot = do
 printDirection :: GoDirectionAction -> IO ()
 printDirection (GoDirectionAction direction) = putStrLn direction
 
-removePathHead :: Maybe [String] -> Maybe [String]
+removePathHead :: Maybe [ByteString] -> Maybe [ByteString]
 removePathHead Nothing = Nothing
 removePathHead (Just []) = Nothing
 removePathHead x@(Just xs) = fmap Prelude.tail x
 
-bPathNotEmpty :: Behavior (Maybe [String]) -> Behavior Bool
+bPathNotEmpty :: Behavior (Maybe [ByteString]) -> Behavior Bool
 bPathNotEmpty = fmap pathNotEmpty
 
-pathNotEmpty :: Maybe [String] -> Bool
+pathNotEmpty :: Maybe [ByteString] -> Bool
 pathNotEmpty Nothing = False
 pathNotEmpty (Just []) = False
 pathNotEmpty (Just xs) = True
+
+fire = snd

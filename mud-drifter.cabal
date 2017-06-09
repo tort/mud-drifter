@@ -23,6 +23,11 @@ library
                      , bytestring
                      , mtl
                      , reactive-banana
+                     , network-simple
+                     , pipes
+                     , pipes-concurrency
+                     , pipes-network
+                     , pipes-bytestring
   default-language:    Haskell2010
 
 executable mud-drifter
@@ -34,9 +39,9 @@ executable mud-drifter
                      , pipes-network
                      , pipes-bytestring
                      , pipes-text
-                     , pipes-concurrency
                      , pipes-attoparsec
                      , pipes-parse
+                     , pipes-concurrency
                      , pipes
                      , text
                      , attoparsec
@@ -44,6 +49,7 @@ executable mud-drifter
                      , word8
                      , network
                      , network-simple
+                     , reactive-banana
                      , lens-family-core
   default-language:    Haskell2010
 
