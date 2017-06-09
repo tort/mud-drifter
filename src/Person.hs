@@ -8,14 +8,11 @@ module Person (
   , DisconnectEvent(..)
 ) where
 
-import Data.Text
+import Data.ByteString.Char8
 import Reactive.Banana
 import Reactive.Banana.Frameworks
 import Data.Maybe
-import Data.ByteString.Char8
 import Prelude hiding (putStrLn)
-import Control.Monad
-import Data.Monoid
 
 newtype GoCommand = GoCommand [ByteString]
 data StopCommand = StopCommand
