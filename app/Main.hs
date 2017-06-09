@@ -48,11 +48,12 @@ connectToServer fireDisconnection consToPersIn persToConsOut = do
     let closeSockOnEof = NST.closeSock sock
     let closeLogFile = liftIO $ hClose logFile
     let fireDisconnectionEvent = liftIO $ fireDisconnection DisconnectEvent
-    forkIO $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof >> closeLogFile >> fireDisconnectionEvent) >-> toOutput (persToConsOut <> persToLogOut)
+    forkIO $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput (persToConsOut <> persToLogOut) >> closeLogFile >> fireDisconnectionEvent
                 performGC
     forkIO $ do runEffect $ fromInput persToLogIn >-> toHandle logFile
                 performGC
     forkIO $ do runEffect $ fromInput consToPersIn >-> toSocket sock
+                performGC
     return ()
 
 sendToPerson :: EventSource KeepConnectionCommand -> Output ByteString -> Consumer TE.Text IO ()
@@ -61,6 +62,7 @@ sendToPerson keepConnectionEventSource consToPersOut = do
   toCommand text
   sendToPerson keepConnectionEventSource consToPersOut
   where toCommand ":conn" = liftIO $ fire keepConnectionEventSource $ KeepConnectionCommand True
+        toCommand ":disconn" = liftIO $ fire keepConnectionEventSource $ KeepConnectionCommand False
         toCommand txt = liftIO $ do atomically $ PC.send consToPersOut (encodeUtf8 (TE.snoc txt '\n'))
                                     return ()
 

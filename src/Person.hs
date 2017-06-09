@@ -36,10 +36,20 @@ newtype UserInput = UserInput ByteString
 keepConnectedTask :: EventSource KeepConnectionCommand -> EventSource DisconnectEvent -> IO () -> MomentIO ()
 keepConnectedTask keepConnectionEventSource disconnectEventSource connectToMud = do
     disconnectionEvent <- fromAddHandler $ fst disconnectEventSource
-    keepConnectionCommand <- fromAddHandler $ fst keepConnectionEventSource
+    keepConnectionEvent <- fromAddHandler $ fst keepConnectionEventSource
 
-    reactimate $ connectToMud <$ keepConnectionCommand
-    reactimate $ connectToMud <$ disconnectionEvent
+    let ifKeepConnection = (\(KeepConnectionCommand b) -> (\pair -> (snd pair, b))) <$> keepConnectionEvent
+    oldAndNewEvent <- accumE (False, False) ifKeepConnection 
+    bKeepConnection <- stepper False $ fmap (\(KeepConnectionCommand b) -> b) keepConnectionEvent
+
+    reactimate $ connectToMud <$ filterE negatedImplication oldAndNewEvent
+    reactimate $ connectToMud <$ whenE bKeepConnection disconnectionEvent
+
+negatedImplication :: (Bool, Bool) -> Bool
+negatedImplication (False, True) = True
+negatedImplication (False, False) = False
+negatedImplication (True, True) = False
+negatedImplication (True, False) = False
 
 personBotTest :: IO ()
 personBotTest = do 
