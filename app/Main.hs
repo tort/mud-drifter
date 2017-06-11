@@ -23,52 +23,17 @@ import Console
 import Reactive.Banana
 import Reactive.Banana.Frameworks
 import qualified Network.Simple.TCP as NST
+import qualified Data.ByteString.Char8 as DBC8
 
 main :: IO ()
 main = runWithLog
 
 runWithLog :: IO ()
 runWithLog = do 
-    (persToConsOut, persToConsIn) <- spawn unbounded
-    (consToPersOut, consToPersIn) <- spawn unbounded
-    keepConnectionEventSource <- newAddHandler
-    disconnectEventSource <- newAddHandler
-    network <- compile $ keepConnectedTask keepConnectionEventSource disconnectEventSource (connectToServer (snd disconnectEventSource) consToPersIn persToConsOut)
+    consoleCommandEventSource <- newAddHandler
+    network <- compile $ keepConnectedTask consoleCommandEventSource DBC8.putStrLn
     actuate network
-    forkIO $ do runEffect $ fromInput persToConsIn >-> stdout
-                performGC
-    runConsole keepConnectionEventSource consToPersOut
-
-connectToServer :: Handler DisconnectEvent -> Input ByteString -> Output ByteString -> IO ()
-connectToServer fireDisconnection consToPersIn persToConsOut = do 
-    (sock, addr) <- NST.connectSock "bylins.su" "4000"
-    logFile <- openFile "log" WriteMode
-    (persToLogOut, persToLogIn) <- spawn unbounded
-    let closeSockOnEof = NST.closeSock sock
-    let closeLogFile = liftIO $ hClose logFile
-    let fireDisconnectionEvent = liftIO $ fireDisconnection DisconnectEvent
-    forkIO $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput (persToConsOut <> persToLogOut) >> closeLogFile >> fireDisconnectionEvent
-                performGC
-    forkIO $ do runEffect $ fromInput persToLogIn >-> toHandle logFile
-                performGC
-    forkIO $ do runEffect $ fromInput consToPersIn >-> toSocket sock
-                performGC
-    return ()
-
-person :: Maybe Socket -> Output ByteString -> Consumer TE.Text IO ()
-person socket persToConsOut = do
-  text <- await
-  personHandleInput socket persToConsOut text
-
-personHandleInput :: Maybe PNT.Socket -> Output ByteString -> TE.Text -> Consumer TE.Text IO ()
-personHandleInput (Just sock) persToConsOut text = do liftIO $ sendToServer sock $ text <> "\n"
-                                                      person (Just sock) persToConsOut
-personHandleInput mbsocket persToConsOut _ = do liftIO $ putStrLn "cannot execute"
-                                                person mbsocket persToConsOut
-
-sendToServer :: Socket -> TE.Text -> IO ()
-sendToServer socket text = do count <- NBS.send socket (encodeUtf8 text)
-                              return ()
+    runConsole (\command -> snd consoleCommandEventSource $ command)
 
 codepagePromptParser :: Parser ByteString 
 codepagePromptParser = do
