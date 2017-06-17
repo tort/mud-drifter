@@ -42,23 +42,31 @@ data ConsoleCommand = UserInput Text
 
 keepConnectedTask :: EventSource ConsoleCommand -> (ByteString -> IO ()) -> MomentIO ()
 keepConnectedTask consoleCommandEventSource sendToConsoleAction = do
+    (serverEvent, fireServerEvent) <- newEvent
     (disconnectionEvent, fireDisconnection) <- newEvent
     (bSocket, fireUpdateSocket) <- newBehavior Nothing
     consoleCommandEvent <- fromAddHandler $ fst consoleCommandEventSource
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
     bKeepConnection <- stepper False keepConnectionEvent
 
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction <$ whenE bKeepConnection disconnectionEvent
-    reactimate $ consoleCommandToIO <$> bSocket <@> filterE notCommandInput consoleCommandEvent
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction fireServerEvent <$ whenE bKeepConnection disconnectionEvent
+    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ((\(UserInput txt) -> txt) <$> filterE notCommandInput consoleCommandEvent)
+
+keepLoggedTask :: MomentIO ()
+keepLoggedTask = do
+    --reactimate $ sendCommand sendToConsoleAction <$> bSocket <@ codepagePromptEvent
+    --reactimate $ sendName <$ namePromptEvent
+    --reactimate $ sendPassword <$ passwordPromptEvent
+    return ()
 
 ifTurnOnConnectionBehaviour :: Bool -> Maybe Socket -> Bool
 ifTurnOnConnectionBehaviour True Nothing = True
 ifTurnOnConnectionBehaviour _ _ = False
 
-consoleCommandToIO :: Maybe Socket -> ConsoleCommand -> IO ()
-consoleCommandToIO (Just sock) (UserInput txt) = NST.send sock $ encodeUtf8 $ snoc txt '\n'
-consoleCommandToIO Nothing input = putStrLn "no connection to server"
+sendCommand :: (ByteString -> IO ()) -> Maybe Socket -> Text -> IO ()
+sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
+sendCommand action Nothing _ = action "no connection to server"
 
 keepConnectionCommandToEvent :: ConsoleCommand -> Bool
 keepConnectionCommandToEvent (UserInput ":conn") = True
@@ -72,8 +80,8 @@ isKeepConnectionCommand _ = False
 notCommandInput :: ConsoleCommand -> Bool
 notCommandInput (UserInput input) = not $ isPrefixOf ":" input
 
-connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> (ByteString -> IO ()) -> IO ()
-connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction = do
+connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> (ByteString -> IO ()) -> Handler Text -> IO ()
+connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction fireServerEvent = do
     (sock, addr) <- NST.connectSock "bylins.su" "4000"
     updateSocketBehavior $ Just sock
     (persToConsOut, persToConsIn, sealPersToCons) <- spawn' unbounded
@@ -86,7 +94,7 @@ connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction = do
     let cleanup = closeLogFile >> liftIO (updateSocketBehavior Nothing) >> fireDisconnectionEvent 
     async $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput (persToConsOut <> persToLogOut) >> cleanup
                performGC
-    async $ do runEffect $ fromInput persToConsIn >-> PBS.stdout >> seal sealPersToCons
+    async $ do runEffect $ fromInput persToConsIn >-> sendToConsoleConsumer sendToConsoleAction >> seal sealPersToCons
                performGC
     async $ do runEffect $ fromInput persToLogIn >-> PBS.toHandle logFile >> seal sealPersToLog
                performGC

@@ -31,7 +31,7 @@ main = runWithLog
 runWithLog :: IO ()
 runWithLog = do 
     consoleCommandEventSource <- newAddHandler
-    network <- compile $ keepConnectedTask consoleCommandEventSource DBC8.putStrLn
+    network <- compile $ keepConnectedTask consoleCommandEventSource DBC8.putStr
     actuate network
     runConsole (\command -> snd consoleCommandEventSource $ command)
 
