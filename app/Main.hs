@@ -37,6 +37,7 @@ runWithLog = do
 
 codepagePromptParser :: Parser ByteString 
 codepagePromptParser = do
+    string "Using keytable"
     _ <- manyTill (skip (\x -> True)) (string "Select one :")
     return "codepage prompt"
 
@@ -47,5 +48,6 @@ namePromptParser = do
 
 passwordPromptParser :: Parser ByteString
 passwordPromptParser = do
+    string " --------"
     _ <- manyTill (skip (\x -> True)) (string "Введите пароль :")
     return "password"
