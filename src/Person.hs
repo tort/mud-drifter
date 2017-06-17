@@ -48,8 +48,8 @@ keepConnectedTask consoleCommandEventSource sendToConsoleAction = do
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
     bKeepConnection <- stepper False keepConnectionEvent
 
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket <$ whenE bKeepConnection disconnectionEvent
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction <$ whenE bKeepConnection disconnectionEvent
     reactimate $ consoleCommandToIO <$> bSocket <@> filterE notCommandInput consoleCommandEvent
 
 ifTurnOnConnectionBehaviour :: Bool -> Maybe Socket -> Bool
@@ -72,8 +72,8 @@ isKeepConnectionCommand _ = False
 notCommandInput :: ConsoleCommand -> Bool
 notCommandInput (UserInput input) = not $ isPrefixOf ":" input
 
-connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> IO ()
-connectToServer fireDisconnection updateSocketBehavior = do
+connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> (ByteString -> IO ()) -> IO ()
+connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction = do
     (sock, addr) <- NST.connectSock "bylins.su" "4000"
     updateSocketBehavior $ Just sock
     (persToConsOut, persToConsIn, sealPersToCons) <- spawn' unbounded
@@ -91,6 +91,12 @@ connectToServer fireDisconnection updateSocketBehavior = do
     async $ do runEffect $ fromInput persToLogIn >-> PBS.toHandle logFile >> seal sealPersToLog
                performGC
     return ()
+
+sendToConsoleConsumer :: (ByteString -> IO ()) -> Consumer ByteString IO ()
+sendToConsoleConsumer action = do
+    text <- await
+    liftIO $ action text
+    sendToConsoleConsumer action
 
 negatedImplication :: (Bool, Bool) -> Bool
 negatedImplication (False, True) = True
