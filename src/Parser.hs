@@ -14,10 +14,10 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | Raw Text deriving Eq
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | UnknownServerEvent deriving Eq
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> unknownMessage
+serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -48,17 +48,44 @@ passwordPrompt = do
     iacGA
     return PasswordPrompt
 
+welcomePrompt :: A.Parser ServerEvent
+welcomePrompt = do
+    crnl
+    crnl
+    string $ encodeUtf8 "Последний раз вы заходили к нам в"
+    endsIACGA
+    return WelcomePrompt
+
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do
-    text <- manyTill A.anyWord8 iacGA
-    return $ Raw $ decodeUtf8 $ B.pack text
+    endsIACGA
+    return UnknownServerEvent
 
 iacGA :: A.Parser Word8
-iacGA = do A.word8 255
-           A.word8 249
+iacGA = do iac
+           ga
+
+endsIACGA :: A.Parser Word8
+endsIACGA = do skipWhile (/= iacWord)
+               iac
+               ga
+
+iacWord :: Word8
+iacWord = 255
+
+iac :: A.Parser Word8
+iac = A.word8 255
+
+ga :: A.Parser Word8
+ga = A.word8 249
 
 cr :: A.Parser Word8
 cr = A.word8 13
 
 newline :: A.Parser Word8
 newline = A.word8 10
+
+crnl :: A.Parser Word8
+crnl = do
+    cr
+    newline

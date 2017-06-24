@@ -65,6 +65,7 @@ keepLoggedTask sendToConsoleAction bSocket serverEvent = do
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("5" <$ filterE (== CodepagePrompt) serverEvent)
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("ладень" <$ filterE (== LoginPrompt) serverEvent)
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("каркасный" <$ filterE (== PasswordPrompt) serverEvent)
+    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("" <$ filterE (== WelcomePrompt) serverEvent)
 
 sendCommand :: (ByteString -> IO ()) -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
