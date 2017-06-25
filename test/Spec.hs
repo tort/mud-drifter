@@ -9,7 +9,7 @@ import Prelude hiding (readFile, length, filter, take)
 
 main :: IO ()
 main = do
-    log <- readFile "log"
     hspec $ do
-      describe "Mapper" $ do
-        it "parse log to graph" $ countRoomsSimple log `shouldBe` countRoomsInGraph log
+      describe "Parser" $ do
+        it "parse codepage prompt, login prompt, password prompt, welcome prompt" $ parsedEvents `shouldBe` expectedLoginEvents
+        it "parse location and move to location" $ parsedEvents `shouldBe` expected
