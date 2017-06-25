@@ -14,7 +14,7 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | UnknownServerEvent deriving Eq
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | UnknownServerEvent deriving (Eq, Show)
 
 serverInputParser :: A.Parser ServerEvent
 serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> unknownMessage
