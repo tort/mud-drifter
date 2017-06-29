@@ -12,14 +12,17 @@ import Parser
 
 spec :: Spec
 spec = describe "Parser" $ do
-        it "does not fail on input" $ do log <- readFile "test/common.log"
+        it "does not fail on input" $ do log <- readFile "test/logs/common.log"
                                          shouldSucceedOn serverInputParser log
-        it "parse codepage prompt" $ do log <- readFile "test/codepagePrompt.log"
+        it "parse codepage prompt" $ do log <- readFile "test/logs/codepagePrompt.log"
                                         log ~> serverInputParser `shouldParse` CodepagePrompt
-        it "login prompt" $ do log <- readFile "test/loginPrompt.log"
-                               log ~> serverInputParser `shouldParse` LoginPrompt
-        it "password prompt" $ do log <- readFile "test/passwordPrompt.log"
-                                  log ~> serverInputParser `shouldParse` PasswordPrompt
-        it "welcome prompt" $ do log <- readFile "test/welcomePrompt.log"
-                                 log ~> serverInputParser `shouldParse` WelcomePrompt
-        it "parse location and move to location" $ pending
+        it "parse login prompt" $ do log <- readFile "test/logs/loginPrompt.log"
+                                     log ~> serverInputParser `shouldParse` LoginPrompt
+        it "parse password prompt" $ do log <- readFile "test/logs/passwordPrompt.log"
+                                        log ~> serverInputParser `shouldParse` PasswordPrompt
+        it "parse welcome prompt" $ do log <- readFile "test/logs/welcomePrompt.log"
+                                       log ~> serverInputParser `shouldParse` WelcomePrompt
+        it "parse post welcome message" $ do log <- readFile "test/logs/postWelcome.log"
+                                             log ~> serverInputParser `shouldParse` PostWelcome
+        it "parse location" $ pending
+        it "patse move to location" $ pending

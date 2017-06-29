@@ -14,10 +14,10 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | UnknownServerEvent deriving (Eq, Show)
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | UnknownServerEvent deriving (Eq, Show)
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> unknownMessage
+serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -55,6 +55,17 @@ welcomePrompt = do
     string $ encodeUtf8 "Последний раз вы заходили к нам в"
     endsIACGA
     return WelcomePrompt
+
+postWelcome :: A.Parser ServerEvent
+postWelcome = do
+    crnl
+    string $ encodeUtf8 "  Добро пожаловать на землю Киевскую, богатую историей"
+    _ <- manyTill (skip (\x -> True)) dblCrnl
+    return PostWelcome
+
+dblCrnl :: A.Parser Word8
+dblCrnl = do crnl
+             crnl
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do
