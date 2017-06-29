@@ -8,16 +8,17 @@ module Parser (
 import Control.Applicative
 import Pipes.Attoparsec
 import qualified Data.Attoparsec.ByteString as A
+import qualified Data.Attoparsec.ByteString.Char8 as C
 import Data.Text
 import Data.Attoparsec.ByteString
 import Data.Text.Encoding
 import qualified Data.ByteString as B
-import Data.Word
+import Data.Word8
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | UnknownServerEvent deriving (Eq, Show)
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location Int | UnknownServerEvent deriving (Eq, Show)
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> unknownMessage
+serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -62,6 +63,28 @@ postWelcome = do
     string $ encodeUtf8 "  Добро пожаловать на землю Киевскую, богатую историей"
     _ <- manyTill (skip (\x -> True)) dblCrnl
     return PostWelcome
+
+location :: A.Parser ServerEvent
+location = do
+    cs
+    string "1;36m"
+    _ <- skipWhile (/= _bracketleft)
+    A.word8 _bracketleft
+    locationId <- C.decimal
+    A.word8 _bracketright
+    _ <- manyTill (skip (\x -> True)) clearColors
+    return $ Location locationId
+
+clearColors :: A.Parser ()
+clearColors = do
+    cs
+    string "0;0m"
+    return ()
+
+cs :: A.Parser ()
+cs = do C.char '\ESC'
+        C.char '['
+        return ()
 
 dblCrnl :: A.Parser Word8
 dblCrnl = do crnl
