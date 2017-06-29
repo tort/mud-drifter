@@ -5,10 +5,16 @@ module ParserSpec (spec) where
 import Test.Hspec
 import Test.QuickCheck
 import Control.Exception (evaluate)
-import Data.ByteString.Char8
-import Prelude hiding (readFile, length, filter, take)
+import Data.ByteString.Char8 hiding (filter, length)
 import Test.Hspec.Attoparsec
+import Pipes.ByteString hiding (filter, length)
+import Prelude hiding (readFile, putStrLn)
+import System.IO hiding (readFile, putStrLn)
+import Pipes.Core
+import Pipes.Prelude hiding (fromHandle, filter, length)
+
 import Parser
+import Person
 
 spec :: Spec
 spec = describe "Parser" $ do
@@ -26,5 +32,13 @@ spec = describe "Parser" $ do
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
                                  log ~> serverInputParser `shouldParse` (Location (LocData 35040 "В корчме "))
-        it "patse move to location" $ do log <- readFile "test/logs/move.log"
+        it "parse move to location" $ do log <- readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (Move "юг" (LocData 35039 "Во дворе перед корчмой "))
+        it "parse multiple moves" $ do hLog <- openFile "test/logs/simpleWalk.log" ReadMode 
+                                       serverEventList <- toListM $ parseProducer (fromHandle hLog)
+                                       (length (filter isLocation serverEventList)) `shouldBe` (2 :: Int)
+                                       (length (filter isMove serverEventList)) `shouldBe` 4
+                                       where isLocation (Just (Right (Location _))) = True
+                                             isLocation _ = False
+                                             isMove (Just (Right (Move _ _))) = True
+                                             isMove _ = False

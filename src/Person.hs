@@ -7,6 +7,7 @@ module Person (
   , EventSource
   , DisconnectEvent(..)
   , ConsoleCommand(..)
+  , parseProducer
 ) where
 
 import Control.Applicative ((<$), (<|>))
@@ -109,8 +110,15 @@ connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction fireS
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do 
     (result, partial) <- liftIO $ runStateT (parse serverInputParser) src
-    yield result
-    parseProducer partial
+    continue result partial
+    where continue result@(Just (Right _)) partial = do yield result
+                                                        parseProducer partial
+          continue (Just (Left err)) _ = do liftIO $ DBC8.putStr "error"
+          continue Nothing _ = do liftIO $ DBC8.putStr "parsed entire stream"
+    {--where helper (Just (Right event)) = liftIO $ DBC8.putStr $ DBC8.pack $ show $ event
+          helper (Just (Left err)) = liftIO $ DBC8.putStr "error"
+          helper Nothing = liftIO $ DBC8.putStr "NOTHING"--}
+
 
 fireServerEventConsumer :: Handler ServerEvent -> Consumer (Maybe (Either ParsingError ServerEvent)) IO ()
 fireServerEventConsumer fireServerEvent = do
