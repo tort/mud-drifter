@@ -25,8 +25,7 @@ codepagePrompt = do
     iacWill
     iacWill
     iacWill
-    cr
-    newline
+    C.endOfLine
     string "Using keytable"
     _ <- manyTill (skip (\x -> True)) (string "Select one : ")
     return CodepagePrompt
@@ -37,8 +36,7 @@ codepagePrompt = do
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do
     string "    "
-    cr
-    newline
+    C.endOfLine
     string " --------"
     _ <- manyTill (skip (\x -> True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
     return LoginPrompt
@@ -51,15 +49,15 @@ passwordPrompt = do
 
 welcomePrompt :: A.Parser ServerEvent
 welcomePrompt = do
-    crnl
-    crnl
+    C.endOfLine
+    C.endOfLine
     string $ encodeUtf8 "Последний раз вы заходили к нам в"
     endsIACGA
     return WelcomePrompt
 
 postWelcome :: A.Parser ServerEvent
 postWelcome = do
-    crnl
+    C.endOfLine
     string $ encodeUtf8 "  Добро пожаловать на землю Киевскую, богатую историей"
     _ <- manyTill (skip (\x -> True)) dblCrnl
     return PostWelcome
@@ -86,9 +84,9 @@ cs = do C.char '\ESC'
         C.char '['
         return ()
 
-dblCrnl :: A.Parser Word8
-dblCrnl = do crnl
-             crnl
+dblCrnl :: A.Parser ()
+dblCrnl = do C.endOfLine
+             C.endOfLine
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do
@@ -112,14 +110,3 @@ iac = A.word8 255
 
 ga :: A.Parser Word8
 ga = A.word8 249
-
-cr :: A.Parser Word8
-cr = A.word8 13
-
-newline :: A.Parser Word8
-newline = A.word8 10
-
-crnl :: A.Parser Word8
-crnl = do
-    cr
-    newline
