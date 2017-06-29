@@ -3,6 +3,7 @@
 module Parser (
   serverInputParser
   , ServerEvent(..)
+  , LocData(..)
 ) where
 
 import Control.Applicative
@@ -15,10 +16,11 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location Int Text | UnknownServerEvent deriving (Eq, Show)
+data LocData = LocData Int Text deriving (Eq, Show)
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location LocData | Move Text LocData | UnknownServerEvent deriving (Eq, Show)
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> unknownMessage
+serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> move <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -71,7 +73,17 @@ location = do
     locationId <- C.decimal
     A.word8 _bracketright
     _ <- manyTill (skip (\x -> True)) clearColors
-    return $ Location locationId (decodeUtf8 locationName)
+    return $ Location $ LocData locationId (decodeUtf8 locationName)
+
+move :: A.Parser ServerEvent
+move = do
+    string $ encodeUtf8 "Вы поплелись на "
+    direction <- takeTill (== _period)
+    A.word8 _period
+    C.endOfLine
+    loc <- location
+    return $ Move (decodeUtf8 direction) $ ld loc
+    where ld (Location locData) = locData
 
 clearColors :: A.Parser ()
 clearColors = do
