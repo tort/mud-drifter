@@ -15,7 +15,7 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location Int | UnknownServerEvent deriving (Eq, Show)
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location Int Text | UnknownServerEvent deriving (Eq, Show)
 
 serverInputParser :: A.Parser ServerEvent
 serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> unknownMessage
@@ -66,12 +66,12 @@ location :: A.Parser ServerEvent
 location = do
     cs
     string "1;36m"
-    _ <- skipWhile (/= _bracketleft)
+    locationName <- takeTill (== _bracketleft)
     A.word8 _bracketleft
     locationId <- C.decimal
     A.word8 _bracketright
     _ <- manyTill (skip (\x -> True)) clearColors
-    return $ Location locationId
+    return $ Location locationId (decodeUtf8 locationName)
 
 clearColors :: A.Parser ()
 clearColors = do

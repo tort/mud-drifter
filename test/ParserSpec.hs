@@ -25,5 +25,5 @@ spec = describe "Parser" $ do
         it "parse post welcome message" $ do log <- readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
-                                 log ~> serverInputParser `shouldParse` (Location 35040)
+                                 log ~> serverInputParser `shouldParse` (Location 35040 "В корчме ")
         it "patse move to location" $ pending
