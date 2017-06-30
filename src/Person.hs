@@ -64,8 +64,8 @@ keepConnectedTask consoleCommandEventSource sendToConsoleAction = do
 keepLoggedTask :: (ByteString -> IO ()) -> Behavior (Maybe Socket) -> Event ServerEvent -> MomentIO ()
 keepLoggedTask sendToConsoleAction bSocket serverEvent = do
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("5" <$ filterE (== CodepagePrompt) serverEvent)
-    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("ладень" <$ filterE (== LoginPrompt) serverEvent)
-    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("каркасный" <$ filterE (== PasswordPrompt) serverEvent)
+    --reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("ладень" <$ filterE (== LoginPrompt) serverEvent)
+    --reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("каркасный" <$ filterE (== PasswordPrompt) serverEvent)
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("" <$ filterE (== WelcomePrompt) serverEvent)
 
 sendCommand :: (ByteString -> IO ()) -> Maybe Socket -> Text -> IO ()

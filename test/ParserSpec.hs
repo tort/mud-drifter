@@ -36,6 +36,8 @@ spec = describe "Parser" $ do
                                  log ~> serverInputParser `shouldParse` (Location (LocData 35040 "В корчме "))
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (Move "юг" (LocData 35039 "Во дворе перед корчмой "))
+        it "parse move in darkness" $ do log <- readFile "test/logs/inDarkness.log"
+                                         log ~> serverInputParser `shouldParse` (Move "север" (LocData 5200 "Лесная дорога "))
         it "parse multiple moves" $ do hLog <- openFile simpleWalkFile ReadMode 
                                        serverEventList <- toListM $ parseProducer (fromHandle hLog)
                                        expectedLocationsCount <- countStringsWith "1;36m" simpleWalkFile
