@@ -7,11 +7,13 @@ import Test.QuickCheck
 import Control.Exception (evaluate)
 import Data.ByteString.Char8 hiding (filter, length)
 import Test.Hspec.Attoparsec
-import Pipes.ByteString hiding (filter, length)
-import Prelude hiding (readFile, putStrLn)
-import System.IO hiding (readFile, putStrLn)
+import Pipes.ByteString hiding (filter, length, lines)
+import Prelude hiding (readFile, putStrLn, lines)
+import System.IO hiding (readFile, putStrLn, hGetContents)
 import Pipes.Core
 import Pipes.Prelude hiding (fromHandle, filter, length)
+import Data.Text hiding (isInfixOf, isPrefixOf, length, filter, lines)
+import Data.Text.Encoding
 
 import Parser
 import Person
@@ -34,11 +36,20 @@ spec = describe "Parser" $ do
                                  log ~> serverInputParser `shouldParse` (Location (LocData 35040 "В корчме "))
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (Move "юг" (LocData 35039 "Во дворе перед корчмой "))
-        it "parse multiple moves" $ do hLog <- openFile "test/logs/simpleWalk.log" ReadMode 
+        it "parse multiple moves" $ do hLog <- openFile simpleWalkFile ReadMode 
                                        serverEventList <- toListM $ parseProducer (fromHandle hLog)
-                                       (length (filter isLocation serverEventList)) `shouldBe` (2 :: Int)
-                                       (length (filter isMove serverEventList)) `shouldBe` 4
+                                       expectedLocationsCount <- countStringsWith "1;36m" simpleWalkFile
+                                       expectedMoveCount <- countStringsWith (encodeUtf8 "Вы поплелись") simpleWalkFile
+                                       let locationEventsCount = length (filter isLocation serverEventList)
+                                       let moveEventsCount = length (filter isMove serverEventList)
+                                       moveEventsCount `shouldBe` expectedMoveCount
+                                       (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
                                        where isLocation (Just (Right (Location _))) = True
                                              isLocation _ = False
                                              isMove (Just (Right (Move _ _))) = True
                                              isMove _ = False
+                                             countStringsWith substr file = do contents <- readFile file
+                                                                               return $ length $ filter (isInfixOf substr) $ lines contents
+                                             countStringsStartingWith substr file =  do contents <- readFile file
+                                                                                        return $ length $ filter (isPrefixOf substr) $ lines contents
+                                             simpleWalkFile = "test/logs/simpleWalk.log"
