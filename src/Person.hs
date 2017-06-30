@@ -32,6 +32,8 @@ import Control.Concurrent.Async
 import Parser
 import Pipes.Attoparsec
 import Pipes.Parse
+import qualified Data.Configurator as DC
+import Data.Configurator.Types
 
 newtype GoCommand = GoCommand [Text]
 data StopCommand = StopCommand
@@ -64,9 +66,22 @@ keepConnectedTask consoleCommandEventSource sendToConsoleAction = do
 keepLoggedTask :: (ByteString -> IO ()) -> Behavior (Maybe Socket) -> Event ServerEvent -> MomentIO ()
 keepLoggedTask sendToConsoleAction bSocket serverEvent = do
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("5" <$ filterE (== CodepagePrompt) serverEvent)
-    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("ладень" <$ filterE (== LoginPrompt) serverEvent)
-    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("каркасный" <$ filterE (== PasswordPrompt) serverEvent)
+    reactimate $ loadLoginAndSendCommand <$> bSocket <@ (filterE (== LoginPrompt) serverEvent)
+    reactimate $ loadPasswordAndSendCommand <$> bSocket <@ (filterE (== PasswordPrompt) serverEvent)
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("" <$ filterE (== WelcomePrompt) serverEvent)
+    where loadLoginAndSendCommand socket = do conf <- DC.load [Required personCfgFileName]
+                                              mbLogin <- DC.lookup conf "person.login"
+                                              handle mbLogin
+                                              where handle (Just login) = sendCommand sendToConsoleAction socket login
+                                                    handle Nothing = DTIO.putStrLn "failed to load person login"
+          loadPasswordAndSendCommand socket = do conf <- DC.load [Required personCfgFileName]
+                                                 mbPassword <- DC.lookup conf "person.password"
+                                                 handle mbPassword
+                                                 where handle (Just pass) = sendCommand sendToConsoleAction socket pass
+                                                       handle Nothing = DTIO.putStrLn "failed to load person password"
+
+personCfgFileName :: String
+personCfgFileName = "person.cfg"
 
 sendCommand :: (ByteString -> IO ()) -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'

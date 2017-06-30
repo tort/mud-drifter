@@ -37,6 +37,7 @@ library
                      , attoparsec
                      , async
                      , word8
+                     , configurator
   default-language:    Haskell2010
 
 executable mud-drifter
