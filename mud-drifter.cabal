@@ -21,7 +21,6 @@ library
                      , Parser
   build-depends:       base >= 4.7 && < 5
                      , text
-                     , fgl
                      , bytestring
                      , mtl
                      , reactive-banana
@@ -38,6 +37,7 @@ library
                      , async
                      , word8
                      , configurator
+                     , fgl
   default-language:    Haskell2010
 
 executable mud-drifter
@@ -72,10 +72,13 @@ test-suite mud-drifter-test
                      , hspec
                      , hspec-attoparsec
                      , QuickCheck
+                     , quickcheck-instances
                      , bytestring
                      , pipes-bytestring
+                     , pipes-attoparsec
                      , pipes
                      , text
+                     , fgl
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

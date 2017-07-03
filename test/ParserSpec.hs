@@ -38,20 +38,38 @@ spec = describe "Parser" $ do
                                          log ~> serverInputParser `shouldParse` (Move "юг" (LocData 35039 "Во дворе перед корчмой "))
         it "parse move in darkness" $ do log <- readFile "test/logs/inDarkness.log"
                                          log ~> serverInputParser `shouldParse` (Move "север" (LocData 5200 "Лесная дорога "))
-        it "parse multiple moves" $ do hLog <- openFile simpleWalkFile ReadMode 
-                                       serverEventList <- toListM $ parseProducer (fromHandle hLog)
-                                       expectedLocationsCount <- countStringsWith "1;36m" simpleWalkFile
-                                       expectedMoveCount <- countStringsWith (encodeUtf8 "Вы поплелись") simpleWalkFile
-                                       let locationEventsCount = length (filter isLocation serverEventList)
-                                       let moveEventsCount = length (filter isMove serverEventList)
-                                       moveEventsCount `shouldBe` expectedMoveCount
-                                       (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
-                                       where isLocation (Just (Right (Location _))) = True
-                                             isLocation _ = False
-                                             isMove (Just (Right (Move _ _))) = True
-                                             isMove _ = False
-                                             countStringsWith substr file = do contents <- readFile file
-                                                                               return $ length $ filter (isInfixOf substr) $ lines contents
-                                             countStringsStartingWith substr file =  do contents <- readFile file
-                                                                                        return $ length $ filter (isPrefixOf substr) $ lines contents
-                                             simpleWalkFile = "test/logs/simpleWalk.log"
+        it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log" 
+                                                                (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
+                                                                (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
+                                                                moveEventsCount `shouldBe` expectedMoveCount
+                                                                (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
+        it "parse log, finishing on partial move message" $ do let simpleWalkFile = "test/logs/finishingInTheMiddleOfMove.log" 
+                                                               (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
+                                                               (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
+                                                               moveEventsCount `shouldBe` (expectedMoveCount - 1)
+                                                               (locationEventsCount + moveEventsCount) `shouldBe` (expectedLocationsCount - 1)
+        it "parse multiple moves" $ do let simpleWalkFile = "test/logs/simpleWalk.log"
+                                       (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
+                                       (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
+                                       moveEventsCount `shouldBe` expectedMoveCount 
+                                       (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount 
+
+locationsAndCounts :: String -> IO (Int, Int)
+locationsAndCounts file = do 
+  hLog <- openFile file ReadMode 
+  serverEventList <- toListM $ parseProducer (fromHandle hLog)
+  let locationEventsCount = length (filter isLocation serverEventList)
+  let moveEventsCount = length (filter isMove serverEventList)
+  return (locationEventsCount, moveEventsCount)
+  where isLocation (Just (Right (Location _))) = True
+        isLocation _ = False
+        isMove (Just (Right (Move _ _))) = True
+        isMove _ = False
+
+expectedLocsAndMovesCounts :: String -> IO (Int, Int)
+expectedLocsAndMovesCounts file = do
+  expectedLocationsCount <- countStringsWith (isInfixOf "1;36m") file
+  expectedMoveCount <- countStringsWith (isInfixOf $ encodeUtf8 "Вы поплелись") file
+  return (expectedLocationsCount, expectedMoveCount)
+  where countStringsWith predicate file = do contents <- readFile file
+                                             return $ length $ filter predicate $ lines contents
