@@ -19,6 +19,13 @@ import Data.Text hiding (head, empty)
 import Data.Either
 import Data.Maybe
 
+foldToGraph :: Monad m => Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Gr Text Text)
+foldToGraph eventProducer = PP.fold accGraph empty id (eventProducer >-> PP.filter filterLocationsAndMoves 
+                                                                  >-> PP.map unwrapLocationsAndMoves 
+                                                                  >-> PP.scan toPairs (Nothing, Nothing) id 
+                                                                  >-> PP.filter mappableMove
+                                                                  >-> PP.map (\p -> (fromJust . fst $ p, fromJust . snd $ p)))
+
 
 unwrapLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
 unwrapLocationsAndMoves (Just (Right evt)) = evt
@@ -27,13 +34,6 @@ filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
 filterLocationsAndMoves (Just (Right (Location _))) = True
 filterLocationsAndMoves (Just (Right (Move _ _))) = True
 filterLocationsAndMoves _ = False
-
-foldToGraph :: Monad m => Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Gr Text Text)
-foldToGraph eventProducer = PP.fold accGraph empty id (eventProducer >-> PP.filter filterLocationsAndMoves 
-                                                                  >-> PP.map unwrapLocationsAndMoves 
-                                                                  >-> PP.scan toPairs (Nothing, Nothing) id 
-                                                                  >-> PP.filter mappableMove
-                                                                  >-> PP.map (\p -> (fromJust . fst $ p, fromJust . snd $ p)))
 
 type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
 

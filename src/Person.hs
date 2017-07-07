@@ -10,7 +10,7 @@ module Person (
   , parseProducer
 ) where
 
-import Control.Applicative ((<$), (<|>))
+import Control.Applicative ((<|>))
 import Data.Monoid
 import Data.Char
 import Data.Text as DT
@@ -40,12 +40,41 @@ data StopCommand = StopCommand
 newtype EnterLocationEvent = EnterLocationEvent Int
 data PulseEvent = PulseEvent
 newtype GoDirectionAction = GoDirectionAction Text
+data MoveRequest = MoveRequest TaskKey LocData
+type TaskKey = Int
 
 newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
 type EventSource a = (AddHandler a, a -> IO ())
 
 data ConsoleCommand = UserInput Text
+
+moveToTask :: Event MoveRequest -> Event ServerEvent -> MomentIO ()
+moveToTask moveRequest serverEvent = do
+    let locEvent = filterE isLocation serverEvent
+    let moveEvent = filterE isMove serverEvent
+    bRequests <- accumB [] $ addRequestEvent moveRequest
+    let changeCurrLocEvent = (unions [(\l@(Location locData) -> const locData) <$> locEvent
+                                     ,(\m@(Move _ locData) -> const locData) <$> moveEvent])
+
+    reactimate $ moveCommand <$> bRequests <@> changeCurrLocEvent
+
+addRequestEvent :: Event MoveRequest -> Event ([(TaskKey, LocData)] -> [(TaskKey, LocData)])
+addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) <$> moveRequest
+
+--mapToState :: MoveRequest -> ([(TaskKey, LocData)] -> [(TaskKey, LocData)])
+--mapToState (MoveRequest k dest) acc = (k, dest) : acc
+
+moveCommand :: [(TaskKey, LocData)] -> (LocData -> LocData) -> IO ()
+moveCommand = undefined
+    
+isLocation :: ServerEvent -> Bool
+isLocation (Location _) = True
+isLocation _ = False
+
+isMove :: ServerEvent -> Bool
+isMove (Move _ _) = True
+isMove _ = False
 
 keepConnectedTask :: EventSource ConsoleCommand -> (ByteString -> IO ()) -> MomentIO ()
 keepConnectedTask consoleCommandEventSource sendToConsoleAction = do
@@ -145,45 +174,6 @@ sendToConsoleConsumer action = do
     text <- await
     liftIO $ action text
     sendToConsoleConsumer action
-
-personBotTest :: IO ()
-personBotTest = do 
-    (addGoCommandHandler, fireGoCommand) <- newAddHandler
-    (addStopCommandHandler, fireStopCommand) <- newAddHandler
-    (addEnterLocationHandler, fireEnterLocationEvent) <- newAddHandler
-    (addPulseEvent, firePulseEvent) <- newAddHandler
-
-    network <- compile $ do
-        goCommandEvent <- fromAddHandler addGoCommandHandler
-        stopCommandEvent <- fromAddHandler addStopCommandHandler
-        enterLocationEvent <- fromAddHandler addEnterLocationHandler
-        pulseEvent <- fromAddHandler addPulseEvent
-
-        ifGo <- accumB False $ unions [const True <$ goCommandEvent, const False <$ stopCommandEvent]
-        path <- accumB Nothing $ unions [(\(GoCommand path) acc -> Just path) <$> goCommandEvent, removePathHead <$ enterLocationEvent]
-        let filteredPulseEvent = whenE ifGo pulseEvent
-        let pathEvent = path <@ whenE (bPathNotEmpty path) filteredPulseEvent 
-        let goDirectionAction = GoDirectionAction . Prelude.head . fromJust <$> pathEvent
-
-        reactimate $ DTIO.putStrLn "pulse event" <$ pulseEvent
-        reactimate $ printDirection <$> goDirectionAction
-
-    actuate network
-    firePulseEvent PulseEvent
-    fireGoCommand $ GoCommand ["north", "south", "west", "east"]
-    firePulseEvent PulseEvent
-    fireEnterLocationEvent $ EnterLocationEvent 1
-    firePulseEvent PulseEvent
-    fireEnterLocationEvent $ EnterLocationEvent 1
-    firePulseEvent PulseEvent
-    fireEnterLocationEvent $ EnterLocationEvent 1
-    firePulseEvent PulseEvent
-    fireEnterLocationEvent $ EnterLocationEvent 1
-    firePulseEvent PulseEvent
-    firePulseEvent PulseEvent
-    fireStopCommand StopCommand
-    firePulseEvent PulseEvent
-    firePulseEvent PulseEvent
 
 printDirection :: GoDirectionAction -> IO ()
 printDirection (GoDirectionAction direction) = DTIO.putStrLn direction
