@@ -8,6 +8,10 @@ module Person (
   , DisconnectEvent(..)
   , ConsoleCommand(..)
   , parseProducer
+  , BiBox
+  , ConsolePersonBiBox
+  , sendRight
+  , receiveLeft
 ) where
 
 import Control.Applicative ((<|>))
@@ -23,6 +27,7 @@ import qualified Network.Socket.ByteString as NBS
 import qualified Network.Socket as NS
 import Pipes
 import Pipes.Concurrent
+import qualified Pipes.Concurrent as PC
 import qualified Pipes.ByteString as PBS
 import Pipes.Network.TCP as PNT
 import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
@@ -48,6 +53,21 @@ data DisconnectEvent = DisconnectEvent
 type EventSource a = (AddHandler a, a -> IO ())
 
 data ConsoleCommand = UserInput Text
+
+type BiBox a b = ((Output a, Input a), (Output b, Input b))
+type ConsolePersonBiBox = BiBox ByteString Text
+
+receiveRight :: BiBox a b -> Input b
+receiveRight = snd . snd
+
+sendRight :: BiBox a b -> Output b
+sendRight bb = fst $ snd bb
+
+receiveLeft :: BiBox a b -> Input a
+receiveLeft = snd . fst
+
+sendLeft :: BiBox a b -> Output a
+sendLeft = fst . fst
 
 moveToTask :: Event MoveRequest -> Event ServerEvent -> MomentIO ()
 moveToTask moveRequest serverEvent = do
@@ -76,23 +96,32 @@ isMove :: ServerEvent -> Bool
 isMove (Move _ _) = True
 isMove _ = False
 
-keepConnectedTask :: EventSource ConsoleCommand -> (ByteString -> IO ()) -> MomentIO ()
-keepConnectedTask consoleCommandEventSource sendToConsoleAction = do
+sendToPersonConsumer :: Handler ConsoleCommand -> Consumer Text IO ()
+sendToPersonConsumer sendAction = do
+  text <- await
+  liftIO $ sendAction $ UserInput text
+  sendToPersonConsumer sendAction
+
+--keepConnectedTask :: EventSource ConsoleCommand -> (ByteString -> IO ()) -> MomentIO ()
+keepConnectedTask :: ConsolePersonBiBox -> Output ByteString -> MomentIO ()
+keepConnectedTask consolePersonBB remoteConsoleOut = do
+    (consoleCommandEvent, fireConsoleCommandEvent) <- newEvent
+    liftIOLater $ do async $ runEffect (fromInput (receiveRight consolePersonBB) >-> sendToPersonConsumer fireConsoleCommandEvent)
+                     return ()
     (disconnectionEvent, fireDisconnection) <- newEvent
     (bSocket, fireUpdateSocket) <- newBehavior Nothing
-    consoleCommandEvent <- fromAddHandler $ fst consoleCommandEventSource
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
     bKeepConnection <- stepper False keepConnectionEvent
 
     (serverEvent, fireServerEvent) <- newEvent
 
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsoleAction fireServerEvent <$ whenE bKeepConnection disconnectionEvent
-    reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ((\(UserInput txt) -> txt) <$> filterE notCommandInput consoleCommandEvent)
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket (sendLeft consolePersonBB) remoteConsoleOut fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket (sendLeft consolePersonBB) remoteConsoleOut fireServerEvent <$ whenE bKeepConnection disconnectionEvent
+    reactimate $ sendCommand (sendLeft consolePersonBB) <$> bSocket <@> ((\(UserInput txt) -> txt) <$> filterE notCommandInput consoleCommandEvent)
 
-    keepLoggedTask sendToConsoleAction bSocket serverEvent
+    keepLoggedTask (sendLeft consolePersonBB) bSocket serverEvent
 
-keepLoggedTask :: (ByteString -> IO ()) -> Behavior (Maybe Socket) -> Event ServerEvent -> MomentIO ()
+keepLoggedTask :: Output ByteString -> Behavior (Maybe Socket) -> Event ServerEvent -> MomentIO ()
 keepLoggedTask sendToConsoleAction bSocket serverEvent = do
     reactimate $ sendCommand sendToConsoleAction <$> bSocket <@> ("5" <$ filterE (== CodepagePrompt) serverEvent)
     reactimate $ loadLoginAndSendCommand <$> bSocket <@ (filterE (== LoginPrompt) serverEvent)
@@ -112,10 +141,10 @@ keepLoggedTask sendToConsoleAction bSocket serverEvent = do
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
 
-sendCommand :: (ByteString -> IO ()) -> Maybe Socket -> Text -> IO ()
+sendCommand :: Output ByteString -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
-sendCommand action Nothing _ = action "no connection to server"
-
+sendCommand consoleBox Nothing _ = do atomically $ PC.send consoleBox $ encodeUtf8 "no connection to server"
+                                      return ()
 keepConnectionCommandToEvent :: ConsoleCommand -> Bool
 keepConnectionCommandToEvent (UserInput ":conn") = True
 keepConnectionCommandToEvent (UserInput ":unconn") = False
@@ -128,11 +157,10 @@ isKeepConnectionCommand _ = False
 notCommandInput :: ConsoleCommand -> Bool
 notCommandInput (UserInput input) = not $ isPrefixOf ":" input
 
-connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> (ByteString -> IO ()) -> Handler ServerEvent -> IO ()
-connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction fireServerEvent = do
+connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> Output ByteString -> Output ByteString -> Handler ServerEvent -> IO ()
+connectToServer fireDisconnection updateSocketBehavior consOut remoteConsOut fireServerEvent = do
     (sock, addr) <- NST.connectSock "bylins.su" "4000"
     updateSocketBehavior $ Just sock
-    (persToConsOut, persToConsIn, sealPersToCons) <- spawn' unbounded
     logFile <- openFile "log" WriteMode
     (persToLogOut, persToLogIn, sealPersToLog) <- spawn' unbounded
     (parseServerTextOut, parseServerTextIn, sealParseServerText) <- spawn' unbounded
@@ -141,10 +169,8 @@ connectToServer fireDisconnection updateSocketBehavior sendToConsoleAction fireS
     let fireDisconnectionEvent = liftIO $ fireDisconnection DisconnectEvent
     let seal f = liftIO $ atomically f
     let cleanup = closeLogFile >> liftIO (updateSocketBehavior Nothing) >> fireDisconnectionEvent 
-    async $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput (persToConsOut <> persToLogOut <> parseServerTextOut) >> cleanup
-               performGC
-    async $ do runEffect $ fromInput persToConsIn >-> sendToConsoleConsumer sendToConsoleAction >> seal sealPersToCons
-               performGC
+    async $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput (consOut <> parseServerTextOut <> persToLogOut <> remoteConsOut) >> cleanup
+               performGC 
     async $ do runEffect $ fromInput persToLogIn >-> PBS.toHandle logFile >> seal sealPersToLog
                performGC
     async $ do runEffect $ parseProducer (fromInput parseServerTextIn) >-> fireServerEventConsumer fireServerEvent >> seal sealParseServerText

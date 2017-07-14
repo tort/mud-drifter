@@ -17,6 +17,7 @@ import Data.Text.Encoding
 
 import Parser
 import Person
+import RemoteConsole
 
 spec :: Spec
 spec = describe "Parser" $ do
@@ -53,6 +54,9 @@ spec = describe "Parser" $ do
                                        (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                        moveEventsCount `shouldBe` expectedMoveCount 
                                        (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount 
+        it "parse remote console input" $ do hLog <- openFile "test/logs/inDarkness.log" ReadMode
+                                             events <- toListM $ parseRemoteInput2 (fromHandle hLog)
+                                             events `shouldBe` ["", "blabla"]
 
 locationsAndCounts :: String -> IO (Int, Int)
 locationsAndCounts file = do 

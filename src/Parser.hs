@@ -2,8 +2,10 @@
 
 module Parser (
   serverInputParser
-  , ServerEvent(..)
+  , remoteInputParser
   , LocData(..)
+  , ServerEvent(..)
+  , RemoteConsoleEvent(..)
 ) where
 
 import Control.Applicative
@@ -11,13 +13,15 @@ import Pipes.Attoparsec
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Char8 as C
 import Data.Text
-import Data.Attoparsec.ByteString
+import Data.Attoparsec.ByteString as DAB
 import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
 
 data LocData = LocData Int Text deriving (Eq, Show)
 data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location LocData | Move Text LocData | UnknownServerEvent deriving (Eq, Show)
+
+data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
 
 serverInputParser :: A.Parser ServerEvent
 serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> move <|> unknownMessage
@@ -29,18 +33,54 @@ codepagePrompt = do
     iacWill
     C.endOfLine
     string "Using keytable"
-    _ <- manyTill (skip (\x -> True)) (string "Select one : ")
+    _ <- manyTill (skip (const True)) (string "Select one : ")
     return CodepagePrompt
-    where iacWill = do A.word8 255
-                       A.word8 251
-                       A.anyWord8
+
+iacWill :: A.Parser Word8
+iacWill = do iac
+             A.word8 251
+             A.anyWord8
+
+iacWont :: A.Parser Word8
+iacWont = do iac
+             wont
+             A.anyWord8
+
+iacDo :: A.Parser Word8
+iacDo = do iac
+           A.word8 doWord
+           A.anyWord8
+
+iacDont :: A.Parser Word8
+iacDont = do iac
+             A.word8 dontWord
+             A.anyWord8
+
+iacAny :: A.Parser Word8
+iacAny = do iac
+            A.anyWord8
+
+remoteInputParser :: A.Parser RemoteConsoleEvent
+remoteInputParser = telnetControlSeq <|> eol <|> utf8String
+    where eol = do C.endOfLine
+                   return $ RemoteUserInput ""
+          utf8String = do text <- DAB.takeWhile (\x -> x /= 255 && not (C.isEndOfLine x))
+                          eolOrIac <- A.anyWord8
+                          return $ event eolOrIac text
+                          where event wrd text
+                                  | wrd == iacWord = RemoteUserInput text
+                                  | C.isEndOfLine wrd = RemoteUserInput $ B.snoc text wrd
+
+telnetControlSeq :: A.Parser RemoteConsoleEvent
+telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny 
+                      return TelnetControlSeq
 
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do
     string "    "
     C.endOfLine
     string " --------"
-    _ <- manyTill (skip (\x -> True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
+    _ <- manyTill (skip (const True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
     return LoginPrompt
 
 passwordPrompt :: A.Parser ServerEvent
@@ -61,7 +101,7 @@ postWelcome :: A.Parser ServerEvent
 postWelcome = do
     C.endOfLine
     string $ encodeUtf8 "  Добро пожаловать на землю Киевскую, богатую историей"
-    _ <- manyTill (skip (\x -> True)) dblCrnl
+    _ <- manyTill (skip (const True)) dblCrnl
     return PostWelcome
 
 location :: A.Parser ServerEvent
@@ -72,7 +112,7 @@ location = do
     A.word8 _bracketleft
     locationId <- C.decimal
     A.word8 _bracketright
-    _ <- manyTill (skip (\x -> True)) clearColors
+    _ <- manyTill (skip (const True)) clearColors
     return $ Location $ LocData locationId (decodeUtf8 locationName)
 
 move :: A.Parser ServerEvent
@@ -116,6 +156,18 @@ endsIACGA = do skipWhile (/= iacWord)
 
 iacWord :: Word8
 iacWord = 255
+
+wontWord :: Word8
+wontWord = 252
+
+doWord :: Word8
+doWord = 253
+
+dontWord :: Word8
+dontWord = 254
+
+wont :: A.Parser Word8
+wont = A.word8 wontWord
 
 iac :: A.Parser Word8
 iac = A.word8 255
