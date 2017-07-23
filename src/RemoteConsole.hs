@@ -23,11 +23,11 @@ import Parser
 import System.IO
 import Debug.Trace
 
-runRemoteConsole :: Output TE.Text -> Input B.ByteString -> IO ()
-runRemoteConsole sendChan receiveChan = do
+runRemoteConsole :: Input B.ByteString -> Output TE.Text -> IO ()
+runRemoteConsole input output = do
   async $ serve (Host "localhost") "4000" $ \(sock, addr) -> do 
-                                                async $ runEffect $ fromInput receiveChan >-> toSocket sock
-                                                runEffect $ parseRemoteInput sock (fromSocket sock (2^15)) >-> extractText >-> PPR.map decodeUtf8 >-> toOutput sendChan
+                                                async $ runEffect $ fromInput input >-> toSocket sock
+                                                runEffect $ parseRemoteInput sock (fromSocket sock (2^15)) >-> extractText >-> PPR.map decodeUtf8 >-> toOutput output
                                                 return ()
   return ()
 

@@ -5,6 +5,7 @@ module Main where
 import Reactive.Banana
 import Reactive.Banana.Frameworks
 import Pipes.Concurrent
+import Data.Monoid
 
 import Person
 import Parser
@@ -17,10 +18,10 @@ main = runWithLog
 runWithLog :: IO ()
 runWithLog = do 
     consoleBox <- spawn unbounded
-    personBox <- spawn unbounded
     remoteConsoleBox <- spawn unbounded
-    let consolePersonBB = (consoleBox, personBox)
-    network <- compile $ keepConnectedTask consolePersonBB $ fst remoteConsoleBox
-    actuate network
-    runRemoteConsole (fst personBox) (snd remoteConsoleBox)
-    runConsole (fst personBox) (snd consoleBox)
+    
+    (toPerson, runPerson) <- initPerson
+    runPerson $ fst consoleBox <> fst remoteConsoleBox
+
+    runRemoteConsole (snd remoteConsoleBox) toPerson 
+    runConsole toPerson (snd consoleBox)

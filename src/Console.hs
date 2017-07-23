@@ -20,7 +20,7 @@ import qualified Data.ByteString as BS
 import qualified Pipes.ByteString as PB
 
 runConsole :: Output TE.Text -> Input PB.ByteString -> IO ()
-runConsole sendChan receiveChan = do
-  async $ do runEffect $ fromInput receiveChan >-> PB.stdout >> (liftIO $ BS.putStr "console receive stream finished")
+runConsole toPerson fromPerson = do
+  async $ do runEffect $ fromInput fromPerson >-> PB.stdout >> (liftIO $ BS.putStr "console receive stream finished")
              performGC
-  runEffect $ PPT.stdinLn >-> PPR.takeWhile(/= ":quit") >-> toOutput sendChan >> (liftIO $ BS.putStr "console send stream finished")
+  runEffect $ PPT.stdinLn >-> PPR.takeWhile(/= ":quit") >-> toOutput toPerson >> (liftIO $ BS.putStr "console send stream finished")
