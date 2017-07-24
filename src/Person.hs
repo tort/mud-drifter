@@ -133,7 +133,7 @@ isKeepConnectionCommand (UserInput "/unconn") = True
 isKeepConnectionCommand _ = False
 
 notCommandInput :: ConsoleCommand -> Bool
-notCommandInput (UserInput input) = not $ isPrefixOf ":" input
+notCommandInput (UserInput input) = not $ isPrefixOf "/" input
 
 connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> Output ByteString -> Handler ServerEvent -> IO ()
 connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEvent = do
