@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Person (
-  initPerson
-  , runPerson
+  runPerson
   , parseProducer -- TODO move to separate module
 ) where
 
@@ -40,15 +39,12 @@ newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
 data ConsoleCommand = UserInput Text
 
-initPerson :: IO (Output Text, Output ByteString -> IO ())
-initPerson = do
+runPerson :: Output ByteString -> IO (Output Text)
+runPerson output = do 
     personBox <- spawn unbounded
-    return (fst personBox, runPerson $ snd personBox)
-
-runPerson :: Input Text -> Output ByteString -> IO ()
-runPerson input output = do 
-    network <- compile $ keepConnectedTask input output    
+    network <- compile $ keepConnectedTask (snd personBox) output    
     actuate network
+    return $ fst personBox
 
 moveToTask :: Event MoveRequest -> Event ServerEvent -> MomentIO ()
 moveToTask moveRequest serverEvent = do

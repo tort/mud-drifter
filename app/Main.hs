@@ -17,11 +17,9 @@ main = runWithLog
 
 runWithLog :: IO ()
 runWithLog = do 
-    consoleBox <- spawn unbounded
-    remoteConsoleBox <- spawn unbounded
-    
-    (toPerson, runPerson) <- initPerson
-    runPerson $ fst consoleBox <> fst remoteConsoleBox
+    (toRemoteConsole, runRemoteConsole) <- initRemoteConsole
+    (toConsole, runConsole) <- initConsole
+    toPerson <- runPerson $ toConsole <> toRemoteConsole
 
-    runRemoteConsole (snd remoteConsoleBox) toPerson 
-    runConsole toPerson (snd consoleBox)
+    runRemoteConsole toPerson 
+    runConsole toPerson

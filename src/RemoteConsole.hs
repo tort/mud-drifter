@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module RemoteConsole (
-  runRemoteConsole
+  initRemoteConsole
+  , runRemoteConsole
 ) where
 
 import Person
@@ -22,6 +23,11 @@ import Pipes.Attoparsec
 import Parser
 import System.IO
 import Debug.Trace
+
+initRemoteConsole :: IO (Output B.ByteString, Output TE.Text -> IO ())
+initRemoteConsole = do
+    remoteConsoleBox <- spawn unbounded
+    return $ (fst remoteConsoleBox, runRemoteConsole $ snd remoteConsoleBox)
 
 runRemoteConsole :: Input B.ByteString -> Output TE.Text -> IO ()
 runRemoteConsole input output = do
