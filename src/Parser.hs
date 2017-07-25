@@ -66,10 +66,7 @@ remoteInputParser = telnetControlSeq <|> eol <|> utf8String
                    return $ RemoteUserInput ""
           utf8String = do text <- DAB.takeWhile (\x -> x /= 255 && not (C.isEndOfLine x))
                           eolOrIac <- A.anyWord8
-                          return $ event eolOrIac text
-                          where event wrd text
-                                  | wrd == iacWord = RemoteUserInput text
-                                  | C.isEndOfLine wrd = RemoteUserInput $ B.snoc text wrd
+                          return $ RemoteUserInput text
 
 telnetControlSeq :: A.Parser RemoteConsoleEvent
 telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny 
