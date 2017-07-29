@@ -41,7 +41,7 @@ data ConsoleCommand = UserInput Text
 
 runPerson :: Output ByteString -> IO (Output Text)
 runPerson output = do 
-    personBox <- spawn unbounded
+    personBox <- spawn $ bounded 1024
     network <- compile $ personTask (snd personBox) output 
     actuate network
     return $ fst personBox
@@ -54,7 +54,7 @@ writeLog :: IO (Output ByteString)
 writeLog = do
   logFile <- openFile "log" WriteMode
   let closeLogFile = liftIO $ hClose logFile
-  (persToLogOut, input, sealLog) <- spawn' unbounded
+  (persToLogOut, input, sealLog) <- spawn' $ bounded 1024
   async $ do runEffect $ fromInput input >-> PBS.toHandle logFile >> (liftIO $ atomically sealLog) >> closeLogFile
              performGC
   return persToLogOut
@@ -166,7 +166,7 @@ connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEven
 
 fireEventsFromServerInput :: Handler ServerEvent -> IO (Output ByteString)
 fireEventsFromServerInput fireServerEvent = do
-    (parseServerTextOut, parseServerTextIn, sealParseServerText) <- spawn' unbounded
+    (parseServerTextOut, parseServerTextIn, sealParseServerText) <- spawn' $ bounded 1024
     async $ do runEffect $ parseProducer (fromInput parseServerTextIn) >-> fireServerEventConsumer fireServerEvent >> (liftIO $ atomically sealParseServerText)
                performGC
     return parseServerTextOut

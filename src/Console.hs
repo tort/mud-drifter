@@ -22,7 +22,7 @@ import qualified Pipes.ByteString as PB
 
 initConsole :: IO (Output BS.ByteString, Output TE.Text -> IO ())
 initConsole = do
-    consoleBox <- spawn unbounded
+    consoleBox <- spawn $ bounded 1024
     return (fst consoleBox, runConsole $ snd consoleBox)
 
 runConsole :: Input PB.ByteString -> Output TE.Text -> IO ()

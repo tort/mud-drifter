@@ -26,7 +26,7 @@ import Debug.Trace
 
 initRemoteConsole :: IO (Output B.ByteString, Output TE.Text -> IO ())
 initRemoteConsole = do
-    remoteConsoleBox <- spawn unbounded
+    remoteConsoleBox <- spawn $ bounded 1024
     return $ (fst remoteConsoleBox, runRemoteConsole $ snd remoteConsoleBox)
 
 runRemoteConsole :: Input B.ByteString -> Output TE.Text -> IO ()
