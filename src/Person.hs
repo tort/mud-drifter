@@ -28,6 +28,7 @@ import Control.Concurrent.Async
 import Parser
 import Pipes.Attoparsec
 import Pipes.Parse
+import qualified Pipes.Safe as PSafe
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
 
@@ -49,15 +50,21 @@ runPerson output = do
 personTask :: Input Text -> Output ByteString -> MomentIO ()
 personTask fromConsoles toConsoles = do
     keepLoggedTask fromConsoles toConsoles
+    --sendCommandsTask
 
-writeLog :: IO (Output ByteString)
+{-sendCommandTask :: MomentIO (Handler ServerCommand)
+sendCommandTask = do
+  (serverCommandEvent, fireServerCommand) <- newEvent
+  reactimate $ sendCommand toConsoles <$> bSocket <@> serverCommandEvent
+  return fireServerCommand -}
+
+writeLog :: IO (Output ByteString, STM ())
 writeLog = do
   logFile <- openFile "log" WriteMode
-  let closeLogFile = liftIO $ hClose logFile
-  (persToLogOut, input, sealLog) <- spawn' $ bounded 1024
-  async $ do runEffect $ fromInput input >-> PBS.toHandle logFile >> (liftIO $ atomically sealLog) >> closeLogFile
+  (persToLogOut, input, seal) <- spawn' $ bounded 1024
+  async $ do runEffect $ fromInput input >-> PBS.toHandle logFile >> (liftIO $ hClose logFile) >> (liftIO $ DBC8.putStr "write log channel closed\n")
              performGC
-  return persToLogOut
+  return (persToLogOut, seal)
 
 fireEventsFromConsolesInput :: Input Text -> MomentIO (Event ConsoleCommand)
 fireEventsFromConsolesInput fromConsoles = do
@@ -134,7 +141,7 @@ personCfgFileName = "person.cfg"
 
 sendCommand :: Output ByteString -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
-sendCommand consoleBox Nothing _ = do atomically $ PC.send consoleBox $ encodeUtf8 "no connection to server"
+sendCommand toConsoles Nothing _ = do atomically $ PC.send toConsoles $ encodeUtf8 "no connection to server"
                                       return ()
 
 keepConnectionCommandToEvent :: ConsoleCommand -> Bool
@@ -156,20 +163,20 @@ connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEven
 
     let closeSockOnEof = NST.closeSock sock
     let fireDisconnectionEvent = liftIO $ fireDisconnection DisconnectEvent
-    let cleanup = liftIO (updateSocketBehavior Nothing) >> fireDisconnectionEvent 
 
-    writeLogChan <- writeLog
-    parseServerInputChan <- fireEventsFromServerInput fireServerEvent
-    async $ do runEffect $ (fromSocket sock (2^15) >> closeSockOnEof) >-> toOutput (toConsoles <> parseServerInputChan <> writeLogChan) >> cleanup
+    (writeLogChan, sealLogChain) <- writeLog
+    (parseServerInputChan, sealServerInputParser) <- fireEventsFromServerInput fireServerEvent
+    let cleanup = liftIO (updateSocketBehavior Nothing) >> (liftIO $ atomically sealLogChain) >> (liftIO $ atomically sealServerInputParser)
+    async $ do runEffect $ (fromSocket sock (2^15) >> (liftIO $ DBC8.putStr "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toConsoles <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
                performGC 
     return ()
 
-fireEventsFromServerInput :: Handler ServerEvent -> IO (Output ByteString)
+fireEventsFromServerInput :: Handler ServerEvent -> IO (Output ByteString, STM ())
 fireEventsFromServerInput fireServerEvent = do
-    (parseServerTextOut, parseServerTextIn, sealParseServerText) <- spawn' $ bounded 1024
-    async $ do runEffect $ parseProducer (fromInput parseServerTextIn) >-> fireServerEventConsumer fireServerEvent >> (liftIO $ atomically sealParseServerText)
+    (parseServerTextOut, parseServerTextIn, seal) <- spawn' $ bounded 1024
+    async $ do runEffect $ parseProducer (fromInput parseServerTextIn) >-> fireServerEventConsumer fireServerEvent
                performGC
-    return parseServerTextOut
+    return (parseServerTextOut, seal)
                               
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do 
