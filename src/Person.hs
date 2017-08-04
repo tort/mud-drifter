@@ -28,7 +28,6 @@ import Control.Concurrent.Async
 import Parser
 import Pipes.Attoparsec
 import Pipes.Parse
-import qualified Pipes.Safe as PSafe
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
 
