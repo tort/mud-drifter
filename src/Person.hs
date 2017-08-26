@@ -23,7 +23,7 @@ import qualified Pipes.ByteString as PBS
 import Pipes.Network.TCP as PNT
 import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
 import Data.Text.Encoding
-import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStrLn) 
+import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStrLn)
 import Control.Concurrent.Async
 import Parser
 import Pipes.Attoparsec
@@ -38,24 +38,25 @@ type TaskKey = Int
 newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
 data ConsoleCommand = UserInput Text
+data ServerCommand = ServerCommand Text
 
 runPerson :: Output ByteString -> IO (Output Text)
-runPerson output = do 
+runPerson output = do
     personBox <- spawn $ bounded 1024
-    network <- compile $ personTask (snd personBox) output 
+    network <- compile $ personTask (snd personBox) output
     actuate network
     return $ fst personBox
 
 personTask :: Input Text -> Output ByteString -> MomentIO ()
 personTask fromConsoles toConsoles = do
     keepLoggedTask fromConsoles toConsoles
-    --sendCommandsTask
 
-{-sendCommandTask :: MomentIO (Handler ServerCommand)
-sendCommandTask = do
+sendServerCommandTask :: Behavior (Maybe Socket) -> Output ByteString -> MomentIO (Handler ServerCommand)
+sendServerCommandTask bSocket toConsoles = do
   (serverCommandEvent, fireServerCommand) <- newEvent
-  reactimate $ sendCommand toConsoles <$> bSocket <@> serverCommandEvent
-  return fireServerCommand -}
+  let txt = (\(ServerCommand txt) -> txt) <$> serverCommandEvent
+  reactimate $ sendCommand toConsoles <$> bSocket <@> txt
+  return fireServerCommand
 
 writeLog :: IO (Output ByteString, STM ())
 writeLog = do
@@ -87,7 +88,7 @@ addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) 
 
 moveCommand :: [(TaskKey, LocData)] -> (LocData -> LocData) -> IO ()
 moveCommand = undefined
-    
+
 isLocation :: ServerEvent -> Bool
 isLocation (Location _) = True
 isLocation _ = False
@@ -102,38 +103,39 @@ sendToPersonConsumer sendAction = do
   liftIO $ sendAction $ UserInput text
   sendToPersonConsumer sendAction
 
-keepConnectedTask :: Input Text -> Output ByteString -> Handler ServerEvent -> MomentIO (Behavior (Maybe Socket))
+keepConnectedTask :: Input Text -> Output ByteString -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
 keepConnectedTask fromConsoles toConsoles fireServerEvent = do
     consoleCommandEvent <- fireEventsFromConsolesInput fromConsoles
     (disconnectionEvent, fireDisconnection) <- newEvent
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
     bKeepConnection <- stepper False keepConnectionEvent
     (bSocket, fireUpdateSocket) <- newBehavior Nothing
+    sendServerCommand <- sendServerCommandTask bSocket toConsoles
 
     reactimate $ connectToServer fireDisconnection fireUpdateSocket toConsoles fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
     reactimate $ connectToServer fireDisconnection fireUpdateSocket toConsoles fireServerEvent <$ whenE bKeepConnection disconnectionEvent
-    reactimate $ sendCommand toConsoles <$> bSocket <@> ((\(UserInput txt) -> txt) <$> filterE notCommandInput consoleCommandEvent)
-    return bSocket
+    reactimate $ sendServerCommand <$> ((\(UserInput txt) -> ServerCommand txt) <$> filterE notCommandInput consoleCommandEvent)
+    return sendServerCommand
 
 keepLoggedTask :: Input Text -> Output ByteString -> MomentIO ()
 keepLoggedTask fromConsoles toConsoles = do
     (serverEvent, fireServerEvent) <- newEvent
-    bSocket <- keepConnectedTask fromConsoles toConsoles fireServerEvent
+    sendServerCommand <- keepConnectedTask fromConsoles toConsoles fireServerEvent
 
-    reactimate $ sendCommand toConsoles <$> bSocket <@> ("5" <$ filterE (== CodepagePrompt) serverEvent)
-    reactimate $ loadLoginAndSendCommand <$> bSocket <@ (filterE (== LoginPrompt) serverEvent)
-    reactimate $ loadPasswordAndSendCommand <$> bSocket <@ (filterE (== PasswordPrompt) serverEvent)
-    reactimate $ sendCommand toConsoles <$> bSocket <@> ("" <$ filterE (== WelcomePrompt) serverEvent)
-    where loadLoginAndSendCommand socket = do conf <- DC.load [Required personCfgFileName]
-                                              mbLogin <- DC.lookup conf "person.login"
-                                              handle mbLogin
-                                              where handle (Just login) = sendCommand toConsoles socket login
-                                                    handle Nothing = DTIO.putStrLn "failed to load person login"
-          loadPasswordAndSendCommand socket = do conf <- DC.load [Required personCfgFileName]
-                                                 mbPassword <- DC.lookup conf "person.password"
-                                                 handle mbPassword
-                                                 where handle (Just pass) = sendCommand toConsoles socket pass
-                                                       handle Nothing = DTIO.putStrLn "failed to load person password"
+    reactimate $ sendServerCommand <$> ServerCommand <$> ("5" <$ filterE (== CodepagePrompt) serverEvent)
+    reactimate $ loadLoginAndSendCommand sendServerCommand <$ (filterE (== LoginPrompt) serverEvent)
+    reactimate $ loadPasswordAndSendCommand sendServerCommand <$ (filterE (== PasswordPrompt) serverEvent)
+    reactimate $ sendServerCommand <$> ServerCommand <$> ("" <$ filterE (== WelcomePrompt) serverEvent)
+      where loadLoginAndSendCommand sendServerCommand = do conf <- DC.load [Required personCfgFileName]
+                                                           mbLogin <- DC.lookup conf "person.login"
+                                                           handle mbLogin
+                                                             where handle (Just login) = sendServerCommand $ ServerCommand login
+                                                                   handle Nothing = DTIO.putStrLn "failed to load person login"
+            loadPasswordAndSendCommand sendServerCommand = do conf <- DC.load [Required personCfgFileName]
+                                                              mbPassword <- DC.lookup conf "person.password"
+                                                              handle mbPassword
+                                                                where handle (Just pass) = sendServerCommand $ ServerCommand pass
+                                                                      handle Nothing = DTIO.putStrLn "failed to load person password"
 
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
@@ -167,7 +169,7 @@ connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEven
     (parseServerInputChan, sealServerInputParser) <- fireEventsFromServerInput fireServerEvent
     let cleanup = liftIO (updateSocketBehavior Nothing) >> (liftIO $ atomically sealLogChain) >> (liftIO $ atomically sealServerInputParser)
     async $ do runEffect $ (fromSocket sock (2^15) >> (liftIO $ DBC8.putStr "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toConsoles <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
-               performGC 
+               performGC
     return ()
 
 fireEventsFromServerInput :: Handler ServerEvent -> IO (Output ByteString, STM ())
@@ -176,9 +178,9 @@ fireEventsFromServerInput fireServerEvent = do
     async $ do runEffect $ parseProducer (fromInput parseServerTextIn) >-> fireServerEventConsumer fireServerEvent
                performGC
     return (parseServerTextOut, seal)
-                              
+
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
-parseProducer src = do 
+parseProducer src = do
     (result, partial) <- liftIO $ runStateT (parse serverInputParser) src
     continue result partial
     where continue result@(Just (Right _)) partial = do yield result
