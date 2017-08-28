@@ -34,10 +34,11 @@ import Data.Configurator.Types
 newtype GoDirectionAction = GoDirectionAction Text
 data MoveRequest = MoveRequest TaskKey LocData
 type TaskKey = Int
+type SendToConsolesAction = ByteString -> IO ()
 
 newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
-data ConsoleCommand = UserInput Text
+data ConsoleCommand = UserInput Text | KeepConn Bool
 data ServerCommand = ServerCommand Text
 
 runPerson :: Output ByteString -> IO (Output Text)
@@ -51,11 +52,11 @@ personTask :: Input Text -> Output ByteString -> MomentIO ()
 personTask fromConsoles toConsoles = do
     keepLoggedTask fromConsoles toConsoles
 
-sendServerCommandTask :: Behavior (Maybe Socket) -> Output ByteString -> MomentIO (Handler ServerCommand)
-sendServerCommandTask bSocket toConsoles = do
+sendServerCommandTask :: Behavior (Maybe Socket) -> SendToConsolesAction -> MomentIO (Handler ServerCommand)
+sendServerCommandTask bSocket sendToConsolesAction = do
   (serverCommandEvent, fireServerCommand) <- newEvent
   let txt = (\(ServerCommand txt) -> txt) <$> serverCommandEvent
-  reactimate $ sendCommand toConsoles <$> bSocket <@> txt
+  reactimate $ sendCommand sendToConsolesAction <$> bSocket <@> txt
   return fireServerCommand
 
 writeLog :: IO (Output ByteString, STM ())
@@ -66,10 +67,10 @@ writeLog = do
              performGC
   return (persToLogOut, seal)
 
-fireEventsFromConsolesInput :: Input Text -> MomentIO (Event ConsoleCommand)
-fireEventsFromConsolesInput fromConsoles = do
-    (consoleCommandEvent, fireConsoleCommandEvent) <- newEvent
-    liftIOLater $ do async $ runEffect $ fromInput fromConsoles >-> sendToPersonConsumer fireConsoleCommandEvent
+fireEventsFromConsolesInput :: SendToConsolesAction -> Input Text -> MomentIO (Event ConsoleCommand)
+fireEventsFromConsolesInput sendToConsolesAction fromConsolesChan = do
+    (consoleCommandEvent, trigger) <- newEvent
+    liftIOLater $ do async $ runEffect $ fromInput fromConsolesChan >-> handleInputFromConsolesConsumer sendToConsolesAction trigger
                      return ()
     return consoleCommandEvent
 
@@ -97,20 +98,28 @@ isMove :: ServerEvent -> Bool
 isMove (Move _ _) = True
 isMove _ = False
 
-sendToPersonConsumer :: Handler ConsoleCommand -> Consumer Text IO ()
-sendToPersonConsumer sendAction = do
+handleInputFromConsolesConsumer :: SendToConsolesAction -> Handler ConsoleCommand -> Consumer Text IO ()
+handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent = do
   text <- await
-  liftIO $ sendAction $ UserInput text
-  sendToPersonConsumer sendAction
+  liftIO $ handleInputFromConsoles sendToConsolesAction fireConsoleCommandEvent text
+  handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent
+
+handleInputFromConsoles :: SendToConsolesAction -> Handler ConsoleCommand -> Text -> IO ()
+handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/conn" = consoleCommandEventTrigger $ KeepConn True
+handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
+handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
+  | isPrefixOf "/" txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt
+  | otherwise = consoleCommandEventTrigger $ UserInput txt
 
 keepConnectedTask :: Input Text -> Output ByteString -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
 keepConnectedTask fromConsoles toConsoles fireServerEvent = do
-    consoleCommandEvent <- fireEventsFromConsolesInput fromConsoles
+    let sendToConsolesAction = sendToConsoles toConsoles
+    consoleCommandEvent <- fireEventsFromConsolesInput sendToConsolesAction fromConsoles
     (disconnectionEvent, fireDisconnection) <- newEvent
-    let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
+    let keepConnectionEvent = keepConnectionCommandToEvent <$> (filterE isKeepConnectionCommand consoleCommandEvent)
     bKeepConnection <- stepper False keepConnectionEvent
     (bSocket, fireUpdateSocket) <- newBehavior Nothing
-    sendServerCommand <- sendServerCommandTask bSocket toConsoles
+    sendServerCommand <- sendServerCommandTask bSocket sendToConsolesAction
 
     reactimate $ connectToServer fireDisconnection fireUpdateSocket toConsoles fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
     reactimate $ connectToServer fireDisconnection fireUpdateSocket toConsoles fireServerEvent <$ whenE bKeepConnection disconnectionEvent
@@ -140,22 +149,24 @@ keepLoggedTask fromConsoles toConsoles = do
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
 
-sendCommand :: Output ByteString -> Maybe Socket -> Text -> IO ()
+sendCommand :: SendToConsolesAction -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
-sendCommand toConsoles Nothing _ = do atomically $ PC.send toConsoles $ encodeUtf8 "no connection to server"
-                                      return ()
+sendCommand sendToConsolesAction Nothing _ = sendToConsolesAction "no connection to server"
+
+sendToConsoles :: Output ByteString -> SendToConsolesAction
+sendToConsoles channel msg = do atomically $ PC.send channel $ msg <> "\n"
+                                return ()
 
 keepConnectionCommandToEvent :: ConsoleCommand -> Bool
-keepConnectionCommandToEvent (UserInput "/conn") = True
-keepConnectionCommandToEvent (UserInput "/unconn") = False
+keepConnectionCommandToEvent (KeepConn v) = v
 
 isKeepConnectionCommand :: ConsoleCommand -> Bool
-isKeepConnectionCommand (UserInput "/conn") = True
-isKeepConnectionCommand (UserInput "/unconn") = True
+isKeepConnectionCommand (KeepConn _) = True
 isKeepConnectionCommand _ = False
 
 notCommandInput :: ConsoleCommand -> Bool
-notCommandInput (UserInput input) = not $ isPrefixOf "/" input
+notCommandInput (UserInput _) = True
+notCommandInput _ = False
 
 connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> Output ByteString -> Handler ServerEvent -> IO ()
 connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEvent = do
