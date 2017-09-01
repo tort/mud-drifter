@@ -49,8 +49,7 @@ runPerson output = do
     return $ fst personBox
 
 personTask :: Input Text -> Output ByteString -> MomentIO ()
-personTask fromConsoles toConsoles = do
-    keepLoggedTask fromConsoles toConsoles
+personTask = keepLoggedTask
 
 sendServerCommandTask :: Behavior (Maybe Socket) -> SendToConsolesAction -> MomentIO (Handler ServerCommand)
 sendServerCommandTask bSocket sendToConsolesAction = do
@@ -63,7 +62,7 @@ writeLog :: IO (Output ByteString, STM ())
 writeLog = do
   logFile <- openFile "log" WriteMode
   (persToLogOut, input, seal) <- spawn' $ bounded 1024
-  async $ do runEffect $ fromInput input >-> PBS.toHandle logFile >> (liftIO $ hClose logFile) >> (liftIO $ DBC8.putStr "write log channel closed\n")
+  async $ do runEffect $ fromInput input >-> PBS.toHandle logFile >> liftIO (hClose logFile) >> liftIO (DBC8.putStr "write log channel closed\n")
              performGC
   return (persToLogOut, seal)
 
@@ -79,8 +78,8 @@ moveToTask moveRequest serverEvent = do
     let locEvent = filterE isLocation serverEvent
     let moveEvent = filterE isMove serverEvent
     bRequests <- accumB [] $ addRequestEvent moveRequest
-    let changeCurrLocEvent = (unions [(\l@(Location locData) -> const locData) <$> locEvent
-                                     ,(\m@(Move _ locData) -> const locData) <$> moveEvent])
+    let changeCurrLocEvent = unions [(\l@(Location locData) -> const locData) <$> locEvent
+                                     ,(\m@(Move _ locData) -> const locData) <$> moveEvent]
 
     reactimate $ moveCommand <$> bRequests <@> changeCurrLocEvent
 
@@ -108,7 +107,7 @@ handleInputFromConsoles :: SendToConsolesAction -> Handler ConsoleCommand -> Tex
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/conn" = consoleCommandEventTrigger $ KeepConn True
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
-  | isPrefixOf "/" txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt
+  | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt
   | otherwise = consoleCommandEventTrigger $ UserInput txt
 
 keepConnectedTask :: Input Text -> Output ByteString -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
@@ -116,7 +115,7 @@ keepConnectedTask fromConsoles toConsoles fireServerEvent = do
     let sendToConsolesAction = sendToConsoles toConsoles
     consoleCommandEvent <- fireEventsFromConsolesInput sendToConsolesAction fromConsoles
     (disconnectionEvent, fireDisconnection) <- newEvent
-    let keepConnectionEvent = keepConnectionCommandToEvent <$> (filterE isKeepConnectionCommand consoleCommandEvent)
+    let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
     bKeepConnection <- stepper False keepConnectionEvent
     (bSocket, fireUpdateSocket) <- newBehavior Nothing
     sendServerCommand <- sendServerCommandTask bSocket sendToConsolesAction
@@ -131,23 +130,31 @@ keepLoggedTask fromConsoles toConsoles = do
     (serverEvent, fireServerEvent) <- newEvent
     sendServerCommand <- keepConnectedTask fromConsoles toConsoles fireServerEvent
 
-    reactimate $ sendServerCommand <$> ServerCommand <$> ("5" <$ filterE (== CodepagePrompt) serverEvent)
-    reactimate $ loadLoginAndSendCommand sendServerCommand <$ (filterE (== LoginPrompt) serverEvent)
-    reactimate $ loadPasswordAndSendCommand sendServerCommand <$ (filterE (== PasswordPrompt) serverEvent)
-    reactimate $ sendServerCommand <$> ServerCommand <$> ("" <$ filterE (== WelcomePrompt) serverEvent)
-      where loadLoginAndSendCommand sendServerCommand = do conf <- DC.load [Required personCfgFileName]
-                                                           mbLogin <- DC.lookup conf "person.login"
-                                                           handle mbLogin
+    reactimate $ sendServerCommand codepageServerCommand <$ filterE (== CodepagePrompt) serverEvent
+    reactimate $ loadLoginAndSendCommand sendServerCommand <$ filterE (== LoginPrompt) serverEvent
+    reactimate $ loadPasswordAndSendCommand sendServerCommand <$ filterE (== PasswordPrompt) serverEvent
+    reactimate $ sendServerCommand emptyServerCommand <$ filterE (== WelcomePrompt) serverEvent
+      where loadLoginAndSendCommand sendServerCommand = handle =<< loadConfigProperty "person.login"
                                                              where handle (Just login) = sendServerCommand $ ServerCommand login
-                                                                   handle Nothing = DTIO.putStrLn "failed to load person login"
-            loadPasswordAndSendCommand sendServerCommand = do conf <- DC.load [Required personCfgFileName]
-                                                              mbPassword <- DC.lookup conf "person.password"
-                                                              handle mbPassword
+                                                                   handle Nothing = sendToConsolesAction "failed to load person login"
+            loadPasswordAndSendCommand sendServerCommand = handle =<< loadConfigProperty "person.password"
                                                                 where handle (Just pass) = sendServerCommand $ ServerCommand pass
-                                                                      handle Nothing = DTIO.putStrLn "failed to load person password"
+                                                                      handle Nothing = sendToConsolesAction "failed to load person password"
+            sendToConsolesAction = sendToConsoles toConsoles
 
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
+
+codepageServerCommand :: ServerCommand
+codepageServerCommand = ServerCommand "5"
+
+loadConfigProperty :: Text -> IO (Maybe Text)
+loadConfigProperty propertyName = do conf <- DC.load [Required personCfgFileName]
+                                     propertyValue <- DC.lookup conf propertyName
+                                     return propertyValue
+
+emptyServerCommand :: ServerCommand
+emptyServerCommand = ServerCommand ""
 
 sendCommand :: SendToConsolesAction -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
@@ -178,8 +185,8 @@ connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEven
 
     (writeLogChan, sealLogChain) <- writeLog
     (parseServerInputChan, sealServerInputParser) <- fireEventsFromServerInput fireServerEvent
-    let cleanup = liftIO (updateSocketBehavior Nothing) >> (liftIO $ atomically sealLogChain) >> (liftIO $ atomically sealServerInputParser)
-    async $ do runEffect $ (fromSocket sock (2^15) >> (liftIO $ DBC8.putStr "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toConsoles <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
+    let cleanup = liftIO (updateSocketBehavior Nothing) >> liftIO (atomically sealLogChain) >> liftIO (atomically sealServerInputParser)
+    async $ do runEffect $ (fromSocket sock (2^15) >> liftIO (DBC8.putStr "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toConsoles <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
                performGC
     return ()
 
@@ -196,8 +203,8 @@ parseProducer src = do
     continue result partial
     where continue result@(Just (Right _)) partial = do yield result
                                                         parseProducer partial
-          continue (Just (Left err)) _ = do liftIO $ DBC8.putStr "\nerror"
-          continue Nothing _ = do liftIO $ DBC8.putStr "\nparsed entire stream"
+          continue (Just (Left err)) _ = liftIO $ DBC8.putStr "\nerror"
+          continue Nothing _ = liftIO $ DBC8.putStr "\nparsed entire stream"
 
 fireServerEventConsumer :: Handler ServerEvent -> Consumer (Maybe (Either ParsingError ServerEvent)) IO ()
 fireServerEventConsumer fireServerEvent = do
