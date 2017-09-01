@@ -3,6 +3,7 @@
 module Person (
   runPerson
   , parseProducer -- TODO move to separate module
+  , SendToConsolesAction
 ) where
 
 import Control.Applicative ((<|>))
@@ -18,7 +19,6 @@ import qualified Network.Socket.ByteString as NBS
 import qualified Network.Socket as NS
 import Pipes
 import Pipes.Concurrent
-import qualified Pipes.Concurrent as PC
 import qualified Pipes.ByteString as PBS
 import Pipes.Network.TCP as PNT
 import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
@@ -41,14 +41,14 @@ data DisconnectEvent = DisconnectEvent
 data ConsoleCommand = UserInput Text | KeepConn Bool
 data ServerCommand = ServerCommand Text
 
-runPerson :: Output ByteString -> IO (Output Text)
-runPerson output = do
+runPerson :: SendToConsolesAction -> IO (Output Text)
+runPerson sendToConsolesAction = do
     personBox <- spawn $ bounded 1024
-    network <- compile $ personTask (snd personBox) output
+    network <- compile $ personTask (snd personBox) sendToConsolesAction
     actuate network
     return $ fst personBox
 
-personTask :: Input Text -> Output ByteString -> MomentIO ()
+personTask :: Input Text -> SendToConsolesAction -> MomentIO ()
 personTask = keepLoggedTask
 
 sendServerCommandTask :: Behavior (Maybe Socket) -> SendToConsolesAction -> MomentIO (Handler ServerCommand)
@@ -107,12 +107,11 @@ handleInputFromConsoles :: SendToConsolesAction -> Handler ConsoleCommand -> Tex
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/conn" = consoleCommandEventTrigger $ KeepConn True
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
-  | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt
+  | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt <> "\n"
   | otherwise = consoleCommandEventTrigger $ UserInput txt
 
-keepConnectedTask :: Input Text -> Output ByteString -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
-keepConnectedTask fromConsoles toConsoles fireServerEvent = do
-    let sendToConsolesAction = sendToConsoles toConsoles
+keepConnectedTask :: Input Text -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
+keepConnectedTask fromConsoles sendToConsolesAction fireServerEvent = do
     consoleCommandEvent <- fireEventsFromConsolesInput sendToConsolesAction fromConsoles
     (disconnectionEvent, fireDisconnection) <- newEvent
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
@@ -120,15 +119,15 @@ keepConnectedTask fromConsoles toConsoles fireServerEvent = do
     (bSocket, fireUpdateSocket) <- newBehavior Nothing
     sendServerCommand <- sendServerCommandTask bSocket sendToConsolesAction
 
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket toConsoles fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
-    reactimate $ connectToServer fireDisconnection fireUpdateSocket toConsoles fireServerEvent <$ whenE bKeepConnection disconnectionEvent
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsolesAction fireServerEvent <$ whenE (isNothing <$> bSocket) (filterE id keepConnectionEvent)
+    reactimate $ connectToServer fireDisconnection fireUpdateSocket sendToConsolesAction fireServerEvent <$ whenE bKeepConnection disconnectionEvent
     reactimate $ sendServerCommand <$> ((\(UserInput txt) -> ServerCommand txt) <$> filterE notCommandInput consoleCommandEvent)
     return sendServerCommand
 
-keepLoggedTask :: Input Text -> Output ByteString -> MomentIO ()
-keepLoggedTask fromConsoles toConsoles = do
+keepLoggedTask :: Input Text -> SendToConsolesAction -> MomentIO ()
+keepLoggedTask fromConsoles sendToConsolesAction = do
     (serverEvent, fireServerEvent) <- newEvent
-    sendServerCommand <- keepConnectedTask fromConsoles toConsoles fireServerEvent
+    sendServerCommand <- keepConnectedTask fromConsoles sendToConsolesAction fireServerEvent
 
     reactimate $ sendServerCommand codepageServerCommand <$ filterE (== CodepagePrompt) serverEvent
     reactimate $ loadLoginAndSendCommand sendServerCommand <$ filterE (== LoginPrompt) serverEvent
@@ -136,11 +135,10 @@ keepLoggedTask fromConsoles toConsoles = do
     reactimate $ sendServerCommand emptyServerCommand <$ filterE (== WelcomePrompt) serverEvent
       where loadLoginAndSendCommand sendServerCommand = handle =<< loadConfigProperty "person.login"
                                                              where handle (Just login) = sendServerCommand $ ServerCommand login
-                                                                   handle Nothing = sendToConsolesAction "failed to load person login"
+                                                                   handle Nothing = sendToConsolesAction "failed to load person login\n"
             loadPasswordAndSendCommand sendServerCommand = handle =<< loadConfigProperty "person.password"
                                                                 where handle (Just pass) = sendServerCommand $ ServerCommand pass
-                                                                      handle Nothing = sendToConsolesAction "failed to load person password"
-            sendToConsolesAction = sendToConsoles toConsoles
+                                                                      handle Nothing = sendToConsolesAction "failed to load person password\n"
 
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
@@ -158,11 +156,7 @@ emptyServerCommand = ServerCommand ""
 
 sendCommand :: SendToConsolesAction -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
-sendCommand sendToConsolesAction Nothing _ = sendToConsolesAction "no connection to server"
-
-sendToConsoles :: Output ByteString -> SendToConsolesAction
-sendToConsoles channel msg = do atomically $ PC.send channel $ msg <> "\n"
-                                return ()
+sendCommand sendToConsolesAction Nothing _ = sendToConsolesAction "no connection to server\n"
 
 keepConnectionCommandToEvent :: ConsoleCommand -> Bool
 keepConnectionCommandToEvent (KeepConn v) = v
@@ -175,8 +169,8 @@ notCommandInput :: ConsoleCommand -> Bool
 notCommandInput (UserInput _) = True
 notCommandInput _ = False
 
-connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> Output ByteString -> Handler ServerEvent -> IO ()
-connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEvent = do
+connectToServer :: Handler DisconnectEvent -> Handler (Maybe Socket) -> SendToConsolesAction -> Handler ServerEvent -> IO ()
+connectToServer fireDisconnection updateSocketBehavior sendToConsolesAction fireServerEvent = do
     (sock, addr) <- NST.connectSock "bylins.su" "4000"
     updateSocketBehavior $ Just sock
 
@@ -186,7 +180,9 @@ connectToServer fireDisconnection updateSocketBehavior toConsoles fireServerEven
     (writeLogChan, sealLogChain) <- writeLog
     (parseServerInputChan, sealServerInputParser) <- fireEventsFromServerInput fireServerEvent
     let cleanup = liftIO (updateSocketBehavior Nothing) >> liftIO (atomically sealLogChain) >> liftIO (atomically sealServerInputParser)
-    async $ do runEffect $ (fromSocket sock (2^15) >> liftIO (DBC8.putStr "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toConsoles <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
+    (toCOut, toCIn) <- spawn $ bounded 1024
+    async $ do runEffect $ fromInput toCIn >-> sendToConsoleConsumer sendToConsolesAction
+    async $ do runEffect $ (fromSocket sock (2^15) >> liftIO (sendToConsolesAction "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toCOut <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
                performGC
     return ()
 
@@ -215,7 +211,7 @@ fireServerEventConsumer fireServerEvent = do
           handleEvent (Just (Left err)) = return ()
           handleEvent (Just (Right event)) = fireServerEvent event
 
-sendToConsoleConsumer :: (ByteString -> IO ()) -> Consumer ByteString IO ()
+sendToConsoleConsumer :: SendToConsolesAction -> Consumer ByteString IO ()
 sendToConsoleConsumer action = do
     text <- await
     liftIO $ action text
