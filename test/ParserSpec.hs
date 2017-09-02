@@ -39,12 +39,12 @@ spec = describe "Parser" $ do
                                          log ~> serverInputParser `shouldParse` (Move "юг" (LocData 35039 "Во дворе перед корчмой "))
         it "parse move in darkness" $ do log <- readFile "test/logs/inDarkness.log"
                                          log ~> serverInputParser `shouldParse` (Move "север" (LocData 5200 "Лесная дорога "))
-        it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log" 
+        it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log"
                                                                 (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                 (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                                                 moveEventsCount `shouldBe` expectedMoveCount
                                                                 (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
-        it "parse log, finishing on partial move message" $ do let simpleWalkFile = "test/logs/finishingInTheMiddleOfMove.log" 
+        it "parse log, finishing on partial move message" $ do let simpleWalkFile = "test/logs/finishingInTheMiddleOfMove.log"
                                                                (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                                                moveEventsCount `shouldBe` (expectedMoveCount - 1)
@@ -52,15 +52,15 @@ spec = describe "Parser" $ do
         it "parse multiple moves" $ do let simpleWalkFile = "test/logs/simpleWalk.log"
                                        (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                        (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
-                                       moveEventsCount `shouldBe` expectedMoveCount 
-                                       (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount 
+                                       moveEventsCount `shouldBe` expectedMoveCount
+                                       (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
         {-it "parse remote console input" $ do hLog <- openFile "test/logs/inDarkness.log" ReadMode
                                              events <- toListM $ parseRemoteInput2 (fromHandle hLog)
                                              events `shouldBe` ["", "blabla"]-}
 
 locationsAndCounts :: String -> IO (Int, Int)
-locationsAndCounts file = do 
-  hLog <- openFile file ReadMode 
+locationsAndCounts file = do
+  hLog <- openFile file ReadMode
   serverEventList <- toListM $ parseProducer (fromHandle hLog)
   let locationEventsCount = length (filter isLocation serverEventList)
   let moveEventsCount = length (filter isMove serverEventList)

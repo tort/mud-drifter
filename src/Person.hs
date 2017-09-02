@@ -1,15 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Person (
-  runPerson
-  , parseProducer -- TODO move to separate module
-  , SendToConsolesAction
-) where
+module Person ( runPerson
+              , parseProducer -- TODO move to separate module
+              , SendToConsolesAction
+              , loadMap
+              , mapperTask
+              ) where
 
 import Control.Applicative ((<|>))
 import Data.Monoid
 import Data.Char
-import Data.Text as DT
+import Data.Text
+import qualified Data.Text as T
 import qualified Data.Text.IO as DTIO
 import Reactive.Banana
 import Reactive.Banana.Frameworks
@@ -19,9 +21,8 @@ import qualified Network.Socket.ByteString as NBS
 import qualified Network.Socket as NS
 import Pipes
 import Pipes.Concurrent
-import qualified Pipes.ByteString as PBS
 import Pipes.Network.TCP as PNT
-import System.IO as SIO (hClose, openFile, Handle, withFile, IOMode(WriteMode))
+import System.IO (hClose, openFile, Handle, withFile, IOMode(..))
 import Data.Text.Encoding
 import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStrLn)
 import Control.Concurrent.Async
@@ -30,6 +31,11 @@ import Pipes.Attoparsec
 import Pipes.Parse
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
+import Mapper
+import Data.Graph.Inductive.Tree
+import Data.Graph.Inductive.Graph
+import qualified Data.Graph.Inductive.Graph as G
+import qualified Pipes.ByteString as PBS
 
 newtype GoDirectionAction = GoDirectionAction Text
 data MoveRequest = MoveRequest TaskKey LocData
@@ -38,18 +44,32 @@ type SendToConsolesAction = ByteString -> IO ()
 
 newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
-data ConsoleCommand = UserInput Text | KeepConn Bool
+data ConsoleCommand = UserInput Text | KeepConn Bool | FindLoc Text | ReloadMap deriving Eq
 data ServerCommand = ServerCommand Text
 
-runPerson :: SendToConsolesAction -> IO (Output Text)
-runPerson sendToConsolesAction = do
+runPerson :: Gr Text Text -> SendToConsolesAction -> IO (Output Text)
+runPerson worldMap sendToConsolesAction = do
     personBox <- spawn $ bounded 1024
-    network <- compile $ personTask (snd personBox) sendToConsolesAction
+    network <- compile $ personTask worldMap (snd personBox) sendToConsolesAction
     actuate network
     return $ fst personBox
 
-personTask :: Input Text -> SendToConsolesAction -> MomentIO ()
-personTask = keepLoggedTask
+personTask :: Gr Text Text -> Input Text -> SendToConsolesAction -> MomentIO ()
+personTask worldMap fromConsoles sendToConsolesAction = do
+  consoleCommandEvent <- fireEventsFromConsolesInput sendToConsolesAction fromConsoles
+  mapperTask worldMap consoleCommandEvent sendToConsolesAction
+  keepLoggedTask consoleCommandEvent sendToConsolesAction
+
+mapperTask :: Gr Text Text -> Event ConsoleCommand -> SendToConsolesAction -> MomentIO ()
+mapperTask worldMap consoleCommandEvent sendToConsolesAction =
+  reactimate $ (sendToConsolesAction . matchingLocs worldMap) <$> filterE isFindLoc consoleCommandEvent
+
+isFindLoc :: ConsoleCommand -> Bool
+isFindLoc (FindLoc regex) = True
+isFindLoc _ = False
+
+matchingLocs :: Gr Text Text -> ConsoleCommand -> ByteString
+matchingLocs graph (FindLoc regex) = locsByRegex graph regex
 
 sendServerCommandTask :: Behavior (Maybe Socket) -> SendToConsolesAction -> MomentIO (Handler ServerCommand)
 sendServerCommandTask bSocket sendToConsolesAction = do
@@ -106,13 +126,14 @@ handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent = d
 handleInputFromConsoles :: SendToConsolesAction -> Handler ConsoleCommand -> Text -> IO ()
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/conn" = consoleCommandEventTrigger $ KeepConn True
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
+handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/rmap" = consoleCommandEventTrigger ReloadMap
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
+  | "/findloc " `isPrefixOf` txt = consoleCommandEventTrigger $ FindLoc $ fromJust $ T.stripPrefix "/findloc " txt
   | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt <> "\n"
   | otherwise = consoleCommandEventTrigger $ UserInput txt
 
-keepConnectedTask :: Input Text -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
-keepConnectedTask fromConsoles sendToConsolesAction fireServerEvent = do
-    consoleCommandEvent <- fireEventsFromConsolesInput sendToConsolesAction fromConsoles
+keepConnectedTask :: Event ConsoleCommand -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
+keepConnectedTask consoleCommandEvent sendToConsolesAction fireServerEvent = do
     (disconnectionEvent, fireDisconnection) <- newEvent
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
     bKeepConnection <- stepper False keepConnectionEvent
@@ -124,7 +145,7 @@ keepConnectedTask fromConsoles sendToConsolesAction fireServerEvent = do
     reactimate $ sendServerCommand <$> ((\(UserInput txt) -> ServerCommand txt) <$> filterE notCommandInput consoleCommandEvent)
     return sendServerCommand
 
-keepLoggedTask :: Input Text -> SendToConsolesAction -> MomentIO ()
+keepLoggedTask :: Event ConsoleCommand -> SendToConsolesAction -> MomentIO ()
 keepLoggedTask fromConsoles sendToConsolesAction = do
     (serverEvent, fireServerEvent) <- newEvent
     sendServerCommand <- keepConnectedTask fromConsoles sendToConsolesAction fireServerEvent
@@ -181,7 +202,7 @@ connectToServer fireDisconnection updateSocketBehavior sendToConsolesAction fire
     (parseServerInputChan, sealServerInputParser) <- fireEventsFromServerInput fireServerEvent
     let cleanup = liftIO (updateSocketBehavior Nothing) >> liftIO (atomically sealLogChain) >> liftIO (atomically sealServerInputParser)
     (toCOut, toCIn) <- spawn $ bounded 1024
-    async $ do runEffect $ fromInput toCIn >-> sendToConsoleConsumer sendToConsolesAction
+    async $ runEffect $ fromInput toCIn >-> sendToConsoleConsumer sendToConsolesAction
     async $ do runEffect $ (fromSocket sock (2^15) >> liftIO (sendToConsolesAction "socket channel finished\n") >> closeSockOnEof >> cleanup ) >-> toOutput (toCOut <> parseServerInputChan <> writeLogChan) >> fireDisconnectionEvent
                performGC
     return ()
@@ -199,8 +220,8 @@ parseProducer src = do
     continue result partial
     where continue result@(Just (Right _)) partial = do yield result
                                                         parseProducer partial
-          continue (Just (Left err)) _ = liftIO $ DBC8.putStr "\nerror"
-          continue Nothing _ = liftIO $ DBC8.putStr "\nparsed entire stream"
+          continue (Just (Left err)) _ = liftIO $ DBC8.putStr "error\n"
+          continue Nothing _ = liftIO $ DBC8.putStr "parsed entire stream\n"
 
 fireServerEventConsumer :: Handler ServerEvent -> Consumer (Maybe (Either ParsingError ServerEvent)) IO ()
 fireServerEventConsumer fireServerEvent = do
@@ -232,3 +253,9 @@ pathNotEmpty :: Maybe [Text] -> Bool
 pathNotEmpty Nothing = False
 pathNotEmpty (Just []) = False
 pathNotEmpty (Just xs) = True
+
+loadMap :: Text -> IO (Gr Text Text)
+loadMap file = do
+  hLog <- openFile (T.unpack file) ReadMode
+  graph <- foldToGraph $ parseProducer (PBS.fromHandle hLog)
+  return graph

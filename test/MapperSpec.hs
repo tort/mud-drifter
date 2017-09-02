@@ -19,7 +19,8 @@ import Data.Text as T
 
 spec :: Spec
 spec = describe "Mapper" $ do
-  it "fold move events to graph properties" $ pending
+  it "can find path from any location to any location" pending
+  it "fold move events to graph properties" pending
   it "fold move events to graph" $ foldToGraphProperty moveEvents
       where moveEvents = [Move "north" $ LocData 2 "2"
                          , Location $ LocData 1 "1"
