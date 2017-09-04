@@ -36,6 +36,8 @@ import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph
 import qualified Data.Graph.Inductive.Graph as G
 import qualified Pipes.ByteString as PBS
+import qualified Data.Foldable as F
+import System.Directory
 
 newtype GoDirectionAction = GoDirectionAction Text
 data MoveRequest = MoveRequest TaskKey LocData
@@ -254,8 +256,15 @@ pathNotEmpty Nothing = False
 pathNotEmpty (Just []) = False
 pathNotEmpty (Just xs) = True
 
-loadMap :: Text -> IO (Gr Text Text)
-loadMap file = do
-  hLog <- openFile (T.unpack file) ReadMode
-  graph <- foldToGraph $ parseProducer (PBS.fromHandle hLog)
+loadMap :: FilePath -> IO (Gr Text Text)
+loadMap dir = do
+  files <- listDirectory dir
+  F.foldl (\acc item -> loadLogEvents acc (dir ++ item)) (return G.empty) files
+
+loadLogEvents :: IO (Gr Text Text) -> FilePath -> IO (Gr Text Text)
+loadLogEvents gr file = do
+  hLog <- openFile file ReadMode
+  g <- gr
+  graph <- foldToGraph g $ parseProducer (PBS.fromHandle hLog)
+  hClose hLog
   return graph

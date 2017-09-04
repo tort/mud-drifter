@@ -29,8 +29,8 @@ import Debug.Trace
 import Prelude
 import qualified Prelude as P
 
-foldToGraph :: Monad m => Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Gr Text Text)
-foldToGraph eventProducer = PP.fold accGraph DG.empty id (eventProducer >-> PP.filter filterLocationsAndMoves
+foldToGraph :: Monad m => Gr Text Text -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Gr Text Text)
+foldToGraph initialGraph eventProducer = PP.fold accGraph initialGraph id (eventProducer >-> PP.filter filterLocationsAndMoves
                                                                   >-> PP.map unwrapLocationsAndMoves
                                                                   >-> PP.scan toPairs (Nothing, Nothing) id
                                                                   >-> PP.filter mappableMove

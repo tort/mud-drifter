@@ -19,7 +19,7 @@ main = runWithLog
 
 runWithLog :: IO ()
 runWithLog = do
-    worldMap <- loadMap "/Users/anesterov/workspace/mud-drifter/archive/simpleWalk.log"
+    worldMap <- loadMap "/Users/anesterov/workspace/mud-drifter/archive/"
     (toRemoteConsole, runRemoteConsole) <- initRemoteConsole
     (toConsole, runConsole) <- initConsole
     toPerson <- runPerson worldMap $ sendToConsoles $ toConsole <> toRemoteConsole
