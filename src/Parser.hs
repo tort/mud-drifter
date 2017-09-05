@@ -1,12 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser (
-  serverInputParser
-  , remoteInputParser
-  , LocData(..)
-  , ServerEvent(..)
-  , RemoteConsoleEvent(..)
-) where
+module Parser ( serverInputParser
+              , remoteInputParser
+              , LocData(..)
+              , ServerEvent(..)
+              , RemoteConsoleEvent(..)
+              ) where
 
 import Control.Applicative
 import Pipes.Attoparsec
@@ -69,7 +68,7 @@ remoteInputParser = telnetControlSeq <|> eol <|> utf8String
                           return $ RemoteUserInput text
 
 telnetControlSeq :: A.Parser RemoteConsoleEvent
-telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny 
+telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny
                       return TelnetControlSeq
 
 loginPrompt :: A.Parser ServerEvent

@@ -12,6 +12,7 @@ import System.IO
 import Pipes
 import Pipes.ByteString hiding (head)
 import Data.Graph.Inductive.Graph
+import qualified Data.Graph.Inductive.Graph as G
 import Data.Functor.Identity
 import Data.List as DL
 import Data.Functor
@@ -37,4 +38,4 @@ foldToGraphProperty moveEvents = do size graph `shouldBe` 2
                                     where toOpt = Just . Right
                                           isMove (Move _ _) = True
                                           isMove _ = False
-                                          graph = runIdentity $ foldToGraph $ each (toOpt <$> moveEvents)
+                                          graph = runIdentity $ foldToGraph G.empty $ each (toOpt <$> moveEvents)

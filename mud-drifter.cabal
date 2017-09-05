@@ -20,6 +20,7 @@ library
                      , Console
                      , RemoteConsole
                      , Parser
+                     , UserInputParser
   build-depends:       base >= 4.7 && < 5
                      , text
                      , bytestring
@@ -40,6 +41,8 @@ library
                      , configurator
                      , fgl
                      , directory
+                     , MissingH
+                     , parsec
   default-language:    Haskell2010
 
 executable mud-drifter
@@ -83,6 +86,7 @@ test-suite mud-drifter-test
                      , pipes
                      , text
                      , fgl
+                     , parsec
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 

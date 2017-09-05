@@ -38,6 +38,9 @@ import qualified Data.Graph.Inductive.Graph as G
 import qualified Pipes.ByteString as PBS
 import qualified Data.Foldable as F
 import System.Directory
+import Data.Either.Utils
+import Data.Text.Read
+import UserInputParser
 
 newtype GoDirectionAction = GoDirectionAction Text
 data MoveRequest = MoveRequest TaskKey LocData
@@ -46,7 +49,6 @@ type SendToConsolesAction = ByteString -> IO ()
 
 newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
-data ConsoleCommand = UserInput Text | KeepConn Bool | FindLoc Text | ReloadMap deriving Eq
 data ServerCommand = ServerCommand Text
 
 runPerson :: Gr Text Text -> SendToConsolesAction -> IO (Output Text)
@@ -62,15 +64,20 @@ personTask worldMap fromConsoles sendToConsolesAction = do
   mapperTask worldMap consoleCommandEvent sendToConsolesAction
   keepLoggedTask consoleCommandEvent sendToConsolesAction
 
-mapperTask :: Gr Text Text -> Event ConsoleCommand -> SendToConsolesAction -> MomentIO ()
-mapperTask worldMap consoleCommandEvent sendToConsolesAction =
+mapperTask :: Gr Text Text -> Event UserInput -> SendToConsolesAction -> MomentIO ()
+mapperTask worldMap consoleCommandEvent sendToConsolesAction = do
   reactimate $ (sendToConsolesAction . matchingLocs worldMap) <$> filterE isFindLoc consoleCommandEvent
+  reactimate $ (sendToConsolesAction "not implemented yet") <$ filterE isFindPath consoleCommandEvent
 
-isFindLoc :: ConsoleCommand -> Bool
+isFindPath :: UserInput -> Bool
+isFindPath (FindPath to) = True
+isFindPath _ = False
+
+isFindLoc :: UserInput -> Bool
 isFindLoc (FindLoc regex) = True
 isFindLoc _ = False
 
-matchingLocs :: Gr Text Text -> ConsoleCommand -> ByteString
+matchingLocs :: Gr Text Text -> UserInput -> ByteString
 matchingLocs graph (FindLoc regex) = locsByRegex graph regex
 
 sendServerCommandTask :: Behavior (Maybe Socket) -> SendToConsolesAction -> MomentIO (Handler ServerCommand)
@@ -88,7 +95,7 @@ writeLog = do
              performGC
   return (persToLogOut, seal)
 
-fireEventsFromConsolesInput :: SendToConsolesAction -> Input Text -> MomentIO (Event ConsoleCommand)
+fireEventsFromConsolesInput :: SendToConsolesAction -> Input Text -> MomentIO (Event UserInput)
 fireEventsFromConsolesInput sendToConsolesAction fromConsolesChan = do
     (consoleCommandEvent, trigger) <- newEvent
     liftIOLater $ do async $ runEffect $ fromInput fromConsolesChan >-> handleInputFromConsolesConsumer sendToConsolesAction trigger
@@ -119,22 +126,22 @@ isMove :: ServerEvent -> Bool
 isMove (Move _ _) = True
 isMove _ = False
 
-handleInputFromConsolesConsumer :: SendToConsolesAction -> Handler ConsoleCommand -> Consumer Text IO ()
+handleInputFromConsolesConsumer :: SendToConsolesAction -> Handler UserInput -> Consumer Text IO ()
 handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent = do
   text <- await
   liftIO $ handleInputFromConsoles sendToConsolesAction fireConsoleCommandEvent text
   handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent
 
-handleInputFromConsoles :: SendToConsolesAction -> Handler ConsoleCommand -> Text -> IO ()
+handleInputFromConsoles :: SendToConsolesAction -> Handler UserInput -> Text -> IO ()
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/conn" = consoleCommandEventTrigger $ KeepConn True
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
-handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/rmap" = consoleCommandEventTrigger ReloadMap
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
   | "/findloc " `isPrefixOf` txt = consoleCommandEventTrigger $ FindLoc $ fromJust $ T.stripPrefix "/findloc " txt
+  | "/path " `isPrefixOf` txt = consoleCommandEventTrigger $ FindPath 0
   | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt <> "\n"
   | otherwise = consoleCommandEventTrigger $ UserInput txt
 
-keepConnectedTask :: Event ConsoleCommand -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
+keepConnectedTask :: Event UserInput -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
 keepConnectedTask consoleCommandEvent sendToConsolesAction fireServerEvent = do
     (disconnectionEvent, fireDisconnection) <- newEvent
     let keepConnectionEvent = keepConnectionCommandToEvent <$> filterE isKeepConnectionCommand consoleCommandEvent
@@ -147,7 +154,7 @@ keepConnectedTask consoleCommandEvent sendToConsolesAction fireServerEvent = do
     reactimate $ sendServerCommand <$> ((\(UserInput txt) -> ServerCommand txt) <$> filterE notCommandInput consoleCommandEvent)
     return sendServerCommand
 
-keepLoggedTask :: Event ConsoleCommand -> SendToConsolesAction -> MomentIO ()
+keepLoggedTask :: Event UserInput -> SendToConsolesAction -> MomentIO ()
 keepLoggedTask fromConsoles sendToConsolesAction = do
     (serverEvent, fireServerEvent) <- newEvent
     sendServerCommand <- keepConnectedTask fromConsoles sendToConsolesAction fireServerEvent
@@ -181,14 +188,14 @@ sendCommand :: SendToConsolesAction -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = NST.send sock $ encodeUtf8 $ snoc txt '\n'
 sendCommand sendToConsolesAction Nothing _ = sendToConsolesAction "no connection to server\n"
 
-keepConnectionCommandToEvent :: ConsoleCommand -> Bool
+keepConnectionCommandToEvent :: UserInput -> Bool
 keepConnectionCommandToEvent (KeepConn v) = v
 
-isKeepConnectionCommand :: ConsoleCommand -> Bool
+isKeepConnectionCommand :: UserInput -> Bool
 isKeepConnectionCommand (KeepConn _) = True
 isKeepConnectionCommand _ = False
 
-notCommandInput :: ConsoleCommand -> Bool
+notCommandInput :: UserInput -> Bool
 notCommandInput (UserInput _) = True
 notCommandInput _ = False
 
