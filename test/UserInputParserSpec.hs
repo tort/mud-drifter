@@ -33,6 +33,10 @@ spec = describe "UserInputParser" $ do
   it "parse /unconn command" $ (parse userInputParser "" "/unconn") `shouldBe` (Right $ KeepConn False)
   it "parse /path toLocName" pending
   it "parse /path toLocId" pending
-  it "parse /path fromLocId toLocId" pending
+  it "parse /path fromLocId toLocId" $ (parse userInputParser "" "/path 1 2") `shouldBe` (Right $ FindPathFromTo 1 2)
+  it "parse /path      fromLocId       toLocId    " $ (parse userInputParser "" "/path     1     2    ") `shouldBe` (Right $ FindPathFromTo 1 2)
+  it "parse /path str toId" $ isLeft $ (parse userInputParser "" "/path a 2")
+  it "parse /path fromId src" $ isLeft $ (parse userInputParser "" "/path 1 b")
+  it "parse /path" $ isLeft $ (parse userInputParser "" "/path")
   it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ UserInput "")
   it "return error in case of misspelled command" $ isLeft $ parse userInputParser "" "/unknowncommand blabla"

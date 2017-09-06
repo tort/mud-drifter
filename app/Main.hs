@@ -10,7 +10,7 @@ import Data.ByteString
 import qualified Pipes.Concurrent as PC
 
 import Person
-import Parser
+import ServerInputParser
 import Console
 import RemoteConsole
 
@@ -19,10 +19,10 @@ main = runWithLog
 
 runWithLog :: IO ()
 runWithLog = do
-    worldMap <- loadMap "/Users/anesterov/workspace/mud-drifter/archive/"
+    world <- loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
     (toRemoteConsole, runRemoteConsole) <- initRemoteConsole
     (toConsole, runConsole) <- initConsole
-    toPerson <- runPerson worldMap $ sendToConsoles $ toConsole <> toRemoteConsole
+    toPerson <- runPerson world $ sendToConsoles $ toConsole <> toRemoteConsole
 
     runRemoteConsole toPerson
     runConsole toPerson

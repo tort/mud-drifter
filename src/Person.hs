@@ -3,7 +3,7 @@
 module Person ( runPerson
               , parseProducer -- TODO move to separate module
               , SendToConsolesAction
-              , loadMap
+              , loadWorld
               , mapperTask
               ) where
 
@@ -14,6 +14,7 @@ import Data.Text
 import qualified Data.Text as T
 import qualified Data.Text.IO as DTIO
 import Reactive.Banana
+import qualified Reactive.Banana as B
 import Reactive.Banana.Frameworks
 import Data.Maybe
 import qualified Network.Simple.TCP as NST
@@ -26,7 +27,7 @@ import System.IO (hClose, openFile, Handle, withFile, IOMode(..))
 import Data.Text.Encoding
 import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStrLn)
 import Control.Concurrent.Async
-import Parser
+import ServerInputParser
 import Pipes.Attoparsec
 import qualified Pipes.Attoparsec as PA
 import Pipes.Parse
@@ -44,9 +45,15 @@ import Data.Text.Read
 import Text.Parsec
 import qualified Text.Parsec as Parsec
 import UserInputParser
+import qualified Data.Graph.Inductive.Query.SP as GA
+import Data.Set
+import qualified Data.Set as S
+import Prelude
+import qualified Prelude as P
+import Debug.Trace
 
 newtype GoDirectionAction = GoDirectionAction Text
-data MoveRequest = MoveRequest TaskKey LocData
+data MoveRequest = MoveRequest TaskKey Location
 type TaskKey = Int
 type SendToConsolesAction = ByteString -> IO ()
 
@@ -54,33 +61,55 @@ newtype KeepConnectionCommand = KeepConnectionCommand Bool
 data DisconnectEvent = DisconnectEvent
 data ServerCommand = ServerCommand Text
 
-runPerson :: Gr Text Text -> SendToConsolesAction -> IO (Output Text)
-runPerson worldMap sendToConsolesAction = do
+runPerson :: World -> SendToConsolesAction -> IO (Output Text)
+runPerson world sendToConsolesAction = do
     personBox <- spawn $ bounded 1024
-    network <- compile $ personTask worldMap (snd personBox) sendToConsolesAction
+    network <- compile $ personTask world (snd personBox) sendToConsolesAction
     actuate network
     return $ fst personBox
 
-personTask :: Gr Text Text -> Input Text -> SendToConsolesAction -> MomentIO ()
-personTask worldMap fromConsoles sendToConsolesAction = do
+personTask :: World -> Input Text -> SendToConsolesAction -> MomentIO ()
+personTask world fromConsoles sendToConsolesAction = do
   consoleCommandEvent <- fireEventsFromConsolesInput sendToConsolesAction fromConsoles
-  mapperTask worldMap consoleCommandEvent sendToConsolesAction
+  mapperTask world consoleCommandEvent sendToConsolesAction
   keepLoggedTask consoleCommandEvent sendToConsolesAction
 
-mapperTask :: Gr Text Text -> Event UserInput -> SendToConsolesAction -> MomentIO ()
-mapperTask worldMap consoleCommandEvent sendToConsolesAction = do
-  reactimate $ (sendToConsolesAction . matchingLocs worldMap) <$> filterE isFindLoc consoleCommandEvent
-  reactimate $ (sendToConsolesAction "not implemented yet") <$ filterE isFindPath consoleCommandEvent
+mapperTask :: World -> Event UserInput -> SendToConsolesAction -> MomentIO ()
+mapperTask world consoleCommandEvent sendToConsolesAction = do
+  let graph = buildMap $ directions world
+  reactimate $ (sendToConsolesAction . matchingLocs world) <$> filterE isFindLoc consoleCommandEvent
+  reactimate $ (sendToConsolesAction . (showPath $ directions world) . pathFromTo graph) <$> filterE isFindPath consoleCommandEvent
+
+buildMap :: Set Direction -> Gr () Int
+buildMap directions = mkGraph nodes edges
+  where edges = F.concat $ (\d -> aheadEdge d : reverseEdge d : []) <$> (S.toList directions)
+        nodes = fmap (\n -> (n, ())) $ F.foldl (\acc d -> locIdFrom d : locIdTo d : acc) [] directions
+        aheadEdge d = (locIdFrom d, locIdTo d, 1)
+        reverseEdge d = (locIdTo d, locIdFrom d, 1)
+
+pathFromTo :: Gr () Int -> UserInput -> Path
+pathFromTo graph (FindPathFromTo from to) = GA.sp from to graph
+
+showPath :: Set Direction -> Path -> ByteString
+showPath directions [] = "path is empty\n"
+showPath directions path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . nodePairToDirection <$> toJust <$> nodePairs)
+  where joinToOneMsg = T.intercalate "\n"
+        showDirection = trigger
+        addRet txt = T.snoc txt '\n'
+        nodePairToDirection (from, to) = P.head $ S.toList $ S.filter (\d -> locIdFrom d == from && locIdTo d == to) directions
+        nodePairs = filterDirs $ P.scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
+        filterDirs = P.filter (\pair -> isJust (fst pair) && isJust (snd pair))
+        toJust (Just left, Just right) = (left, right)
 
 isFindPath :: UserInput -> Bool
-isFindPath (FindPath to) = True
+isFindPath (FindPathFromTo from to) = True
 isFindPath _ = False
 
 isFindLoc :: UserInput -> Bool
 isFindLoc (FindLoc regex) = True
 isFindLoc _ = False
 
-matchingLocs :: Gr Text Text -> UserInput -> ByteString
+matchingLocs :: World -> UserInput -> ByteString
 matchingLocs graph (FindLoc regex) = locsByRegex graph regex
 
 sendServerCommandTask :: Behavior (Maybe Socket) -> SendToConsolesAction -> MomentIO (Handler ServerCommand)
@@ -110,40 +139,31 @@ moveToTask moveRequest serverEvent = do
     let locEvent = filterE isLocation serverEvent
     let moveEvent = filterE isMove serverEvent
     bRequests <- accumB [] $ addRequestEvent moveRequest
-    let changeCurrLocEvent = unions [(\l@(Location locData) -> const locData) <$> locEvent
-                                     ,(\m@(Move _ locData) -> const locData) <$> moveEvent]
+    let changeCurrLocEvent = B.unions [(\l@(LocationEvent locData) -> const locData) <$> locEvent
+                                     ,(\m@(MoveEvent _ locData) -> const locData) <$> moveEvent]
 
     reactimate $ moveCommand <$> bRequests <@> changeCurrLocEvent
 
-addRequestEvent :: Event MoveRequest -> Event ([(TaskKey, LocData)] -> [(TaskKey, LocData)])
+addRequestEvent :: Event MoveRequest -> Event ([(TaskKey, Location)] -> [(TaskKey, Location)])
 addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) <$> moveRequest
 
-moveCommand :: [(TaskKey, LocData)] -> (LocData -> LocData) -> IO ()
+moveCommand :: [(TaskKey, Location)] -> (Location -> Location) -> IO ()
 moveCommand = undefined
 
 isLocation :: ServerEvent -> Bool
-isLocation (Location _) = True
+isLocation (LocationEvent _) = True
 isLocation _ = False
 
 isMove :: ServerEvent -> Bool
-isMove (Move _ _) = True
+isMove (MoveEvent _ _) = True
 isMove _ = False
 
 handleInputFromConsolesConsumer :: SendToConsolesAction -> Handler UserInput -> Consumer Text IO ()
 handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent = do
   text <- await
-  liftIO $ case (Parsec.parse userInputParser "" text) of (Right cmd) -> fireConsoleCommandEvent cmd
-                                                          (Left err) -> sendToConsolesAction $ DBC8.pack $ show err
+  liftIO $ case Parsec.parse userInputParser "" text of (Right cmd) -> fireConsoleCommandEvent cmd
+                                                        (Left err) -> sendToConsolesAction $ DBC8.pack $ show err
   handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent
-
-{-handleInputFromConsoles :: SendToConsolesAction -> Handler UserInput -> Text -> IO ()
-handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger input = consoleCommandEventTrigger $ KeepConn True
-handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
-handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
-  | "/findloc " `isPrefixOf` txt = consoleCommandEventTrigger $ FindLoc $ fromJust $ T.stripPrefix "/findloc " txt
-  | "/path " `isPrefixOf` txt = consoleCommandEventTrigger $ FindPath 0
-  | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt <> "\n"
-  | otherwise = consoleCommandEventTrigger $ UserInput txt-}
 
 keepConnectedTask :: Event UserInput -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
 keepConnectedTask consoleCommandEvent sendToConsolesAction fireServerEvent = do
@@ -257,7 +277,7 @@ printDirection (GoDirectionAction direction) = DTIO.putStrLn direction
 removePathHead :: Maybe [Text] -> Maybe [Text]
 removePathHead Nothing = Nothing
 removePathHead (Just []) = Nothing
-removePathHead x@(Just xs) = fmap Prelude.tail x
+removePathHead x@(Just xs) = fmap P.tail x
 
 bPathNotEmpty :: Behavior (Maybe [Text]) -> Behavior Bool
 bPathNotEmpty = fmap pathNotEmpty
@@ -267,15 +287,27 @@ pathNotEmpty Nothing = False
 pathNotEmpty (Just []) = False
 pathNotEmpty (Just xs) = True
 
-loadMap :: FilePath -> IO (Gr Text Text)
-loadMap dir = do
+loadWorld :: FilePath -> IO World
+loadWorld dir = do
   files <- listDirectory dir
-  F.foldl (\acc item -> loadLogEvents acc (dir ++ item)) (return G.empty) files
+  directions <- loadDirs files
+  locations <- loadLocs files
+  return $ World locations directions
+    where loadDirs files = F.foldl (\acc item -> loadDirections acc (dir ++ item)) (return S.empty) files
+          loadLocs files = F.foldl (\acc item -> loadLocations acc (dir ++ item)) (return S.empty) files
 
-loadLogEvents :: IO (Gr Text Text) -> FilePath -> IO (Gr Text Text)
-loadLogEvents gr file = do
+loadDirections :: IO (Set Direction) -> FilePath -> IO (Set Direction)
+loadDirections ioDirs file = do
   hLog <- openFile file ReadMode
-  g <- gr
-  graph <- foldToGraph g $ parseProducer (PBS.fromHandle hLog)
+  dirs <- ioDirs
+  newDirs <- foldToDirections dirs $ parseProducer (PBS.fromHandle hLog)
   hClose hLog
-  return graph
+  return newDirs
+
+loadLocations :: IO (Set Location) -> FilePath -> IO (Set Location)
+loadLocations ioLocs file = do
+  hLog <- openFile file ReadMode
+  locs <- ioLocs
+  newLocations <- foldToLocations locs $ parseProducer (PBS.fromHandle hLog)
+  hClose hLog
+  return newLocations

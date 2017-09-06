@@ -1,11 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Parser ( serverInputParser
-              , remoteInputParser
-              , LocData(..)
-              , ServerEvent(..)
-              , RemoteConsoleEvent(..)
-              ) where
+module ServerInputParser ( serverInputParser
+                         , remoteInputParser
+                         , Location(..)
+                         , LocId
+                         , LocTitle
+                         , ServerEvent(..)
+                         , RemoteConsoleEvent(..)
+                         ) where
 
 import Control.Applicative
 import Pipes.Attoparsec
@@ -17,8 +19,16 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
 
-data LocData = LocData Int Text deriving (Eq, Show)
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | Location LocData | Move Text LocData | UnknownServerEvent deriving (Eq, Show)
+data Location = Location { locId :: LocId
+                         , locTitle :: LocTitle
+                         } deriving (Show, Ord)
+type LocId = Int
+type LocTitle = Text
+
+instance Eq Location where
+  left == right = locId left == locId right
+
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text Location | UnknownServerEvent deriving (Eq, Show)
 
 data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
 
@@ -109,17 +119,18 @@ location = do
     locationId <- C.decimal
     A.word8 _bracketright
     _ <- manyTill (skip (const True)) clearColors
-    return $ Location $ LocData locationId (decodeUtf8 locationName)
+    return $ LocationEvent $ Location locationId (decodeUtf8 locationName)
 
 move :: A.Parser ServerEvent
 move = do
-    string $ encodeUtf8 "Вы поплелись на "
+    string $ encodeUtf8 "Вы поплелись "
+    option "" $ string $ encodeUtf8 "на "
     direction <- takeTill (== _period)
     A.word8 _period
     C.endOfLine
     loc <- location
-    return $ Move (decodeUtf8 direction) $ ld loc
-    where ld (Location locData) = locData
+    return $ MoveEvent (decodeUtf8 direction) $ ld loc
+    where ld (LocationEvent locData) = locData
 
 clearColors :: A.Parser ()
 clearColors = do

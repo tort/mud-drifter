@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module ParserSpec (spec) where
+module ServerInputParserSpec (spec) where
 
 import Test.Hspec
 import Test.QuickCheck
@@ -15,7 +15,7 @@ import Pipes.Prelude hiding (fromHandle, filter, length)
 import Data.Text hiding (isInfixOf, isPrefixOf, length, filter, lines)
 import Data.Text.Encoding
 
-import Parser
+import ServerInputParser
 import Person
 import RemoteConsole
 
@@ -34,11 +34,11 @@ spec = describe "Parser" $ do
         it "parse post welcome message" $ do log <- readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
-                                 log ~> serverInputParser `shouldParse` (Location (LocData 35040 "В корчме "))
+                                 log ~> serverInputParser `shouldParse` (LocationEvent (Location 35040 "В корчме "))
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
-                                         log ~> serverInputParser `shouldParse` (Move "юг" (LocData 35039 "Во дворе перед корчмой "))
+                                         log ~> serverInputParser `shouldParse` (MoveEvent "юг" (Location 35039 "Во дворе перед корчмой "))
         it "parse move in darkness" $ do log <- readFile "test/logs/inDarkness.log"
-                                         log ~> serverInputParser `shouldParse` (Move "север" (LocData 5200 "Лесная дорога "))
+                                         log ~> serverInputParser `shouldParse` (MoveEvent "север" (Location 5200 "Лесная дорога "))
         it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log"
                                                                 (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                 (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
@@ -65,9 +65,9 @@ locationsAndCounts file = do
   let locationEventsCount = length (filter isLocation serverEventList)
   let moveEventsCount = length (filter isMove serverEventList)
   return (locationEventsCount, moveEventsCount)
-  where isLocation (Just (Right (Location _))) = True
+  where isLocation (Just (Right (LocationEvent _))) = True
         isLocation _ = False
-        isMove (Just (Right (Move _ _))) = True
+        isMove (Just (Right (MoveEvent _ _))) = True
         isMove _ = False
 
 expectedLocsAndMovesCounts :: String -> IO (Int, Int)

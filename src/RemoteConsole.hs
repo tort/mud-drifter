@@ -20,7 +20,7 @@ import qualified Data.ByteString as B
 import qualified Pipes.ByteString as PB
 import qualified Data.ByteString.Char8 as DBC8
 import Pipes.Attoparsec
-import Parser
+import ServerInputParser
 import System.IO
 import Debug.Trace
 
@@ -31,7 +31,7 @@ initRemoteConsole = do
 
 runRemoteConsole :: Input B.ByteString -> Output TE.Text -> IO ()
 runRemoteConsole input output = do
-  async $ serve (Host "localhost") "4000" $ \(sock, addr) -> do 
+  async $ serve (Host "localhost") "4000" $ \(sock, addr) -> do
                                                 async $ runEffect $ fromInput input >-> toSocket sock
                                                 runEffect $ parseRemoteInput sock (fromSocket sock (2^15)) >-> extractText >-> PPR.map decodeUtf8 >-> toOutput output
                                                 return ()
@@ -45,7 +45,7 @@ extractText = do evt <- await
                     handle _ = return ()
 
 parseRemoteInput :: Socket -> Producer B.ByteString IO () -> Producer RemoteConsoleEvent IO ()
-parseRemoteInput sock src = do 
+parseRemoteInput sock src = do
     (result, partial) <- liftIO $ PP.runStateT (parse remoteInputParser) src
     continue result partial
     where continue (Just (Left err)) _ = liftIO $ send sock "\nerror when parsing remote console input"
