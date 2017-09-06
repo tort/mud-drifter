@@ -28,6 +28,7 @@ import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStr
 import Control.Concurrent.Async
 import Parser
 import Pipes.Attoparsec
+import qualified Pipes.Attoparsec as PA
 import Pipes.Parse
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
@@ -40,6 +41,8 @@ import qualified Data.Foldable as F
 import System.Directory
 import Data.Either.Utils
 import Data.Text.Read
+import Text.Parsec
+import qualified Text.Parsec as Parsec
 import UserInputParser
 
 newtype GoDirectionAction = GoDirectionAction Text
@@ -129,17 +132,18 @@ isMove _ = False
 handleInputFromConsolesConsumer :: SendToConsolesAction -> Handler UserInput -> Consumer Text IO ()
 handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent = do
   text <- await
-  liftIO $ handleInputFromConsoles sendToConsolesAction fireConsoleCommandEvent text
+  liftIO $ case (Parsec.parse userInputParser "" text) of (Right cmd) -> fireConsoleCommandEvent cmd
+                                                          (Left err) -> sendToConsolesAction $ DBC8.pack $ show err
   handleInputFromConsolesConsumer sendToConsolesAction fireConsoleCommandEvent
 
-handleInputFromConsoles :: SendToConsolesAction -> Handler UserInput -> Text -> IO ()
-handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/conn" = consoleCommandEventTrigger $ KeepConn True
+{-handleInputFromConsoles :: SendToConsolesAction -> Handler UserInput -> Text -> IO ()
+handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger input = consoleCommandEventTrigger $ KeepConn True
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger "/unconn" = consoleCommandEventTrigger $ KeepConn False
 handleInputFromConsoles sendToConsoleAction consoleCommandEventTrigger txt
   | "/findloc " `isPrefixOf` txt = consoleCommandEventTrigger $ FindLoc $ fromJust $ T.stripPrefix "/findloc " txt
   | "/path " `isPrefixOf` txt = consoleCommandEventTrigger $ FindPath 0
   | "/" `isPrefixOf` txt = sendToConsoleAction $ encodeUtf8 $ "unknown command " <> txt <> "\n"
-  | otherwise = consoleCommandEventTrigger $ UserInput txt
+  | otherwise = consoleCommandEventTrigger $ UserInput txt-}
 
 keepConnectedTask :: Event UserInput -> SendToConsolesAction -> Handler ServerEvent -> MomentIO (Handler ServerCommand)
 keepConnectedTask consoleCommandEvent sendToConsolesAction fireServerEvent = do
@@ -225,7 +229,7 @@ fireEventsFromServerInput fireServerEvent = do
 
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do
-    (result, partial) <- liftIO $ runStateT (parse serverInputParser) src
+    (result, partial) <- liftIO $ runStateT (PA.parse serverInputParser) src
     continue result partial
     where continue result@(Just (Right _)) partial = do yield result
                                                         parseProducer partial
