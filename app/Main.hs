@@ -13,20 +13,27 @@ import Person
 import ServerInputParser
 import Console
 import RemoteConsole
+import Control.Concurrent.Async
+import Pipes
+import Control.Monad (forever)
 
 main :: IO ()
-main = runWithLog
+main = runDrifter
 
-runWithLog :: IO ()
-runWithLog = do
+runDrifter :: IO ()
+runDrifter = do
     world <- loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
-    (toRemoteConsole, runRemoteConsole) <- initRemoteConsole
-    (toConsole, runConsole) <- initConsole
-    toPerson <- runPerson world $ sendToConsoles $ toConsole <> toRemoteConsole
+    consoleBranch <- spawn $ newest 1024
+    remoteConsoleBranch <- spawn $ newest 1024
+    personBranch <- spawn $ newest 1024
+    loggerBranch <- spawn $ newest 1024
+    let toEvtBus = fst personBranch <> (fst consoleBranch){-- <> (fst loggerBranch)
 
-    runRemoteConsole toPerson
-    runConsole toPerson
+    let printEvent = forever $ do e <- await
+                                  liftIO $ print e
 
-sendToConsoles :: Output ByteString -> SendToConsolesAction
-sendToConsoles channel msg = do atomically $ PC.send channel msg
-                                return ()
+    async $ do runEffect $ fromInput (snd loggerBranch) >-> printEvent--}
+
+    runPerson world (toEvtBus, snd personBranch)
+    --runRemoteConsole toEvtBus (snd remoteConsoleBranch)
+    runConsole toEvtBus (snd consoleBranch)

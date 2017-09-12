@@ -2,10 +2,6 @@
 
 module ServerInputParser ( serverInputParser
                          , remoteInputParser
-                         , Location(..)
-                         , LocId
-                         , LocTitle
-                         , ServerEvent(..)
                          , RemoteConsoleEvent(..)
                          ) where
 
@@ -18,17 +14,7 @@ import Data.Attoparsec.ByteString as DAB
 import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
-
-data Location = Location { locId :: LocId
-                         , locTitle :: LocTitle
-                         } deriving (Show, Ord)
-type LocId = Int
-type LocTitle = Text
-
-instance Eq Location where
-  left == right = locId left == locId right
-
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text Location | UnknownServerEvent deriving (Eq, Show)
+import Event
 
 data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
 

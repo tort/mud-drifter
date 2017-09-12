@@ -1,9 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module RemoteConsole (
-  initRemoteConsole
-  , runRemoteConsole
-) where
+module RemoteConsole ( runRemoteConsole ) where
 
 import Person
 import Pipes.Concurrent hiding (send)
@@ -23,17 +20,17 @@ import Pipes.Attoparsec
 import ServerInputParser
 import System.IO
 import Debug.Trace
+import Event
+import Console
 
-initRemoteConsole :: IO (Output B.ByteString, Output TE.Text -> IO ())
-initRemoteConsole = do
-    remoteConsoleBox <- spawn $ bounded 1024
-    return $ (fst remoteConsoleBox, runRemoteConsole $ snd remoteConsoleBox)
-
-runRemoteConsole :: Input B.ByteString -> Output TE.Text -> IO ()
-runRemoteConsole input output = do
+runRemoteConsole :: Output Event -> Input Event -> IO ()
+runRemoteConsole evtBusOutput evtBusInput = do
   async $ serve (Host "localhost") "4000" $ \(sock, addr) -> do
-                                                async $ runEffect $ fromInput input >-> toSocket sock
-                                                runEffect $ parseRemoteInput sock (fromSocket sock (2^15)) >-> extractText >-> PPR.map decodeUtf8 >-> toOutput output
+                                                async $ runEffect $ fromInput evtBusInput >-> filterConsoleOutput >-> toSocket sock
+                                                runEffect $ parseRemoteInput sock (fromSocket sock (2^15))
+                                                            >-> extractText
+                                                            >-> PPR.map (ConsoleInput . decodeUtf8)
+                                                            >-> toOutput evtBusOutput
                                                 return ()
   return ()
 

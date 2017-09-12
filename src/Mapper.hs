@@ -3,9 +3,9 @@
 module Mapper ( foldToDirections
               , foldToLocations
               , locsByRegex
+              , showLocs
               , World(..)
               , Direction(..)
-              , Location(..)
               ) where
 
 import Data.ByteString hiding (head, empty, putStrLn)
@@ -33,6 +33,7 @@ import Prelude
 import qualified Prelude as P
 import Data.Set
 import qualified Data.Set as S
+import Event
 
 data World = World { locations :: Set Location
                    , directions :: Set Direction
@@ -104,12 +105,14 @@ mappableMove (Just (LocationEvent _), Just (MoveEvent _ _)) = True
 mappableMove (Just (MoveEvent _ _), Just (MoveEvent _ _)) = True
 mappableMove _ = False
 
-locsByRegex :: World -> Text -> ByteString
-locsByRegex world regex = encodeUtf8 $ renderMsg $ filterLocs locs
-  where locs = locations world
-        renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
+showLocs :: Set Location -> ByteString
+showLocs locs = encodeUtf8 $ renderMsg locs
+  where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
         joinToOneMsg = T.intercalate "\n"
         renderLocs = S.map renderLoc
         renderLoc node = (T.pack $ P.show $ locId node) <> " " <> locTitle node
         addRet txt = T.snoc txt '\n'
-        filterLocs = S.filter (T.isInfixOf regex . locTitle)
+
+locsByRegex :: World -> Text -> Set Location
+locsByRegex world regex = S.filter (T.isInfixOf regex . locTitle) locs
+  where locs = locations world

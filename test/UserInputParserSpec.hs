@@ -31,12 +31,14 @@ spec = describe "UserInputParser" $ do
   it "parse /findloc without param" $ (parse userInputParser "" "/findloc ") `shouldBe` (Right $ FindLoc "")
   it "parse /conn command" $ (parse userInputParser "" "/conn") `shouldBe` (Right $ KeepConn True)
   it "parse /unconn command" $ (parse userInputParser "" "/unconn") `shouldBe` (Right $ KeepConn False)
-  it "parse /path toLocName" pending
-  it "parse /path toLocId" pending
-  it "parse /path fromLocId toLocId" $ (parse userInputParser "" "/path 1 2") `shouldBe` (Right $ FindPathFromTo 1 2)
+  it "parse /path regex" $ (parse userInputParser "" "/path В избе") `shouldBe` (Right $ FindPathTo "В избе")
+  it "parse /path toLocId" $ (parse userInputParser "" "/path 34546") `shouldBe` (Right $ FindPathToLocId 34546)
+  it "parse /path fromLocId toLocId" $ (parse userInputParser "" "/path 111 222") `shouldBe` (Right $ FindPathFromTo 111 222)
   it "parse /path      fromLocId       toLocId    " $ (parse userInputParser "" "/path     1     2    ") `shouldBe` (Right $ FindPathFromTo 1 2)
-  it "parse /path str toId" $ isLeft $ (parse userInputParser "" "/path a 2")
-  it "parse /path fromId src" $ isLeft $ (parse userInputParser "" "/path 1 b")
+  it "parse /path str toId" $ (parse userInputParser "" "/path a 2") `shouldBe` (Right $ FindPathTo "a 2")
+  it "parse /path fromId src" $ (parse userInputParser "" "/path 1 b   ") `shouldBe` (Right $ FindPathTo "1 b")
   it "parse /path" $ isLeft $ (parse userInputParser "" "/path")
+  it "parse /go locId command" $ (parse userInputParser "" "/go 34546") `shouldBe` (Right $ GoToLocId 34546)
+  it "parse /go regex command" $ (parse userInputParser "" "/go В избе") `shouldBe` (Right $ GoTo "В избе")
   it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ UserInput "")
   it "return error in case of misspelled command" $ isLeft $ parse userInputParser "" "/unknowncommand blabla"
