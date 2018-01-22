@@ -103,6 +103,7 @@ parseWholeServerInput (Done "" r) events = ((ServerEvent r):events, Nothing)
 parseWholeServerInput (Done remaining evt) events = let nextResult = A.parse serverInputParser remaining
                                                      in parseWholeServerInput nextResult ((ServerEvent evt):events)
 parseWholeServerInput cnt@(Partial cont) events = (events, Just cnt)
+parseWholeServerInput (Fail remaining _ desc) events = (ConsoleOutput ("parsing error: " <> DBC8.pack desc):events, Nothing)
 
 fireEventConsumer :: Handler E.Event -> Consumer E.Event IO ()
 fireEventConsumer fireEvent = forever $ do
