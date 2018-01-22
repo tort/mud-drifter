@@ -36,6 +36,7 @@ library
                      , pipes-text
                      , pipes-parse
                      , pipes-attoparsec
+                     , pipes-safe
                      , attoparsec
                      , async
                      , word8

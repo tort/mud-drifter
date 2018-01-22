@@ -54,6 +54,7 @@ import Debug.Trace
 import Event
 import qualified Event as E
 import Control.Monad (forever)
+import qualified Pipes.Safe as PS
 
 newtype GoDirectionAction = GoDirectionAction Text
 data MoveRequest = MoveRequest TaskKey Location
@@ -176,18 +177,20 @@ wrapAsync l = do async l
 
 connectToServer :: Handler (Maybe Socket) -> Output E.Event -> IO ()
 connectToServer updateSocketBehavior toOuterBus = do
-    (sock, addr) <- NST.connectSock "bylins.su" "4000"
-    updateSocketBehavior $ Just sock
-
-    let closeSockOnEof = NST.closeSock sock
-        cleanup = liftIO (updateSocketBehavior Nothing) >> closeSockOnEof >> fireDisconnectionEvent
-
-    async $ do runEffect $ (fromSocket sock (2^15)  >> liftIO (sendToConsole toOuterBus "socket channel finished\n") >> cleanup) >-> fireServerInputEventConsumer toOuterBus
-               performGC
+    async $ PS.runSafeT $ do runEffect $ readSocket >-> fireServerInputEventConsumer toOuterBus
     return ()
-      where fireDisconnectionEvent = liftIO $ wrapAsync $ atomically $ PC.send toOuterBus ServerDisconnection
+      where onRun sock = fromSocket sock (2^15) >> liftIO (sendToConsole toOuterBus "socket channel finished\n")
+            onCreate =  do (sock, _) <- NST.connectSock "bylins.su" "4000"
+                           updateSocketBehavior $ Just sock
+                           return sock
+            onDestroy sock =  do updateSocketBehavior Nothing
+                                 closeSockOnEof sock
+                                 fireDisconnectionEvent
+            fireDisconnectionEvent = liftIO $ wrapAsync $ atomically $ PC.send toOuterBus ServerDisconnection
+            readSocket = PS.bracket onCreate onDestroy onRun
+            closeSockOnEof sock = NST.closeSock sock
 
-fireServerInputEventConsumer :: Output E.Event -> Consumer ByteString IO ()
+fireServerInputEventConsumer :: MonadIO m => Output E.Event -> Consumer ByteString m ()
 fireServerInputEventConsumer toOuterBus = do text <- await
                                              liftIO $ do async $ do atomically $ PC.send toOuterBus $ ServerInput text
                                                          return ()
