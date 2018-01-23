@@ -77,7 +77,7 @@ personTask world outerBus = do
   keepLoggedTask innerBus triggerInnerEvent (fst outerBus)
   sendServerCommandTask bSocket innerBus (fst outerBus)
   redirectNonPersonCommandsToServerTask innerBus triggerInnerEvent
-  fireServerEventsTask innerBus triggerInnerEvent
+  fireServerEventsTask outerBus innerBus triggerInnerEvent
   {--mapperTask world consoleCommandEvent sendToConsolesAction--}
   return ()
 
@@ -86,13 +86,15 @@ mapOuterEventsToInner fromOuterBus triggerInnerEvent = do
   liftIOLater $ wrapAsync $ do runEffect $ fromInput fromOuterBus >-> fireEventConsumer triggerInnerEvent
                                performGC
 
-fireServerEventsTask :: B.Event E.Event -> Handler E.Event -> MomentIO ()
-fireServerEventsTask innerEvent triggerEvent = do
+fireServerEventsTask :: EventBus -> B.Event E.Event -> Handler E.Event -> MomentIO ()
+fireServerEventsTask outerBus innerEvent triggerEvent = do
     (serverEvent, x) <- mapAccum Nothing $ scanServerInput <$> filterE isServerInput innerEvent
     reactimate $ triggerEventAction <$> serverEvent
     where isServerInput (ServerInput _) = True
           isServerInput _ = False
-          triggerEventAction evt = mapM_ triggerEvent evt
+          triggerEventAction evt = mapM_ fireOuterEvent evt
+          fireOuterEvent evt = do atomically $ PC.send (fst outerBus) evt
+                                  return ()
 
 scanServerInput :: E.Event -> Maybe (Result ServerEvent) -> ([E.Event], Maybe (Result ServerEvent))
 scanServerInput (ServerInput text) Nothing = parseWholeServerInput (A.parse serverInputParser text) []
