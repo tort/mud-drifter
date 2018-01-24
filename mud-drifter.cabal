@@ -22,6 +22,7 @@ library
                      , ServerInputParser
                      , UserInputParser
                      , Event
+                     , Logger
   build-depends:       base >= 4.7 && < 5
                      , text
                      , bytestring
@@ -37,6 +38,7 @@ library
                      , pipes-parse
                      , pipes-attoparsec
                      , pipes-safe
+                     , safe-exceptions
                      , attoparsec
                      , async
                      , word8

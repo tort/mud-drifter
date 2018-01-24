@@ -13,6 +13,7 @@ import Person
 import ServerInputParser
 import Console
 import RemoteConsole
+import Logger
 import Control.Concurrent.Async
 import Pipes
 import Control.Monad (forever)
@@ -27,13 +28,9 @@ runDrifter = do
     remoteConsoleBranch <- spawn $ newest 1024
     personBranch <- spawn $ newest 1024
     loggerBranch <- spawn $ newest 1024
-    let toEvtBus = fst personBranch <> (fst consoleBranch){-- <> (fst loggerBranch)
-
-    let printEvent = forever $ do e <- await
-                                  liftIO $ print e
-
-    async $ do runEffect $ fromInput (snd loggerBranch) >-> printEvent--}
+    let toEvtBus = fst personBranch <> (fst consoleBranch) <> (fst loggerBranch)
 
     runPerson world (toEvtBus, snd personBranch)
     --runRemoteConsole toEvtBus (snd remoteConsoleBranch)
     runConsole toEvtBus (snd consoleBranch)
+    runLogger $ snd loggerBranch
