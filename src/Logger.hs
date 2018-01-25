@@ -15,8 +15,7 @@ import Control.Concurrent.Async
 import Control.Exception.Safe
 
 runLogger :: Input Event -> IO ()
-runLogger evtBusInput = do
-  bracket
+runLogger evtBusInput = bracket
     (IO.openFile "evt.log" IO.WriteMode)
     (\h -> IO.hClose h)
     (\h -> do async $ do runEffect $ fromInput evtBusInput >-> PP.map P.show >-> PP.toHandle h

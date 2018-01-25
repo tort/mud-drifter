@@ -31,6 +31,6 @@ runDrifter = do
     let toEvtBus = fst personBranch <> (fst consoleBranch) <> (fst loggerBranch)
 
     runPerson world (toEvtBus, snd personBranch)
+    runLogger $ snd loggerBranch
     --runRemoteConsole toEvtBus (snd remoteConsoleBranch)
     runConsole toEvtBus (snd consoleBranch)
-    runLogger $ snd loggerBranch

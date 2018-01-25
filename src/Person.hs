@@ -98,6 +98,7 @@ fireServerEventsTask outerBus innerEvent triggerEvent = do
 
 scanServerInput :: E.Event -> Maybe (Result ServerEvent) -> ([E.Event], Maybe (Result ServerEvent))
 scanServerInput (ServerInput text) Nothing = parseWholeServerInput (A.parse serverInputParser text) []
+scanServerInput (ServerInput "") _ = ([], Nothing)
 scanServerInput (ServerInput text) (Just (Partial cont)) = parseWholeServerInput (cont text) []
 
 parseWholeServerInput :: Result ServerEvent -> [E.Event] -> ([E.Event], Maybe (Result ServerEvent))
@@ -180,18 +181,18 @@ wrapAsync l = do async l
 
 connectToServer :: Handler (Maybe Socket) -> Output E.Event -> IO ()
 connectToServer updateSocketBehavior toOuterBus = do
-    async $ PS.runSafeT $ do runEffect $ readSocket >-> fireServerInputEventConsumer toOuterBus
-    return ()
+  async $ PS.runSafeT $ do runEffect $ readSocket >-> fireServerInputEventConsumer toOuterBus >> onPipeClose
+  return ()
       where onRun sock = fromSocket sock (2^15) >> liftIO (sendToConsole toOuterBus "socket channel finished\n")
             onCreate =  do (sock, _) <- NST.connectSock "bylins.su" "4000"
                            updateSocketBehavior $ Just sock
                            return sock
-            onDestroy sock =  do updateSocketBehavior Nothing
-                                 closeSockOnEof sock
-                                 fireDisconnectionEvent
+            onDestroy sock =  NST.closeSock sock
+            onPipeClose = (liftIO $ updateSocketBehavior Nothing) >> indicateEndOfInput >> fireDisconnectionEvent
             fireDisconnectionEvent = liftIO $ wrapAsync $ atomically $ PC.send toOuterBus ServerDisconnection
             readSocket = PS.bracket onCreate onDestroy onRun
-            closeSockOnEof sock = NST.closeSock sock
+            indicateEndOfInput = liftIO $ do async $ do atomically $ PC.send toOuterBus $ ServerInput ""
+                                             return ()
 
 fireServerInputEventConsumer :: MonadIO m => Output E.Event -> Consumer ByteString m ()
 fireServerInputEventConsumer toOuterBus = do text <- await
