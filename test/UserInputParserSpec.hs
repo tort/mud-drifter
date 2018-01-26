@@ -22,10 +22,11 @@ import Data.Either
 import UserInputParser
 import Person
 import RemoteConsole
+import Event
 
 spec :: Spec
 spec = describe "UserInputParser" $ do
-  it "parse non-command input" $ (parse userInputParser "" "blabla") `shouldBe` (Right $ UserInput "blabla")
+  it "parse non-command input" $ (parse userInputParser "" "blabla") `shouldBe` (Right $ UserInputRedirect "blabla")
   it "parse /findloc command" $ (parse userInputParser "" "/findloc В таверне") `shouldBe` (Right $ FindLoc "В таверне")
   it "parse /findloc without param" $ (parse userInputParser "" "/findloc") `shouldBe` (Right $ FindLoc "")
   it "parse /findloc without param" $ (parse userInputParser "" "/findloc ") `shouldBe` (Right $ FindLoc "")
@@ -40,5 +41,5 @@ spec = describe "UserInputParser" $ do
   it "parse /path" $ isLeft $ (parse userInputParser "" "/path")
   it "parse /go locId command" $ (parse userInputParser "" "/go 34546") `shouldBe` (Right $ GoToLocId 34546)
   it "parse /go regex command" $ (parse userInputParser "" "/go В избе") `shouldBe` (Right $ GoTo "В избе")
-  it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ UserInput "")
+  it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ UserInputRedirect "")
   it "return error in case of misspelled command" $ isLeft $ parse userInputParser "" "/unknowncommand blabla"

@@ -2,6 +2,7 @@
 
 module Person ( runPerson
               , loadWorld
+              , parseProducer
               , SendToConsolesAction
               ) where
 

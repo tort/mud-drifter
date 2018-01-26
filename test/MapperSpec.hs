@@ -19,6 +19,7 @@ import Data.Functor
 import Data.Text as T
 import Data.Set
 import qualified Data.Set as S
+import Event
 
 spec :: Spec
 spec = describe "Mapper" $ do

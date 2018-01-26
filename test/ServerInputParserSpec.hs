@@ -18,6 +18,7 @@ import Data.Text.Encoding
 import ServerInputParser
 import Person
 import RemoteConsole
+import Event
 
 spec :: Spec
 spec = describe "Parser" $ do
