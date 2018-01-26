@@ -3,7 +3,6 @@
 module Person ( runPerson
               , loadWorld
               , parseProducer
-              , SendToConsolesAction
               ) where
 
 import Control.Applicative ((<|>))
@@ -57,12 +56,8 @@ import qualified Event as E
 import Control.Monad (forever)
 import qualified Pipes.Safe as PS
 
-newtype GoDirectionAction = GoDirectionAction Text
 data MoveRequest = MoveRequest TaskKey Location
 type TaskKey = Int
-type SendToConsolesAction = ByteString -> IO ()
-
-newtype KeepConnectionCommand = KeepConnectionCommand Bool
 
 runPerson :: World -> EventBus -> IO ()
 runPerson world eventBus = do
@@ -281,24 +276,6 @@ isFindLoc _ = False
 matchingLocs :: World -> E.Event -> ByteString
 matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
 
-{--
-pathFromTo :: Gr () Int -> Maybe Int -> E.PersonCommand -> Maybe Path
-pathFromTo graph _ (FindPathFromTo from to) = Just $ GA.sp from to graph
-pathFromTo graph (Just currLoc) (FindPathToLocId to) = Just $ GA.sp currLoc to graph
---pathFromTo graph (Just currLoc) (FindPathTo to) =
-pathFromTo graph Nothing _ = Nothing
-
-pathTo :: Gr () Int -> Maybe Int -> E.PersonCommand -> Path
-pathTo graph (Just from) (FindPathToLocId to) = []
-
-writeLog :: IO (Output ByteString, STM ())
-writeLog = do
-  logFile <- openFile "log" WriteMode
-  (persToLogOut, input, seal) <- spawn' $ bounded 1024
-  async $ do runEffect $ fromInput input >-> PBS.toHandle logFile >> liftIO (hClose logFile) >> liftIO (DBC8.putStr "write log channel closed\n")
-             performGC
-  return (persToLogOut, seal)
-
 moveToTask :: B.Event MoveRequest -> B.Event ServerEvent -> MomentIO ()
 moveToTask moveRequest serverEvent = do
     let locEvent = filterE isLocation serverEvent
@@ -323,18 +300,7 @@ isMove :: ServerEvent -> Bool
 isMove (MoveEvent _ _) = True
 isMove _ = False
 
-notCommandInput :: E.Event -> Bool
-notCommandInput (E.PersonCommand (UserInputRedirect _)) = True
-notCommandInput _ = False
-
-sendToConsoleConsumer :: SendToConsolesAction -> Consumer ByteString IO ()
-sendToConsoleConsumer action = do
-    text <- await
-    liftIO $ action text
-    sendToConsoleConsumer action
-
-printDirection :: GoDirectionAction -> IO ()
-printDirection (GoDirectionAction direction) = DTIO.putStrLn direction
+{--
 
 removePathHead :: Maybe [Text] -> Maybe [Text]
 removePathHead Nothing = Nothing
