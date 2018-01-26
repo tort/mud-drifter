@@ -78,7 +78,7 @@ personTask world outerBus = do
   sendServerCommandTask bSocket innerBus (fst outerBus)
   redirectNonPersonCommandsToServerTask innerBus triggerInnerEvent
   fireServerEventsTask outerBus innerBus triggerInnerEvent
-  {--mapperTask world consoleCommandEvent sendToConsolesAction--}
+  mapperTask world (fst outerBus) innerBus
   return ()
 
 mapOuterEventsToInner :: Input E.Event -> Handler E.Event -> MomentIO ()
@@ -225,32 +225,13 @@ loadConfigProperty propertyName = do conf <- DC.load [Required personCfgFileName
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
 
-{--fireEventsFromServerInput :: Handler ServerEvent -> IO (Output ByteString, STM ())
-fireEventsFromServerInput fireServerEvent = do
-    return (parseServerTextOut, seal)
-
-mapperTask :: World -> B.Event E.PersonCommand -> SendToConsolesAction -> MomentIO ()
-mapperTask world consoleCommandEvent sendToConsolesAction = do
+mapperTask :: World -> Output E.Event -> B.Event E.Event -> MomentIO ()
+mapperTask world toOuterBus innerEvent = do
   (bLoc, _) <- newBehavior $ Nothing
   let graph = buildMap $ directions world
-      findPathResponse = showFindPathResponse world graph <$> bLoc <@> filterE isFindPath consoleCommandEvent
-  reactimate $ (sendToConsolesAction . matchingLocs world) <$> filterE isFindLoc consoleCommandEvent
-  reactimate $ sendToConsolesAction <$> findPathResponse
-
-showFindPathResponse :: World -> Gr () Int -> Maybe Int -> E.PersonCommand -> ByteString
-showFindPathResponse world graph currLoc userInput =
-  let destination = locsByRegex world
-      showPathBy f t = if (f == t) then "you are already there!"
-                           else (showPath $ directions world) $ GA.sp f t graph
-   in case (currLoc, userInput) of
-        (_, FindPathFromTo from to) -> showPathBy from to
-        (Just currLoc, FindPathToLocId to) -> showPathBy currLoc to
-        (Just currLoc, FindPathTo regex) -> let matchingLocs = destination regex
-                                             in case S.toList $ matchingLocs of
-                                                  [] -> "no matching locations found"
-                                                  d:[] -> showPathBy currLoc (locId d)
-                                                  _ -> showLocs matchingLocs
-        (Nothing, _) -> "current location is unknown\n"
+      findPathResponse = showFindPathResponse world graph <$> bLoc <@> filterE isFindPath innerEvent
+  reactimate $ (sendToConsole toOuterBus . matchingLocs world) <$> filterE isFindLoc innerEvent
+  reactimate $ sendToConsole toOuterBus <$> findPathResponse
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
@@ -259,14 +240,27 @@ buildMap directions = mkGraph nodes edges
         aheadEdge d = (locIdFrom d, locIdTo d, 1)
         reverseEdge d = (locIdTo d, locIdFrom d, 1)
 
-pathFromTo :: Gr () Int -> Maybe Int -> E.PersonCommand -> Maybe Path
-pathFromTo graph _ (FindPathFromTo from to) = Just $ GA.sp from to graph
-pathFromTo graph (Just currLoc) (FindPathToLocId to) = Just $ GA.sp currLoc to graph
---pathFromTo graph (Just currLoc) (FindPathTo to) =
-pathFromTo graph Nothing _ = Nothing
+isFindPath :: E.Event -> Bool
+isFindPath (PersonCommand (FindPathFromTo from to)) = True
+isFindPath (PersonCommand (FindPathToLocId to)) = True
+isFindPath (PersonCommand (FindPathTo to)) = True
+isFindPath _ = False
 
-pathTo :: Gr () Int -> Maybe Int -> E.PersonCommand -> Path
-pathTo graph (Just from) (FindPathToLocId to) = []
+showFindPathResponse :: World -> Gr () Int -> Maybe Int -> E.Event -> ByteString
+showFindPathResponse world graph currLoc userInput =
+  let destination = locsByRegex world
+      showPathBy f t = if (f == t) then "you are already there!"
+                           else (showPath $ directions world) $ GA.sp f t graph
+   in case (currLoc, userInput) of
+        (_, (PersonCommand (FindPathFromTo from to))) -> showPathBy from to
+        (Just currLoc, (PersonCommand (FindPathToLocId to))) -> showPathBy currLoc to
+        (Just currLoc, (PersonCommand (FindPathTo regex))) -> let matchingLocs = destination regex
+                                             in case S.toList $ matchingLocs of
+                                                  [] -> "no matching locations found"
+                                                  d:[] -> showPathBy currLoc (locId d)
+                                                  _ -> showLocs matchingLocs
+        (Nothing, _) -> "current location is unknown\n"
+
 
 showPath :: Set Direction -> Path -> ByteString
 showPath directions [] = "path is empty\n"
@@ -279,18 +273,22 @@ showPath directions path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection .
         filterDirs = P.filter (\pair -> isJust (fst pair) && isJust (snd pair))
         toJust (Just left, Just right) = (left, right)
 
-isFindPath :: E.PersonCommand -> Bool
-isFindPath (FindPathFromTo from to) = True
-isFindPath (FindPathToLocId to) = True
-isFindPath (FindPathTo to) = True
-isFindPath _ = False
-
-isFindLoc :: E.PersonCommand -> Bool
-isFindLoc (FindLoc regex) = True
+isFindLoc :: E.Event -> Bool
+isFindLoc (PersonCommand (FindLoc regex)) = True
 isFindLoc _ = False
 
-matchingLocs :: World -> E.PersonCommand -> ByteString
-matchingLocs graph (FindLoc regex) = showLocs $ locsByRegex graph regex
+matchingLocs :: World -> E.Event -> ByteString
+matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
+
+{--
+pathFromTo :: Gr () Int -> Maybe Int -> E.PersonCommand -> Maybe Path
+pathFromTo graph _ (FindPathFromTo from to) = Just $ GA.sp from to graph
+pathFromTo graph (Just currLoc) (FindPathToLocId to) = Just $ GA.sp currLoc to graph
+--pathFromTo graph (Just currLoc) (FindPathTo to) =
+pathFromTo graph Nothing _ = Nothing
+
+pathTo :: Gr () Int -> Maybe Int -> E.PersonCommand -> Path
+pathTo graph (Just from) (FindPathToLocId to) = []
 
 writeLog :: IO (Output ByteString, STM ())
 writeLog = do
