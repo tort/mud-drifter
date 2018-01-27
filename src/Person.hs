@@ -66,6 +66,7 @@ runPerson world eventBus = do
 
 personTask :: World -> EventBus -> MomentIO ()
 personTask world outerBus = do
+  let graph = buildMap $ directions world
   (innerBus, triggerInnerEvent) <- newEvent
   mapOuterEventsToInner (snd outerBus) triggerInnerEvent
   firePersonCommands outerBus innerBus triggerInnerEvent
@@ -74,7 +75,8 @@ personTask world outerBus = do
   sendServerCommandTask bSocket innerBus (fst outerBus)
   redirectNonPersonCommandsToServerTask innerBus triggerInnerEvent
   fireServerEventsTask outerBus innerBus triggerInnerEvent
-  mapperTask world (fst outerBus) innerBus
+  bCurrentLoc <- mapperTask world graph (fst outerBus) innerBus
+  travelTask world graph bCurrentLoc innerBus triggerInnerEvent
   return ()
 
 mapOuterEventsToInner :: Input E.Event -> Handler E.Event -> MomentIO ()
@@ -221,20 +223,13 @@ loadConfigProperty propertyName = do conf <- DC.load [Required personCfgFileName
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
 
-mapperTask :: World -> Output E.Event -> B.Event E.Event -> MomentIO ()
-mapperTask world toOuterBus innerEvent = do
-  bLoc <- stepper Nothing changeCurrLocEvent
-  let graph = buildMap $ directions world
-      findPathResponse = showFindPathResponse world graph <$> bLoc <@> filterE isFindPath innerEvent
+mapperTask :: World -> Gr () Int -> Output E.Event -> B.Event E.Event -> MomentIO (Behavior (Maybe LocId))
+mapperTask world graph toOuterBus innerEvent = do
+  bLoc <- stepper Nothing $ Just <$> changeCurrLocEvent innerEvent
+  let findPathResponse = showFindPathResponse world graph <$> bLoc <@> filterE isFindPath innerEvent
   reactimate $ (sendToConsole toOuterBus . matchingLocs world) <$> filterE isFindLoc innerEvent
   reactimate $ sendToConsole toOuterBus <$> findPathResponse
-    where locEvent = filterE isLocEvent innerEvent
-          isLocEvent (ServerEvent (LocationEvent _)) = True
-          isLocEvent (ServerEvent (MoveEvent _ _)) = True
-          isLocEvent _ = False
-          changeCurrLocEvent = toLocId <$> locEvent
-          toLocId (ServerEvent (LocationEvent loc)) = Just $ locId loc
-          toLocId (ServerEvent (MoveEvent _ loc)) = Just $ locId loc
+  return bLoc
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
@@ -267,14 +262,16 @@ showFindPathResponse world graph currLoc userInput =
 
 showPath :: Set Direction -> Path -> ByteString
 showPath directions [] = "path is empty\n"
-showPath directions path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . nodePairToDirection <$> toJust <$> nodePairs)
+showPath directions path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nodePairToDirection directions) <$> toJust <$> nodePairs)
   where joinToOneMsg = T.intercalate "\n"
         showDirection = trigger
         addRet txt = T.snoc txt '\n'
-        nodePairToDirection (from, to) = P.head $ S.toList $ S.filter (\d -> locIdFrom d == from && locIdTo d == to) directions
         nodePairs = filterDirs $ P.scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
         filterDirs = P.filter (\pair -> isJust (fst pair) && isJust (snd pair))
         toJust (Just left, Just right) = (left, right)
+
+nodePairToDirection :: Set Direction -> (LocId, LocId) -> Direction
+nodePairToDirection directions (from, to) = P.head $ S.toList $ S.filter (\d -> locIdFrom d == from && locIdTo d == to) directions
 
 isFindLoc :: E.Event -> Bool
 isFindLoc (PersonCommand (FindLoc regex)) = True
@@ -283,21 +280,37 @@ isFindLoc _ = False
 matchingLocs :: World -> E.Event -> ByteString
 matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
 
-moveToTask :: B.Event MoveRequest -> B.Event E.Event -> MomentIO ()
-moveToTask moveRequest serverEvent = do
-    bRequests <- accumB [] $ addRequestEvent moveRequest
-    let locEvent = filterE isLocation serverEvent
-    let moveEvent = filterE isMove serverEvent
-    let changeCurrLocEvent = B.unions [(\l@(ServerEvent (LocationEvent locData)) -> const locData) <$> locEvent
-                                     ,(\m@(ServerEvent (MoveEvent _ locData)) -> const locData) <$> moveEvent]
+travelTask :: World -> Gr () Int -> Behavior (Maybe LocId) -> B.Event E.Event -> Handler E.Event -> MomentIO ()
+travelTask world graph currentLoc innerEvent triggerEvent = do
+  (bPath, updatePath) <- newBehavior []
+  let moveAction path = do updatePath path
+                           moveActionFromPath path
+                             where moveActionFromPath (x:y:xs) = triggerEvent $ moveCommand x y
+                                   moveActionFromPath _ = return ()
+      onTravelRequestAction Nothing (PersonCommand (GoToLocId locTo)) = return ()
+      onTravelRequestAction (Just currentLocId) (PersonCommand (GoToLocId locTo)) = moveAction $ GA.sp currentLocId locTo graph
+      onChangeLocAction [] = return ()
+      onChangeLocAction path = moveAction $ P.tail path
+  reactimate $ onTravelRequestAction <$> currentLoc <@> filterE isGoRequest innerEvent
+  reactimate $ onChangeLocAction <$> bPath <@ changeCurrLocEvent innerEvent
+    where isGoRequest (PersonCommand (GoToLocId _)) = True
+          isGoRequest _ = False
+          moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
 
-    reactimate $ moveCommand <$> bRequests <@> changeCurrLocEvent
+changeCurrLocEvent :: B.Event E.Event -> B.Event LocId
+changeCurrLocEvent innerEvent = changeCurrLocEvent
+  where locEvent = filterE isLocEvent innerEvent
+        isLocEvent (ServerEvent (LocationEvent _)) = True
+        isLocEvent (ServerEvent (MoveEvent _ _)) = True
+        isLocEvent _ = False
+        changeCurrLocEvent = toLocId <$> locEvent
+        toLocId (ServerEvent (LocationEvent loc)) = locId loc
+        toLocId (ServerEvent (MoveEvent _ loc)) = locId loc
+
+
 
 addRequestEvent :: B.Event MoveRequest -> B.Event ([(TaskKey, Location)] -> [(TaskKey, Location)])
 addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) <$> moveRequest
-
-moveCommand :: [(TaskKey, Location)] -> (Location -> Location) -> IO ()
-moveCommand = undefined
 
 isLocation :: E.Event -> Bool
 isLocation (ServerEvent (LocationEvent _)) = True
