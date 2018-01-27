@@ -223,11 +223,18 @@ personCfgFileName = "person.cfg"
 
 mapperTask :: World -> Output E.Event -> B.Event E.Event -> MomentIO ()
 mapperTask world toOuterBus innerEvent = do
-  (bLoc, _) <- newBehavior $ Nothing
+  bLoc <- stepper Nothing changeCurrLocEvent
   let graph = buildMap $ directions world
       findPathResponse = showFindPathResponse world graph <$> bLoc <@> filterE isFindPath innerEvent
   reactimate $ (sendToConsole toOuterBus . matchingLocs world) <$> filterE isFindLoc innerEvent
   reactimate $ sendToConsole toOuterBus <$> findPathResponse
+    where locEvent = filterE isLocEvent innerEvent
+          isLocEvent (ServerEvent (LocationEvent _)) = True
+          isLocEvent (ServerEvent (MoveEvent _ _)) = True
+          isLocEvent _ = False
+          changeCurrLocEvent = toLocId <$> locEvent
+          toLocId (ServerEvent (LocationEvent loc)) = Just $ locId loc
+          toLocId (ServerEvent (MoveEvent _ loc)) = Just $ locId loc
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
@@ -276,13 +283,13 @@ isFindLoc _ = False
 matchingLocs :: World -> E.Event -> ByteString
 matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
 
-moveToTask :: B.Event MoveRequest -> B.Event ServerEvent -> MomentIO ()
+moveToTask :: B.Event MoveRequest -> B.Event E.Event -> MomentIO ()
 moveToTask moveRequest serverEvent = do
+    bRequests <- accumB [] $ addRequestEvent moveRequest
     let locEvent = filterE isLocation serverEvent
     let moveEvent = filterE isMove serverEvent
-    bRequests <- accumB [] $ addRequestEvent moveRequest
-    let changeCurrLocEvent = B.unions [(\l@(LocationEvent locData) -> const locData) <$> locEvent
-                                     ,(\m@(MoveEvent _ locData) -> const locData) <$> moveEvent]
+    let changeCurrLocEvent = B.unions [(\l@(ServerEvent (LocationEvent locData)) -> const locData) <$> locEvent
+                                     ,(\m@(ServerEvent (MoveEvent _ locData)) -> const locData) <$> moveEvent]
 
     reactimate $ moveCommand <$> bRequests <@> changeCurrLocEvent
 
@@ -292,12 +299,12 @@ addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) 
 moveCommand :: [(TaskKey, Location)] -> (Location -> Location) -> IO ()
 moveCommand = undefined
 
-isLocation :: ServerEvent -> Bool
-isLocation (LocationEvent _) = True
+isLocation :: E.Event -> Bool
+isLocation (ServerEvent (LocationEvent _)) = True
 isLocation _ = False
 
-isMove :: ServerEvent -> Bool
-isMove (MoveEvent _ _) = True
+isMove :: E.Event -> Bool
+isMove (ServerEvent (MoveEvent _ _)) = True
 isMove _ = False
 
 {--
