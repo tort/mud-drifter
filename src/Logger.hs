@@ -13,10 +13,13 @@ import Prelude
 import qualified Prelude as P
 import Control.Concurrent.Async
 import Control.Exception.Safe
+import Control.Monad
+import Data.Maybe
 
 runLogger :: Input Event -> IO ()
-runLogger evtBusInput = bracket
-    (IO.openFile "evt.log" IO.WriteMode)
-    (\h -> IO.hClose h)
-    (\h -> do async $ do runEffect $ fromInput evtBusInput >-> PP.map P.show >-> PP.toHandle h
-              return ())
+runLogger evtBusInput = do async $ (bracketWithError
+                                    (IO.openFile "evt.log" IO.WriteMode)
+                                    (\e h -> do P.putStrLn $ P.show e
+                                                IO.hClose h)
+                                    (\h -> runEffect $ fromInput evtBusInput >-> PP.map P.show >-> PP.toHandle h >> liftIO (IO.putStr "logger input stream ceased")))
+                           return ()

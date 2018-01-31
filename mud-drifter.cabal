@@ -38,7 +38,7 @@ library
                      , pipes-parse
                      , pipes-attoparsec
                      , pipes-safe
-                     , safe-exceptions
+                     , safe-exceptions >= 0.1.7.0
                      , attoparsec
                      , async
                      , word8
