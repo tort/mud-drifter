@@ -179,24 +179,31 @@ wrapAsync l = do async l
 
 connectToServer :: Handler (Maybe Socket) -> Output E.Event -> IO ()
 connectToServer updateSocketBehavior toOuterBus = do
-  async $ PS.runSafeT $ do runEffect $ readSocket >-> fireServerInputEventConsumer toOuterBus >> onPipeClose
+  async $ PS.runSafeT $ do runEffect $ readSocket
   return ()
-      where onRun sock = fromSocket sock (2^15) >> liftIO (sendToConsole toOuterBus "socket channel finished\n")
-            onCreate =  do (sock, _) <- NST.connectSock "bylins.su" "4000"
-                           updateSocketBehavior $ Just sock
-                           return sock
-            onDestroy sock =  NST.closeSock sock
-            onPipeClose = (liftIO $ updateSocketBehavior Nothing) >> indicateEndOfInput >> fireDisconnectionEvent
-            fireDisconnectionEvent = liftIO $ wrapAsync $ atomically $ PC.send toOuterBus ServerDisconnection
-            readSocket = PS.bracket onCreate onDestroy onRun
-            indicateEndOfInput = liftIO $ do async $ do atomically $ PC.send toOuterBus $ ServerInput ""
-                                             return ()
+    where onRun (sock, _, (logChanOutput, _, _)) = fromSocket sock (2^15) >-> serverInputConsumer toOuterBus logChanOutput >> onPipeClose >> liftIO (sendToConsole toOuterBus "socket channel finished\n")
+          onCreate = do (sock, _) <- NST.connectSock "bylins.su" "4000"
+                        updateSocketBehavior $ Just sock
+                        hLog <- openFile "server-input.log" WriteMode
+                        logChan@(_, logChanInput, _) <- spawn' $ newest 1024
+                        async $ runEffect $ fromInput logChanInput >-> PBS.toHandle hLog
+                        return (sock, hLog, logChan)
+          onDestroy (sock, hLog, (_, _, seal)) =  do NST.closeSock sock
+                                                     hClose hLog
+                                                     atomically seal
+          onPipeClose = (liftIO $ updateSocketBehavior Nothing) >> indicateEndOfInput >> fireDisconnectionEvent
+          fireDisconnectionEvent = liftIO $ wrapAsync $ atomically $ PC.send toOuterBus ServerDisconnection
+          readSocket = PS.bracket onCreate onDestroy onRun
+          indicateEndOfInput = liftIO $ do async $ do atomically $ PC.send toOuterBus $ ServerInput ""
+                                           return ()
 
-fireServerInputEventConsumer :: MonadIO m => Output E.Event -> Consumer ByteString m ()
-fireServerInputEventConsumer toOuterBus = do text <- await
-                                             liftIO $ do async $ do atomically $ PC.send toOuterBus $ ServerInput text
-                                                         return ()
-                                             fireServerInputEventConsumer toOuterBus
+serverInputConsumer :: MonadIO m => Output E.Event -> Output ByteString -> Consumer ByteString m ()
+serverInputConsumer toOuterBus toLog = do text <- await
+                                          liftIO $ do async $ do atomically $ PC.send toOuterBus $ ServerInput text
+                                                      return ()
+                                          liftIO $ do async $ do atomically $ PC.send toLog $ text
+                                                      return ()
+                                          serverInputConsumer toOuterBus toLog
 
 keepConnectionCommandToEvent :: E.Event -> Bool
 keepConnectionCommandToEvent (PersonCommand (KeepConn v)) = v
