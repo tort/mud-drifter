@@ -48,6 +48,7 @@ library
                      , MissingH
                      , parsec
                      , containers
+                     , binary
   default-language:    Haskell2010
 
 executable mud-drifter
@@ -71,8 +72,9 @@ executable mud-drifter
                      , network
                      , network-simple
                      , reactive-banana
-                     , lens-family-core
                      , async
+                     , lens
+                     , binary
   default-language:    Haskell2010
 
 test-suite mud-drifter-test

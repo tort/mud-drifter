@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Event ( Event(..)
@@ -13,6 +14,14 @@ import Pipes.Concurrent
 import Data.Text
 import Data.ByteString
 
+import Data.Binary
+import GHC.Generics (Generic)
+
+instance Binary Event
+instance Binary PersonCommand
+instance Binary ServerEvent
+instance Binary Location
+
 data Event = ConsoleInput Text
            | PersonCommand PersonCommand
            | ServerCommand Text
@@ -20,7 +29,7 @@ data Event = ConsoleInput Text
            | ServerEvent ServerEvent
            | ConsoleOutput ByteString
            | ServerDisconnection
-           deriving (Eq, Show)
+           deriving (Eq, Show, Generic)
 
 type EventBus = (Output Event, Input Event)
 
@@ -32,14 +41,14 @@ data PersonCommand = UserInputRedirect Text
                | FindPathTo Text
                | GoTo Text
                | GoToLocId Int
-               deriving (Eq, Show)
+               deriving (Eq, Show, Generic)
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text Location | UnknownServerEvent ByteString deriving (Eq, Show)
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text Location | UnknownServerEvent ByteString deriving (Eq, Show, Generic)
 
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle
-                         } deriving (Show, Ord)
+                         } deriving (Show, Ord, Generic)
 type LocId = Int
 type LocTitle = Text
 

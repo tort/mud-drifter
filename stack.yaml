@@ -15,8 +15,8 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-#resolver: lts-7.15
-resolver: lts-9.18
+#resolver: lts-10.4
+resolver: lts-9.21
 build:
   library-profiling: true
   executable-profiling: true
