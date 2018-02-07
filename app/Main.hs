@@ -23,7 +23,7 @@ main = runDrifter
 
 runDrifter :: IO ()
 runDrifter = do
-    world <- loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
+    world <- loadWorld "/Users/anesterov/workspace/mud-drifter/archive/server-input-log/"
     consoleBranch <- spawn $ newest 1024
     remoteConsoleBranch <- spawn $ newest 1024
     personBranch <- spawn $ newest 1024
