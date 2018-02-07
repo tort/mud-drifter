@@ -34,7 +34,7 @@ data PersonCommand = UserInputRedirect Text
                | GoToLocId Int
                deriving (Eq, Show)
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text Location | UnknownServerEvent deriving (Eq, Show)
+data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text Location | UnknownServerEvent ByteString deriving (Eq, Show)
 
 
 data Location = Location { locId :: LocId

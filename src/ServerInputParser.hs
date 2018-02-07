@@ -86,7 +86,7 @@ welcomePrompt = do
     C.endOfLine
     C.endOfLine
     string $ encodeUtf8 "Последний раз вы заходили к нам в"
-    endsIACGA
+    skipTillIACGA
     return WelcomePrompt
 
 postWelcome :: A.Parser ServerEvent
@@ -135,17 +135,23 @@ dblCrnl = do C.endOfLine
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do
-    endsIACGA
-    return UnknownServerEvent
+  txt <- takeTillIACGA
+  return $ UnknownServerEvent txt
 
 iacGA :: A.Parser Word8
 iacGA = do iac
            ga
 
-endsIACGA :: A.Parser Word8
-endsIACGA = do skipWhile (/= iacWord)
-               iac
-               ga
+takeTillIACGA :: A.Parser B.ByteString
+takeTillIACGA = do txt <- takeTill (== iacWord)
+                   iac
+                   ga
+                   return txt
+
+skipTillIACGA :: A.Parser Word8
+skipTillIACGA = do skipWhile (/= iacWord)
+                   iac
+                   ga
 
 iacWord :: Word8
 iacWord = 255
