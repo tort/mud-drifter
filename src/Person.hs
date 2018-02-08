@@ -100,11 +100,12 @@ scanServerInput (ServerInput "") _ = ([], Nothing)
 scanServerInput (ServerInput text) (Just (Partial cont)) = parseWholeServerInput (cont text) []
 
 parseWholeServerInput :: Result ServerEvent -> [E.Event] -> ([E.Event], Maybe (Result ServerEvent))
-parseWholeServerInput (Done "" r) events = ((ServerEvent r):events, Nothing)
+parseWholeServerInput (Done "" r) events = (events ++ [ServerEvent r], Nothing)
 parseWholeServerInput (Done remaining evt) events = let nextResult = A.parse serverInputParser remaining
-                                                     in parseWholeServerInput nextResult ((ServerEvent evt):events)
+                                                     in parseWholeServerInput nextResult (events ++ [ServerEvent evt])
 parseWholeServerInput cnt@(Partial cont) events = (events, Just cnt)
-parseWholeServerInput (Fail remaining contexts desc) events = (ConsoleOutput ("parsing error: " <> DBC8.pack desc <> " contexts: " <> (DBC8.unwords $ DBC8.pack <$> contexts)):events, Nothing)
+parseWholeServerInput (Fail remaining contexts desc) events = (events ++ [errorEvt contexts desc], Nothing)
+  where errorEvt contexts desc = ConsoleOutput ("parsing error: " <> DBC8.pack desc <> " contexts: " <> (DBC8.unwords $ DBC8.pack <$> contexts))
 
 fireEventConsumer :: Handler E.Event -> Consumer E.Event IO ()
 fireEventConsumer fireEvent = forever $ do
