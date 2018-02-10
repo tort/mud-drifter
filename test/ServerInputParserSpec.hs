@@ -65,9 +65,15 @@ spec = describe "Parser" $ do
                                             serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
                                             length serverEventList `shouldBe` 6
                                             hClose hLog
-        {-it "parse remote console input" $ do hLog <- openFile "test/logs/inDarkness.log" ReadMode
-                                             events <- toListM $ parseRemoteInput2 (fromHandle hLog)
-                                             events `shouldBe` ["", "blabla"]-}
+        it "parse move and location on agromob" $ do hLog <- openFile "test/logs/enterRoomWithFight.log" ReadMode
+                                                     serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter moveOrLocation
+                                                     serverEventList `shouldBe` [MoveEvent "восток", (LocationEvent $ Location 5112 "На кухне")]
+                                                     hClose hLog
+
+moveOrLocation :: ServerEvent -> Bool
+moveOrLocation (MoveEvent _) = True
+moveOrLocation (LocationEvent _) = True
+moveOrLocation _ = False
 
 nonEmptyUnknown :: ServerEvent -> Bool
 nonEmptyUnknown (UnknownServerEvent "") = False
