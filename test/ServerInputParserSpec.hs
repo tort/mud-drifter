@@ -37,27 +37,27 @@ spec = describe "Parser" $ do
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
                                  log ~> serverInputParser `shouldParse` (LocationEvent (Location 35040 "В корчме "))
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
-                                         log ~> serverInputParser `shouldParse` (MoveEvent "юг" (Location 35039 "Во дворе перед корчмой "))
+                                         log ~> serverInputParser `shouldParse` (MoveEvent "юг")
         it "parse move in darkness with nightvision" $ do log <- readFile "test/logs/inDarknessWithInfra.log"
-                                                          log ~> serverInputParser `shouldParse` (MoveEvent "север" (Location 5200 "Лесная дорога "))
+                                                          log ~> serverInputParser `shouldParse` (MoveEvent "север")
         it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log"
                                                                 (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                 (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                                                 moveEventsCount `shouldBe` expectedMoveCount
-                                                                (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
+                                                                locationEventsCount `shouldBe` expectedLocationsCount
         it "parse log, finishing on partial move message" $ do let simpleWalkFile = "test/logs/finishingInTheMiddleOfMove.log"
                                                                (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
-                                                               moveEventsCount `shouldBe` (expectedMoveCount - 1)
-                                                               (locationEventsCount + moveEventsCount) `shouldBe` (expectedLocationsCount - 1)
+                                                               moveEventsCount `shouldBe` expectedMoveCount
+                                                               locationEventsCount `shouldBe` (expectedLocationsCount - 1)
         it "parse multiple moves" $ do let simpleWalkFile = "test/logs/simpleWalk.log"
                                        (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                        (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                        moveEventsCount `shouldBe` expectedMoveCount
-                                       (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
+                                       locationEventsCount `shouldBe` expectedLocationsCount
         it "parse multiple messages in one GA frame" $ do hLog <- openFile "test/logs/multipleEventsInGA.log" ReadMode
                                                           serverEventList <- toListM $ parseProducer (fromHandle hLog)
-                                                          length serverEventList `shouldBe` 4
+                                                          length serverEventList `shouldBe` 5
         {-it "parse remote console input" $ do hLog <- openFile "test/logs/inDarkness.log" ReadMode
                                              events <- toListM $ parseRemoteInput2 (fromHandle hLog)
                                              events `shouldBe` ["", "blabla"]-}
@@ -71,7 +71,7 @@ locationsAndCounts file = do
   return (locationEventsCount, moveEventsCount)
   where isLocation (Just (Right (LocationEvent _))) = True
         isLocation _ = False
-        isMove (Just (Right (MoveEvent _ _))) = True
+        isMove (Just (Right (MoveEvent _))) = True
         isMove _ = False
 
 expectedLocsAndMovesCounts :: String -> IO (Int, Int)

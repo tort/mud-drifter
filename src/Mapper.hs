@@ -49,26 +49,25 @@ type Trigger = Text
 
 foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
 foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections id (eventProducer >-> PP.filter filterLocationsAndMoves
-                                                                  >-> PP.map unwrapLocationsAndMoves
-                                                                  >-> PP.scan toPairs (Nothing, Nothing) id
-                                                                  >-> PP.filter mappableMove
-                                                                  >-> PP.map ((fromJust . fst) Control.Arrow.&&& (fromJust . snd)))
+                                                                                                             >-> PP.map unwrapLocationsAndMoves
+                                                                                                             >-> PP.scan toPairs [] id
+                                                                                                             >-> PP.filter mappableMove
+                                                                                              )
 
 foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
 foldToLocations prevLocs eventProducer = PP.fold accLocations prevLocs id (eventProducer >-> PP.filter filterLocationsAndMoves
                                                                                          >-> PP.map unwrapLocationsAndMoves
-                                                                                         >-> PP.map evtToLocation)
+                                                                                         >-> PP.map (\(LocationEvent loc) -> loc))
 
 evtToLocation :: ServerEvent -> Location
 evtToLocation (LocationEvent loc) = loc
-evtToLocation (MoveEvent dir loc) = loc
 
 unwrapLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
 unwrapLocationsAndMoves (Just (Right evt)) = evt
 
 filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
 filterLocationsAndMoves (Just (Right (LocationEvent _))) = True
-filterLocationsAndMoves (Just (Right (MoveEvent _ _))) = True
+filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
 filterLocationsAndMoves _ = False
 
 type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
@@ -76,15 +75,15 @@ type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
 edgeWeight :: Int
 edgeWeight = 1
 
-accDirections :: Set Direction -> (ServerEvent, ServerEvent) -> Set Direction
+accDirections :: Set Direction -> [ServerEvent] -> Set Direction
 accDirections directions pair =
   let updateWorld locFrom locTo dir
         | locFrom == locTo = directions
         | otherwise = insertOpposite $ insertAhead directions
           where insertAhead = insert (Direction (locId locFrom) (locId locTo) dir)
                 insertOpposite = insert (Direction (locId locTo) (locId locFrom) $ oppositeDir dir)
-   in case pair of (LocationEvent locFrom, MoveEvent dir locTo) -> updateWorld locFrom locTo dir
-                   (MoveEvent _ locFrom, MoveEvent dir locTo) -> updateWorld locFrom locTo dir
+             in case pair of ((LocationEvent locFrom):(MoveEvent dir):(LocationEvent locTo):[]) -> updateWorld locFrom locTo dir
+                             _ -> directions
 
 oppositeDir :: Text -> Text
 oppositeDir "вверх" = "вниз"
@@ -97,12 +96,13 @@ oppositeDir "восток" = "запад"
 accLocations :: Set Location -> Location -> Set Location
 accLocations locations newLocation = S.insert newLocation locations
 
-toPairs :: (SEPair -> ServerEvent -> SEPair)
-toPairs acc event = (snd acc, Just event)
+toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
+toPairs acc event
+  | P.length acc < 3 = event : acc
+  | otherwise = event : P.take 2 acc
 
-mappableMove :: SEPair -> Bool
-mappableMove (Just (LocationEvent _), Just (MoveEvent _ _)) = True
-mappableMove (Just (MoveEvent _ _), Just (MoveEvent _ _)) = True
+mappableMove :: [ServerEvent] -> Bool
+mappableMove ((LocationEvent _) : (MoveEvent _) : (LocationEvent _) : []) = True
 mappableMove _ = False
 
 showLocs :: Set Location -> ByteString

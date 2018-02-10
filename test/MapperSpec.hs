@@ -26,18 +26,24 @@ spec = describe "Mapper" $ do
   it "can find path from any location to any location" pending
   it "map world data to graph" pending
   it "fold move events to directions" $ foldToDirectionsProperty moveEvents
-      where moveEvents = [MoveEvent "north" $ Location 2 "2"
-                         , LocationEvent $ Location 1 "1"
-                         , MoveEvent "north" $ Location 1 "1"
-                         , MoveEvent "north" $ Location 2 "2"
-                         , MoveEvent "north" $ Location 2 "2"
-                         , MoveEvent "north" $ Location 2 "2"
-                         , MoveEvent "north" $ Location 3 "3"
-                         ]
+    where moveEvents = [ MoveEvent "north"
+                       , LocationEvent $ Location 2 "2"
+                       , LocationEvent $ Location 1 "1"
+                       , MoveEvent "north"
+                       , LocationEvent $ Location 1 "1"
+                       , MoveEvent "north"
+                       , LocationEvent $ Location 2 "2"
+                       , MoveEvent "north"
+                       , LocationEvent $ Location 2 "2"
+                       , MoveEvent "north"
+                       , LocationEvent $ Location 2 "2"
+                       , MoveEvent "north"
+                       , LocationEvent $ Location 3 "3"
+                       ]
 
 foldToDirectionsProperty :: [ServerEvent] -> Expectation
 foldToDirectionsProperty moveEvents = do DL.length directions `shouldBe` 4
                                            where toOpt = Just . Right
-                                                 isMove (MoveEvent _ _) = True
+                                                 isMove (MoveEvent _) = True
                                                  isMove _ = False
                                                  directions = runIdentity $ foldToDirections S.empty $ each (toOpt <$> moveEvents)

@@ -300,7 +300,7 @@ travelTask world graph currentLoc innerEvent triggerEvent = do
       onChangeLocAction [] = return ()
       onChangeLocAction path = moveAction $ P.tail path
   reactimate $ onTravelRequestAction <$> currentLoc <@> filterE isGoRequest innerEvent
-  reactimate $ onChangeLocAction <$> bPath <@ changeCurrLocEvent innerEvent
+  reactimate $ onChangeLocAction <$> bPath <@ filterE isMove innerEvent
     where isGoRequest (PersonCommand (GoToLocId _)) = True
           isGoRequest _ = False
           moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
@@ -309,13 +309,9 @@ changeCurrLocEvent :: B.Event E.Event -> B.Event LocId
 changeCurrLocEvent innerEvent = changeCurrLocEvent
   where locEvent = filterE isLocEvent innerEvent
         isLocEvent (ServerEvent (LocationEvent _)) = True
-        isLocEvent (ServerEvent (MoveEvent _ _)) = True
         isLocEvent _ = False
         changeCurrLocEvent = toLocId <$> locEvent
         toLocId (ServerEvent (LocationEvent loc)) = locId loc
-        toLocId (ServerEvent (MoveEvent _ loc)) = locId loc
-
-
 
 addRequestEvent :: B.Event MoveRequest -> B.Event ([(TaskKey, Location)] -> [(TaskKey, Location)])
 addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) <$> moveRequest
@@ -325,7 +321,7 @@ isLocation (ServerEvent (LocationEvent _)) = True
 isLocation _ = False
 
 isMove :: E.Event -> Bool
-isMove (ServerEvent (MoveEvent _ _)) = True
+isMove (ServerEvent (MoveEvent _)) = True
 isMove _ = False
 
 {--

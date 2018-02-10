@@ -114,9 +114,7 @@ move = do
     direction <- takeTill (== _period)
     A.word8 _period
     C.endOfLine
-    loc <- location
-    return $ MoveEvent (decodeUtf8 direction) $ ld loc
-    where ld (LocationEvent locData) = locData
+    return $ MoveEvent (decodeUtf8 direction)
 
 clearColors :: A.Parser ()
 clearColors = do
