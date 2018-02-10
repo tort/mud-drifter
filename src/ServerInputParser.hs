@@ -133,7 +133,6 @@ dblCrnl = do C.endOfLine
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do
-  skipMany C.endOfLine
   txt <- takeTillEndOfLineOrGA
   return $ UnknownServerEvent txt
 
@@ -142,20 +141,19 @@ iacGA = do iac
            ga
 
 takeTillEndOfLineOrGA :: A.Parser B.ByteString
-takeTillEndOfLineOrGA = do txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
+takeTillEndOfLineOrGA = do skipMany $ A.word8 _cr
+                           txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
                            eitherP C.endOfLine iacGA
                            return txt
 
 takeTillIACGA :: A.Parser B.ByteString
 takeTillIACGA = do txt <- takeTill (== iacWord)
-                   iac
-                   ga
+                   iacGA
                    return txt
 
 skipTillIACGA :: A.Parser Word8
 skipTillIACGA = do skipWhile (/= iacWord)
-                   iac
-                   ga
+                   iacGA
 
 iacWord :: Word8
 iacWord = 255
@@ -173,7 +171,7 @@ wont :: A.Parser Word8
 wont = A.word8 wontWord
 
 iac :: A.Parser Word8
-iac = A.word8 255
+iac = A.word8 iacWord
 
 ga :: A.Parser Word8
 ga = A.word8 249

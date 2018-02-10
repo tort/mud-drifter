@@ -55,7 +55,7 @@ foldToDirections initialDirections eventProducer = PP.fold accDirections initial
                                                                                               )
 
 foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
-foldToLocations prevLocs eventProducer = PP.fold accLocations prevLocs id (eventProducer >-> PP.filter filterLocationsAndMoves
+foldToLocations prevLocs eventProducer = PP.fold accLocations prevLocs id (eventProducer >-> PP.filter filterLocations
                                                                                          >-> PP.map unwrapLocationsAndMoves
                                                                                          >-> PP.map (\(LocationEvent loc) -> loc))
 
@@ -70,6 +70,10 @@ filterLocationsAndMoves (Just (Right (LocationEvent _))) = True
 filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
 filterLocationsAndMoves _ = False
 
+filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
+filterLocations (Just (Right (LocationEvent _))) = True
+filterLocations _ = False
+
 type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
 
 edgeWeight :: Int
@@ -82,7 +86,7 @@ accDirections directions pair =
         | otherwise = insertOpposite $ insertAhead directions
           where insertAhead = insert (Direction (locId locFrom) (locId locTo) dir)
                 insertOpposite = insert (Direction (locId locTo) (locId locFrom) $ oppositeDir dir)
-             in case pair of ((LocationEvent locFrom):(MoveEvent dir):(LocationEvent locTo):[]) -> updateWorld locFrom locTo dir
+             in case pair of ((LocationEvent locTo):(MoveEvent dir):(LocationEvent locFrom):[]) -> updateWorld locFrom locTo dir
                              _ -> directions
 
 oppositeDir :: Text -> Text

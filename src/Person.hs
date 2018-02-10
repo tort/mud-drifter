@@ -370,5 +370,5 @@ parseProducer src = do
     continue result partial
     where continue result@(Just (Right _)) partial = do yield result
                                                         parseProducer partial
-          continue (Just (Left err)) _ = liftIO $ DBC8.putStr "error\n"
+          continue (Just (Left (ParsingError ctxts err))) _ = liftIO $ DBC8.putStr $ "error: " <> (DBC8.pack err) <> (DBC8.pack $ P.concat ctxts) <> "\n"
           continue Nothing _ = liftIO $ DBC8.putStr "parsed entire stream\n"

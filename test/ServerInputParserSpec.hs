@@ -10,10 +10,12 @@ import Test.Hspec.Attoparsec
 import Pipes.ByteString hiding (filter, length, lines)
 import Prelude hiding (readFile, putStrLn, lines)
 import System.IO hiding (readFile, putStrLn, hGetContents)
-import Pipes.Core
+import Pipes hiding ((~>))
 import Pipes.Prelude hiding (fromHandle, filter, length, mapM_, print)
+import qualified Pipes.Prelude as PP
 import Data.Text hiding (isInfixOf, isPrefixOf, length, filter, lines)
 import Data.Text.Encoding
+import Control.Monad
 
 import ServerInputParser
 import Person
@@ -56,11 +58,26 @@ spec = describe "Parser" $ do
                                        moveEventsCount `shouldBe` expectedMoveCount
                                        locationEventsCount `shouldBe` expectedLocationsCount
         it "parse multiple messages in one GA frame" $ do hLog <- openFile "test/logs/multipleEventsInGA.log" ReadMode
-                                                          serverEventList <- toListM $ parseProducer (fromHandle hLog)
+                                                          serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
                                                           length serverEventList `shouldBe` 5
+                                                          hClose hLog
+        it "parse sample trigger text" $ do hLog <- openFile "test/logs/triggerText.log" ReadMode
+                                            serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
+                                            length serverEventList `shouldBe` 6
+                                            hClose hLog
         {-it "parse remote console input" $ do hLog <- openFile "test/logs/inDarkness.log" ReadMode
                                              events <- toListM $ parseRemoteInput2 (fromHandle hLog)
                                              events `shouldBe` ["", "blabla"]-}
+
+nonEmptyUnknown :: ServerEvent -> Bool
+nonEmptyUnknown (UnknownServerEvent "") = False
+nonEmptyUnknown _ = True
+
+toJustRight :: Pipe (Maybe (Either a ServerEvent)) ServerEvent IO ()
+toJustRight = forever $ do e <- await
+                           act e
+                             where act (Just (Right evt)) = yield evt
+                                   act _ = return ()
 
 locationsAndCounts :: String -> IO (Int, Int)
 locationsAndCounts file = do
