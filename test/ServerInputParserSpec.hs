@@ -11,7 +11,7 @@ import Pipes.ByteString hiding (filter, length, lines)
 import Prelude hiding (readFile, putStrLn, lines)
 import System.IO hiding (readFile, putStrLn, hGetContents)
 import Pipes.Core
-import Pipes.Prelude hiding (fromHandle, filter, length)
+import Pipes.Prelude hiding (fromHandle, filter, length, mapM_, print)
 import Data.Text hiding (isInfixOf, isPrefixOf, length, filter, lines)
 import Data.Text.Encoding
 
@@ -55,6 +55,9 @@ spec = describe "Parser" $ do
                                        (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                        moveEventsCount `shouldBe` expectedMoveCount
                                        (locationEventsCount + moveEventsCount) `shouldBe` expectedLocationsCount
+        it "parse multiple messages in one GA frame" $ do hLog <- openFile "test/logs/multipleEventsInGA.log" ReadMode
+                                                          serverEventList <- toListM $ parseProducer (fromHandle hLog)
+                                                          length serverEventList `shouldBe` 4
         {-it "parse remote console input" $ do hLog <- openFile "test/logs/inDarkness.log" ReadMode
                                              events <- toListM $ parseRemoteInput2 (fromHandle hLog)
                                              events `shouldBe` ["", "blabla"]-}
