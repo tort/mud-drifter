@@ -38,8 +38,8 @@ spec = describe "Parser" $ do
                                  log ~> serverInputParser `shouldParse` (LocationEvent (Location 35040 "В корчме "))
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг" (Location 35039 "Во дворе перед корчмой "))
-        it "parse move in darkness" $ do log <- readFile "test/logs/inDarkness.log"
-                                         log ~> serverInputParser `shouldParse` (MoveEvent "север" (Location 5200 "Лесная дорога "))
+        it "parse move in darkness with nightvision" $ do log <- readFile "test/logs/inDarknessWithInfra.log"
+                                                          log ~> serverInputParser `shouldParse` (MoveEvent "север" (Location 5200 "Лесная дорога "))
         it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log"
                                                                 (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                 (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
