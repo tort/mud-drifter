@@ -233,7 +233,7 @@ personCfgFileName = "person.cfg"
 
 mapperTask :: World -> Gr () Int -> Output E.Event -> B.Event E.Event -> MomentIO (Behavior (Maybe LocId))
 mapperTask world graph toOuterBus innerEvent = do
-  bLoc <- stepper Nothing $ Just <$> changeCurrLocEvent innerEvent
+  bLoc <- stepper Nothing $ changeCurrLocEvent innerEvent
   let findPathResponse = showFindPathResponse world graph <$> bLoc <@> filterE isFindPath innerEvent
   reactimate $ (sendToConsole toOuterBus . matchingLocs world) <$> filterE isFindLoc innerEvent
   reactimate $ sendToConsole toOuterBus <$> findPathResponse
@@ -305,13 +305,15 @@ travelTask world graph currentLoc innerEvent triggerEvent = do
           isGoRequest _ = False
           moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
 
-changeCurrLocEvent :: B.Event E.Event -> B.Event LocId
+changeCurrLocEvent :: B.Event E.Event -> B.Event (Maybe LocId)
 changeCurrLocEvent innerEvent = changeCurrLocEvent
   where locEvent = filterE isLocEvent innerEvent
         isLocEvent (ServerEvent (LocationEvent _)) = True
+        isLocEvent (ServerEvent DarknessEvent) = True
         isLocEvent _ = False
         changeCurrLocEvent = toLocId <$> locEvent
-        toLocId (ServerEvent (LocationEvent loc)) = locId loc
+        toLocId (ServerEvent (LocationEvent loc)) = Just $ locId loc
+        toLocId (ServerEvent DarknessEvent) = Nothing
 
 addRequestEvent :: B.Event MoveRequest -> B.Event ([(TaskKey, Location)] -> [(TaskKey, Location)])
 addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) <$> moveRequest
