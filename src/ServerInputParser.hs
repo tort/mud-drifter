@@ -19,7 +19,7 @@ import Event
 data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> move <|> unknownMessage
+serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> move <|> darkness <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -130,6 +130,10 @@ cs = do C.char '\ESC'
 dblCrnl :: A.Parser ()
 dblCrnl = do C.endOfLine
              C.endOfLine
+
+darkness :: A.Parser ServerEvent
+darkness = do string $ encodeUtf8 "Слишком темно..."
+              return DarknessEvent
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do

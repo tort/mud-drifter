@@ -9,6 +9,7 @@ import Data.ByteString.Char8 hiding (filter, length)
 import Test.Hspec.Attoparsec
 import Pipes.ByteString hiding (filter, length, lines)
 import Prelude hiding (readFile, putStrLn, lines)
+import qualified Prelude as P
 import System.IO hiding (readFile, putStrLn, hGetContents)
 import Pipes hiding ((~>))
 import Pipes.Prelude hiding (fromHandle, filter, length, mapM_, print)
@@ -42,6 +43,10 @@ spec = describe "Parser" $ do
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
         it "parse move in darkness with nightvision" $ do log <- readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
+        it "parse in darkness server event" $ do hLog <- openFile "test/logs/enterDarkRoom.log" ReadMode
+                                                 serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
+                                                 P.take 2 serverEventList `shouldBe` [MoveEvent "вниз", DarknessEvent]
+                                                 hClose hLog
         it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log"
                                                                 (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                 (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
