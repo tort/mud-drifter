@@ -30,7 +30,7 @@ nonCommandInputParser = do
 
 findLocParser :: Parser PersonCommand
 findLocParser = do
-  string "/findloc"
+  string $ "/лок"
   optional space
   input <- many anyChar
   return $ FindLoc $ pack input
@@ -58,19 +58,19 @@ emptyInputParser = do
 
 findPathFromToParser :: Parser PersonCommand
 findPathFromToParser = do
-  string "/path"
+  string "/путь"
   many1 space
   from <- optionMaybe (many1 digit)
   many1 space
   to <- optionMaybe (many1 digit)
   many space
   case FindPathFromTo <$> (readMaybe =<< from) <*> (readMaybe =<< to) of
-    Nothing -> unexpected " /path format\n"
+    Nothing -> unexpected " /го format\n"
     Just cmd -> return cmd
 
 findPathToLocIdParser :: Parser PersonCommand
 findPathToLocIdParser = do
-  string "/path"
+  string "/путь"
   many1 space
   to <- many1 digit
   many space
@@ -81,7 +81,7 @@ findPathToLocIdParser = do
 
 findPathToLocParser :: Parser PersonCommand
 findPathToLocParser = do
-  string "/path"
+  string "/путь"
   many1 space
   to <- many1 anyChar
   eof
@@ -89,7 +89,7 @@ findPathToLocParser = do
 
 goToParser :: Parser PersonCommand
 goToParser = do
-  string "/go"
+  string "/го"
   many1 space
   to <- many1 anyChar
   eof
