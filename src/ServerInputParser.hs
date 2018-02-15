@@ -10,16 +10,27 @@ import Pipes.Attoparsec
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Char8 as C
 import Data.Text
-import Data.Attoparsec.ByteString as DAB
+import qualified Data.Text as T
+import Data.Attoparsec.ByteString
 import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
+import qualified Data.ByteString.Char8 as DBC8
 import Event
 
 data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt <|> loginPrompt <|> passwordPrompt <|> welcomePrompt <|> postWelcome <|> location <|> move <|> darkness <|> unknownMessage
+serverInputParser = codepagePrompt
+                    <|> loginPrompt
+                    <|> passwordPrompt
+                    <|> welcomePrompt
+                    <|> postWelcome
+                    <|> location
+                    <|> move
+                    <|> listEquipment
+                    <|> darkness
+                    <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -59,7 +70,7 @@ remoteInputParser :: A.Parser RemoteConsoleEvent
 remoteInputParser = telnetControlSeq <|> eol <|> utf8String
     where eol = do C.endOfLine
                    return $ RemoteUserInput ""
-          utf8String = do text <- DAB.takeWhile (\x -> x /= 255 && not (C.isEndOfLine x))
+          utf8String = do text <- A.takeWhile (\x -> x /= 255 && not (C.isEndOfLine x))
                           eolOrIac <- A.anyWord8
                           return $ RemoteUserInput text
 
@@ -134,6 +145,39 @@ dblCrnl = do C.endOfLine
 darkness :: A.Parser ServerEvent
 darkness = do string $ encodeUtf8 "Слишком темно..."
               return DarknessEvent
+
+listEquipment :: A.Parser ServerEvent
+listEquipment = do string $ encodeUtf8 "На вас надето:"
+                   list <- many1 equipmentItem
+                   return $ ListEquipment list
+                     where emptyEquipList = do string $ encodeUtf8 "Вы голы, аки сокол."
+                                               return []
+                           bodyPart = body <|> head <|> legs <|> waist <|> rightHand
+                           body = do string $ encodeUtf8 "<на теле>"
+                                     return Body
+                           head = do string $ encodeUtf8 "<на голове>"
+                                     return Head
+                           legs = do string $ encodeUtf8 "<на ногах>"
+                                     return Legs
+                           waist = do string $ encodeUtf8 "<на поясе>"
+                                      return Waist
+                           rightHand = do string $ encodeUtf8 "<в правой руке>"
+                                          return RightHand
+                           itemState = excellent
+                           excellent = do cs
+                                          string "1;37m"
+                                          string $ encodeUtf8 "<великолепно>"
+                                          cs
+                                          string "0;37m"
+                                          return Excellent
+                           itemName = manyTill C.anyChar (string $ encodeUtf8 "  ")
+                           equipmentItem = do C.endOfLine
+                                              bp <- bodyPart
+                                              skipMany1 C.space
+                                              name <- itemName
+                                              state <- itemState
+                                              A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                              return $ EquipmentItem (bp, decodeUtf8 $ DBC8.pack name, state)
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do

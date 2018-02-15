@@ -8,6 +8,9 @@ module Event ( Event(..)
              , Location(..)
              , LocId
              , LocTitle
+             , BodyPart(..)
+             , EquipmentItem(..)
+             , EquipmentItemState(..)
              ) where
 
 import Pipes.Concurrent
@@ -21,6 +24,9 @@ instance Binary Event
 instance Binary PersonCommand
 instance Binary ServerEvent
 instance Binary Location
+instance Binary BodyPart
+instance Binary EquipmentItem
+instance Binary EquipmentItemState
 
 data Event = ConsoleInput Text
            | PersonCommand PersonCommand
@@ -43,8 +49,21 @@ data PersonCommand = UserInputRedirect Text
                | GoToLocId Int
                deriving (Eq, Show, Generic)
 
-data ServerEvent = CodepagePrompt | LoginPrompt | PasswordPrompt | WelcomePrompt | PostWelcome | LocationEvent Location | MoveEvent Text | DarknessEvent |  UnknownServerEvent ByteString deriving (Eq, Show, Generic)
+data ServerEvent = CodepagePrompt
+                 | LoginPrompt
+                 | PasswordPrompt
+                 | WelcomePrompt
+                 | PostWelcome
+                 | LocationEvent Location
+                 | MoveEvent Text
+                 | DarknessEvent
+                 | UnknownServerEvent ByteString
+                 | ListEquipment [EquipmentItem]
+                 deriving (Eq, Show, Generic)
 
+data BodyPart = Body | Head | Arms | Legs | RightHand | LeftHand | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic)
+data EquipmentItem = EquipmentItem (BodyPart, Text, EquipmentItemState) deriving (Eq, Show, Generic)
+data EquipmentItemState = Excellent | Good | Bad deriving (Eq, Show, Generic)
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle
