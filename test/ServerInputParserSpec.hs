@@ -74,13 +74,16 @@ spec = describe "Parser" $ do
                                                      serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter moveOrLocation
                                                      serverEventList `shouldBe` [MoveEvent "восток", (LocationEvent $ Location 5112 "На кухне")]
                                                      hClose hLog
-        it "parse equipment list" $ do log <- readFile "test/logs/listEquipment.log"
-                                       log ~> serverInputParser `shouldParse` (ListEquipment [ EquipmentItem (Body, "легкий латный доспех", Excellent)
-                                                                                             , EquipmentItem (Head, "легкий латный шлем", Excellent)
-                                                                                             , EquipmentItem (Legs, "легкие латные поножи", Excellent)
-                                                                                             , EquipmentItem (Waist, "холщовый мешок", Excellent)
-                                                                                             , EquipmentItem (RightHand, "длинный бронзовый меч", Excellent)
-                                                                                             ])
+        it "parse equipment list" $ do log <- readFile "test/logs/listEquipment2.log"
+                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body "легкий латный доспех", Excellent)
+                                                                                                  , (EquippedItem Head "легкий латный шлем", Excellent)
+                                                                                                  , (EquippedItem Legs "легкие латные поножи", Excellent)
+                                                                                                  , (EquippedItem Waist "холщовый мешок", Excellent)
+                                                                                                  , (EquippedItem RightHand "длинный бронзовый меч", VeryGood)
+                                                                                                  , (EquippedItem LeftHand "бронзовый топорик", VeryGood)
+                                                                                                  ])
+        it "parse empty equipment list" $ do log <- readFile "test/logs/listEquipmentEmpty.log"
+                                             log ~> serverInputParser `shouldParse` (ListEquipmentEvent [])
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation (MoveEvent _) = True

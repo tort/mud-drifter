@@ -148,11 +148,13 @@ darkness = do string $ encodeUtf8 "Слишком темно..."
 
 listEquipment :: A.Parser ServerEvent
 listEquipment = do string $ encodeUtf8 "На вас надето:"
-                   list <- many1 equipmentItem
-                   return $ ListEquipment list
-                     where emptyEquipList = do string $ encodeUtf8 "Вы голы, аки сокол."
+                   list <- emptyEquipList <|> many1 equipmentItem
+                   return $ ListEquipmentEvent list
+                     where emptyEquipList = do C.endOfLine
+                                               C.skipSpace
+                                               string $ encodeUtf8 "Вы голы, аки сокол."
                                                return []
-                           bodyPart = body <|> head <|> legs <|> waist <|> rightHand
+                           bodyPart = body <|> head <|> legs <|> waist <|> rightHand <|> leftHand
                            body = do string $ encodeUtf8 "<на теле>"
                                      return Body
                            head = do string $ encodeUtf8 "<на голове>"
@@ -163,13 +165,17 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                       return Waist
                            rightHand = do string $ encodeUtf8 "<в правой руке>"
                                           return RightHand
-                           itemState = excellent
-                           excellent = do cs
-                                          string "1;37m"
-                                          string $ encodeUtf8 "<великолепно>"
-                                          cs
-                                          string "0;37m"
-                                          return Excellent
+                           leftHand = do string $ encodeUtf8 "<в левой руке>"
+                                         return LeftHand
+                           itemState = stateParser "<великолепно>" Excellent
+                                       <|> stateParser "<очень хорошо>" VeryGood
+                                       <|> stateParser "<хорошо>" Good
+                           stateParser stateTxt stateVal = do cs
+                                                              C.take 5
+                                                              string $ encodeUtf8 stateTxt
+                                                              cs
+                                                              string "0;37m"
+                                                              return stateVal
                            itemName = manyTill C.anyChar (string $ encodeUtf8 "  ")
                            equipmentItem = do C.endOfLine
                                               bp <- bodyPart
@@ -177,7 +183,7 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                               name <- itemName
                                               state <- itemState
                                               A.skipWhile (\c -> not $ C.isEndOfLine c)
-                                              return $ EquipmentItem (bp, decodeUtf8 $ DBC8.pack name, state)
+                                              return $ (EquippedItem bp (decodeUtf8 $ DBC8.pack name), state)
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do

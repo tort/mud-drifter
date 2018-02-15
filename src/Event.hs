@@ -9,8 +9,8 @@ module Event ( Event(..)
              , LocId
              , LocTitle
              , BodyPart(..)
-             , EquipmentItem(..)
-             , EquipmentItemState(..)
+             , EquippedItem(..)
+             , ItemState(..)
              ) where
 
 import Pipes.Concurrent
@@ -25,8 +25,8 @@ instance Binary PersonCommand
 instance Binary ServerEvent
 instance Binary Location
 instance Binary BodyPart
-instance Binary EquipmentItem
-instance Binary EquipmentItemState
+instance Binary EquippedItem
+instance Binary ItemState
 
 data Event = ConsoleInput Text
            | PersonCommand PersonCommand
@@ -35,6 +35,7 @@ data Event = ConsoleInput Text
            | ServerEvent ServerEvent
            | ConsoleOutput ByteString
            | ServerDisconnection
+           | PulseEvent
            deriving (Eq, Show, Generic)
 
 type EventBus = (Output Event, Input Event)
@@ -47,6 +48,7 @@ data PersonCommand = UserInputRedirect Text
                | FindPathTo Text
                | GoTo Text
                | GoToLocId Int
+               | Equip
                deriving (Eq, Show, Generic)
 
 data ServerEvent = CodepagePrompt
@@ -58,12 +60,12 @@ data ServerEvent = CodepagePrompt
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
-                 | ListEquipment [EquipmentItem]
+                 | ListEquipmentEvent [(EquippedItem, ItemState)]
                  deriving (Eq, Show, Generic)
 
 data BodyPart = Body | Head | Arms | Legs | RightHand | LeftHand | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic)
-data EquipmentItem = EquipmentItem (BodyPart, Text, EquipmentItemState) deriving (Eq, Show, Generic)
-data EquipmentItemState = Excellent | Good | Bad deriving (Eq, Show, Generic)
+data EquippedItem = EquippedItem BodyPart Text deriving (Eq, Show, Generic)
+data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic)
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle

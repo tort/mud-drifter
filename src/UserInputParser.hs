@@ -20,6 +20,7 @@ userInputParser = nonCommandInputParser
                   <|> try findPathFromToParser
                   <|> try findPathToLocParser
                   <|> try goToParser
+                  <|> try equipCmdParser
                   <|> unknownCommandParser
 
 nonCommandInputParser :: Parser PersonCommand
@@ -97,3 +98,7 @@ goToParser = do
   case readMaybe (unpack strippedTo) of
     Nothing -> return $ GoTo $ strippedTo
     Just locId -> return $ GoToLocId locId
+
+equipCmdParser :: Parser PersonCommand
+equipCmdParser = do string "/экип"
+                    return Equip
