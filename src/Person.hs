@@ -120,7 +120,7 @@ equipItems events triggerEvent toOuterBus itemsEvent = do
                                                    xs -> triggerEvent listEquipCmd
           equipItemAction item = triggerEvent $ equipServerCommand item :: IO ()
 
-equipCommand :: BodyPart -> Text
+equipCommand :: Slot -> Text
 equipCommand RightHand = "вооруж"
 equipCommand LeftHand = "держ"
 equipCommand _ = "одеть"

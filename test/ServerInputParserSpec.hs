@@ -91,7 +91,12 @@ spec = describe "Parser" $ do
                                                                                              ])
         it "parse empty inventory" $ do log <- readFile "test/logs/inventoryEmpty.log"
                                         log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
-
+        it "parse weapon stats in shop" $ do log <- readFile "test/logs/statsWeapon.log"
+                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon "длинный бронзовый меч" LongBlade [RightHand, LeftHand, BothHands] 3.5)
+        it "parse armor stats in shop" $ do log <- readFile "test/logs/statsArmor.log"
+                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor "легкий латный доспех" [Body] 3 4)
+        it "parse weapon stats" $ do log <- readFile "test/logs/statsWeaponScroll.log"
+                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon "бронзовый топорик" Axe [RightHand, LeftHand] 3.5)
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation (MoveEvent _) = True

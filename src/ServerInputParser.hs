@@ -30,6 +30,7 @@ serverInputParser = codepagePrompt
                     <|> move
                     <|> listEquipment
                     <|> listInventory
+                    <|> itemStats
                     <|> darkness
                     <|> unknownMessage
 
@@ -146,6 +147,65 @@ dblCrnl = do C.endOfLine
 darkness :: A.Parser ServerEvent
 darkness = do string $ encodeUtf8 "Слишком темно..."
               return DarknessEvent
+
+itemStats :: A.Parser ServerEvent
+itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
+               item <- weaponParser
+               return $ ItemStatsEvent item
+                 where weaponParser = do C.endOfLine
+                                         name <- weaponNameParser
+                                         C.endOfLine
+                                         weaponClass <- weaponClassParser
+                                         slots <- many1 wpnSlot
+                                         line
+                                         line
+                                         line
+                                         line
+                                         line
+                                         C.endOfLine
+                                         damageAvg <- damageAvgParser
+                                         return $ Weapon name weaponClass slots damageAvg
+                       line = do C.endOfLine
+                                 A.skipWhile (\c -> not $ C.isEndOfLine c)
+                       wpnSlot = do C.endOfLine
+                                    string $ encodeUtf8 "Можно взять в"
+                                    C.skipSpace
+                                    slot <- rh <|> lh <|> bh
+                                    A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                    return slot
+                       rh = do string $ encodeUtf8 "правую руку"
+                               return RightHand
+                       lh = do string $ encodeUtf8 "левую руку"
+                               return LeftHand
+                       bh = do string $ encodeUtf8 "обе руки"
+                               return BothHands
+                       weaponNameParser = do string $ encodeUtf8 "Предмет "
+                                             A.word8 _quotedbl
+                                             name <- takeTill (== _quotedbl)
+                                             A.word8 _quotedbl
+                                             string $ encodeUtf8 ", тип : ОРУЖИЕ"
+                                             return (decodeUtf8 name)
+                       weaponClassParser = do string $ encodeUtf8 "Принадлежит к классу"
+                                              C.skipSpace
+                                              A.word8 _quotedbl
+                                              wc <- longBlade <|> axe
+                                              A.word8 _quotedbl
+                                              A.word8 _period
+                                              return wc
+                       longBlade = do string $ encodeUtf8 "длинные лезвия"
+                                      return LongBlade
+                       axe = do string $ encodeUtf8 "секиры"
+                                return Axe
+                       damageAvgParser = do cs
+                                            string $ encodeUtf8 "0;37mНаносимые повреждения"
+                                            C.skipSpace
+                                            C.skipWhile (\c -> not $ C.isSpace c)
+                                            C.skipSpace
+                                            string $ encodeUtf8 "среднее"
+                                            C.skipSpace
+                                            dmgAvg <- C.double
+                                            A.word8 _period
+                                            return dmgAvg
 
 listInventory :: A.Parser ServerEvent
 listInventory = do string $ encodeUtf8 "Вы несете:"

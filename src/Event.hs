@@ -8,9 +8,11 @@ module Event ( Event(..)
              , Location(..)
              , LocId
              , LocTitle
-             , BodyPart(..)
+             , Slot(..)
              , EquippedItem(..)
              , ItemState(..)
+             , Item(..)
+             , WeaponClass(..)
              ) where
 
 import Pipes.Concurrent
@@ -24,9 +26,11 @@ instance Binary Event
 instance Binary PersonCommand
 instance Binary ServerEvent
 instance Binary Location
-instance Binary BodyPart
+instance Binary Slot
 instance Binary EquippedItem
 instance Binary ItemState
+instance Binary Item
+instance Binary WeaponClass
 
 data Event = ConsoleInput Text
            | PersonCommand PersonCommand
@@ -62,11 +66,17 @@ data ServerEvent = CodepagePrompt
                  | UnknownServerEvent ByteString
                  | ListEquipmentEvent [(EquippedItem, ItemState)]
                  | ListInventoryEvent [(Text, ItemState)]
+                 | ItemStatsEvent Item
                  deriving (Eq, Show, Generic)
 
-data BodyPart = Body | Head | Arms | Legs | RightHand | LeftHand | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic)
-data EquippedItem = EquippedItem BodyPart Text deriving (Eq, Show, Generic)
+data Slot = Body | Head | Arms | Legs | RightHand | LeftHand | BothHands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic)
+data EquippedItem = EquippedItem Slot Text deriving (Eq, Show, Generic)
 data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic)
+data Item = Weapon Text WeaponClass [Slot] AvgDamage | Armor Text [Slot] AC ArmorVal deriving (Eq, Show, Generic)
+type AvgDamage = Double
+data WeaponClass = LongBlade | ShortBlade | Axe deriving (Eq, Show, Generic)
+type AC = Int
+type ArmorVal = Int
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle
