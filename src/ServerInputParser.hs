@@ -29,6 +29,7 @@ serverInputParser = codepagePrompt
                     <|> location
                     <|> move
                     <|> listEquipment
+                    <|> listInventory
                     <|> darkness
                     <|> unknownMessage
 
@@ -146,6 +147,20 @@ darkness :: A.Parser ServerEvent
 darkness = do string $ encodeUtf8 "Слишком темно..."
               return DarknessEvent
 
+listInventory :: A.Parser ServerEvent
+listInventory = do string $ encodeUtf8 "Вы несете:"
+                   list <- emptyInventory <|> many1 inventoryItem
+                   return $ ListInventoryEvent list
+                     where emptyInventory = do C.endOfLine
+                                               C.skipSpace
+                                               string $ encodeUtf8 "Вы ничего не несете."
+                                               return []
+                           inventoryItem = do C.endOfLine
+                                              itemName <- itemNameParser
+                                              itemState <- itemStateParser
+                                              A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                              return $ (itemName, itemState)
+
 listEquipment :: A.Parser ServerEvent
 listEquipment = do string $ encodeUtf8 "На вас надето:"
                    list <- emptyEquipList <|> many1 equipmentItem
@@ -167,23 +182,29 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                           return RightHand
                            leftHand = do string $ encodeUtf8 "<в левой руке>"
                                          return LeftHand
-                           itemState = stateParser "<великолепно>" Excellent
-                                       <|> stateParser "<очень хорошо>" VeryGood
-                                       <|> stateParser "<хорошо>" Good
-                           stateParser stateTxt stateVal = do cs
-                                                              C.take 5
-                                                              string $ encodeUtf8 stateTxt
-                                                              cs
-                                                              string "0;37m"
-                                                              return stateVal
-                           itemName = manyTill C.anyChar (string $ encodeUtf8 "  ")
                            equipmentItem = do C.endOfLine
                                               bp <- bodyPart
                                               skipMany1 C.space
-                                              name <- itemName
-                                              state <- itemState
+                                              itemName <- itemNameParser
+                                              state <- itemStateParser
                                               A.skipWhile (\c -> not $ C.isEndOfLine c)
-                                              return $ (EquippedItem bp (decodeUtf8 $ DBC8.pack name), state)
+                                              return $ (EquippedItem bp itemName, state)
+
+itemNameParser :: A.Parser Text
+itemNameParser = do itemName <- manyTill C.anyChar (string $ encodeUtf8 "  ")
+                    return (decodeUtf8 $ DBC8.pack itemName)
+
+itemStateParser :: A.Parser ItemState
+itemStateParser = stateParser "<великолепно>" Excellent
+            <|> stateParser "<очень хорошо>" VeryGood
+            <|> stateParser "<хорошо>" Good
+
+stateParser stateTxt stateVal = do cs
+                                   C.take 5
+                                   string $ encodeUtf8 stateTxt
+                                   cs
+                                   string "0;37m"
+                                   return stateVal
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do

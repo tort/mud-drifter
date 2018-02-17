@@ -61,6 +61,7 @@ data ServerEvent = CodepagePrompt
                  | DarknessEvent
                  | UnknownServerEvent ByteString
                  | ListEquipmentEvent [(EquippedItem, ItemState)]
+                 | ListInventoryEvent [(Text, ItemState)]
                  deriving (Eq, Show, Generic)
 
 data BodyPart = Body | Head | Arms | Legs | RightHand | LeftHand | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic)

@@ -84,6 +84,14 @@ spec = describe "Parser" $ do
                                                                                                   ])
         it "parse empty equipment list" $ do log <- readFile "test/logs/listEquipmentEmpty.log"
                                              log ~> serverInputParser `shouldParse` (ListEquipmentEvent [])
+        it "parse inventory" $ do log <- readFile "test/logs/inventory.log"
+                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ ("холщовый мешок", Excellent)
+                                                                                             , ("бронзовый топорик", VeryGood)
+                                                                                             , ("длинный бронзовый меч", VeryGood)
+                                                                                             ])
+        it "parse empty inventory" $ do log <- readFile "test/logs/inventoryEmpty.log"
+                                        log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
+
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation (MoveEvent _) = True
