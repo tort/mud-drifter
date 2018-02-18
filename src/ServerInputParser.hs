@@ -150,9 +150,31 @@ darkness = do string $ encodeUtf8 "Слишком темно..."
 
 itemStats :: A.Parser ServerEvent
 itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
-               item <- weaponParser
+               item <- weaponParser <|> armorParser
                return $ ItemStatsEvent item
-                 where weaponParser = do C.endOfLine
+                 where armorParser = do C.endOfLine
+                                        name <- armorNameParser
+                                        slots <- many1 armorSlot
+                                        line
+                                        line
+                                        line
+                                        line
+                                        line
+                                        C.endOfLine
+                                        acVal <- acParser
+                                        C.endOfLine
+                                        armVal <- armorValParser
+                                        return $ Armor name slots (fromInteger acVal) (fromInteger armVal)
+                       armorNameParser = do name <- itemNameParser
+                                            string $ encodeUtf8 "БРОНЯ"
+                                            return (decodeUtf8 name)
+                       acParser = do cs
+                                     string "0;37m"
+                                     string $ encodeUtf8 "защита (AC) : "
+                                     C.decimal
+                       armorValParser = do string $ encodeUtf8 "броня       : "
+                                           C.decimal
+                       weaponParser = do C.endOfLine
                                          name <- weaponNameParser
                                          C.endOfLine
                                          weaponClass <- weaponClassParser
@@ -167,6 +189,14 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                          return $ Weapon name weaponClass slots damageAvg
                        line = do C.endOfLine
                                  A.skipWhile (\c -> not $ C.isEndOfLine c)
+                       armorSlot = do C.endOfLine
+                                      string $ encodeUtf8 "Можно надеть на"
+                                      C.skipSpace
+                                      slot <- body
+                                      A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                      return slot
+                       body = do string $ encodeUtf8 "туловище"
+                                 return Body
                        wpnSlot = do C.endOfLine
                                     string $ encodeUtf8 "Можно взять в"
                                     C.skipSpace
@@ -179,11 +209,14 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                return LeftHand
                        bh = do string $ encodeUtf8 "обе руки"
                                return BothHands
-                       weaponNameParser = do string $ encodeUtf8 "Предмет "
-                                             A.word8 _quotedbl
-                                             name <- takeTill (== _quotedbl)
-                                             A.word8 _quotedbl
-                                             string $ encodeUtf8 ", тип : ОРУЖИЕ"
+                       itemNameParser = do string $ encodeUtf8 "Предмет "
+                                           A.word8 _quotedbl
+                                           name <- takeTill (== _quotedbl)
+                                           A.word8 _quotedbl
+                                           string $ encodeUtf8 ", тип : "
+                                           return name
+                       weaponNameParser = do name <- itemNameParser
+                                             string $ encodeUtf8 "ОРУЖИЕ"
                                              return (decodeUtf8 name)
                        weaponClassParser = do string $ encodeUtf8 "Принадлежит к классу"
                                               C.skipSpace
