@@ -417,21 +417,6 @@ isMove :: E.Event -> Bool
 isMove (ServerEvent (MoveEvent _)) = True
 isMove _ = False
 
-{--
-
-removePathHead :: Maybe [Text] -> Maybe [Text]
-removePathHead Nothing = Nothing
-removePathHead (Just []) = Nothing
-removePathHead x@(Just xs) = fmap P.tail x
-
-bPathNotEmpty :: Behavior (Maybe [Text]) -> Behavior Bool
-bPathNotEmpty = fmap pathNotEmpty
-
-pathNotEmpty :: Maybe [Text] -> Bool
-pathNotEmpty Nothing = False
-pathNotEmpty (Just []) = False
-pathNotEmpty (Just xs) = True--}
-
 loadDirections :: IO (Set Direction) -> FilePath -> IO (Set Direction)
 loadDirections ioDirs file = do
   hLog <- openFile file ReadMode
