@@ -190,13 +190,30 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                        line = do C.endOfLine
                                  A.skipWhile (\c -> not $ C.isEndOfLine c)
                        armorSlot = do C.endOfLine
-                                      string $ encodeUtf8 "Можно надеть на"
+                                      string $ encodeUtf8 "Можно"
                                       C.skipSpace
-                                      slot <- body
+                                      slot <- generalSlot <|> feetSlot
                                       A.skipWhile (\c -> not $ C.isEndOfLine c)
                                       return slot
+                       generalSlot = do string $ encodeUtf8 "надеть на"
+                                        C.skipSpace
+                                        body <|> waist <|> shoulders <|> hands <|> arms <|> head <|> legs
+                       feetSlot = do string $ encodeUtf8 "обуть"
+                                     return Feet
                        body = do string $ encodeUtf8 "туловище"
                                  return Body
+                       waist = do string $ encodeUtf8 "пояс"
+                                  return Waist
+                       hands = do string $ encodeUtf8 "кисти"
+                                  return Hands
+                       shoulders = do string $ encodeUtf8 "плечи"
+                                      return Shoulders
+                       arms = do string $ encodeUtf8 "руки"
+                                 return Arms
+                       head = do string $ encodeUtf8 "голову"
+                                 return Head
+                       legs = do string $ encodeUtf8 "ноги"
+                                 return Legs
                        wpnSlot = do C.endOfLine
                                     string $ encodeUtf8 "Можно взять в"
                                     C.skipSpace
@@ -204,11 +221,11 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                     A.skipWhile (\c -> not $ C.isEndOfLine c)
                                     return slot
                        rh = do string $ encodeUtf8 "правую руку"
-                               return RightHand
+                               return Wield
                        lh = do string $ encodeUtf8 "левую руку"
-                               return LeftHand
+                               return Hold
                        bh = do string $ encodeUtf8 "обе руки"
-                               return BothHands
+                               return DualWield
                        itemNameParser = do string $ encodeUtf8 "Предмет "
                                            A.word8 _quotedbl
                                            name <- takeTill (== _quotedbl)
@@ -221,14 +238,26 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                        weaponClassParser = do string $ encodeUtf8 "Принадлежит к классу"
                                               C.skipSpace
                                               A.word8 _quotedbl
-                                              wc <- longBlade <|> axe
+                                              wc <- longBlade <|> axe <|> club <|> spear <|> dual <|> other
                                               A.word8 _quotedbl
                                               A.word8 _period
                                               return wc
                        longBlade = do string $ encodeUtf8 "длинные лезвия"
                                       return LongBlade
+                       shortBlade = do string $ encodeUtf8 "короткие лезвия"
+                                       return ShortBlade
+                       dagger = do string $ encodeUtf8 "проникающее оружие"
+                                   return Dagger
                        axe = do string $ encodeUtf8 "секиры"
                                 return Axe
+                       club = do string $ encodeUtf8 "палицы и дубины"
+                                 return Club
+                       spear = do string $ encodeUtf8 "копья и рогатины"
+                                  return Spear
+                       dual = do string $ encodeUtf8 "двуручники"
+                                 return Dual
+                       other = do string $ encodeUtf8 "иное оружие"
+                                  return Other
                        damageAvgParser = do cs
                                             string $ encodeUtf8 "0;37mНаносимые повреждения"
                                             C.skipSpace
@@ -272,9 +301,9 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                            waist = do string $ encodeUtf8 "<на поясе>"
                                       return Waist
                            rightHand = do string $ encodeUtf8 "<в правой руке>"
-                                          return RightHand
+                                          return Wield
                            leftHand = do string $ encodeUtf8 "<в левой руке>"
-                                         return LeftHand
+                                         return Hold
                            equipmentItem = do C.endOfLine
                                               bp <- bodyPart
                                               skipMany1 C.space

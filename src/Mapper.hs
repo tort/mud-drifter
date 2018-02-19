@@ -2,6 +2,7 @@
 
 module Mapper ( foldToDirections
               , foldToLocations
+              , foldToItems
               , locsByRegex
               , showLocs
               , World(..)
@@ -37,6 +38,7 @@ import Event
 
 data World = World { locations :: Set Location
                    , directions :: Set Direction
+                   , items :: Set Item
                    }
 type WorldMap = Gr Text Int
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -49,21 +51,26 @@ type Trigger = Text
 
 foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
 foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections id (eventProducer >-> PP.filter filterLocationsAndMoves
-                                                                                                             >-> PP.map unwrapLocationsAndMoves
+                                                                                                             >-> PP.map unwrapJustRight
                                                                                                              >-> PP.scan toPairs [] id
                                                                                                              >-> PP.filter mappableMove
                                                                                               )
 
 foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
-foldToLocations prevLocs eventProducer = PP.fold accLocations prevLocs id (eventProducer >-> PP.filter filterLocations
-                                                                                         >-> PP.map unwrapLocationsAndMoves
+foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs id (eventProducer >-> PP.filter filterLocations
+                                                                                         >-> PP.map unwrapJustRight
                                                                                          >-> PP.map (\(LocationEvent loc) -> loc))
+
+foldToItems :: Monad m => Set Item -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Item)
+foldToItems prevItems eventProducer = PP.fold foldToSet prevItems id (eventProducer >-> PP.filter filterItems
+                                                                                   >-> PP.map unwrapJustRight
+                                                                                   >-> PP.map (\(ItemStatsEvent item) -> item))
 
 evtToLocation :: ServerEvent -> Location
 evtToLocation (LocationEvent loc) = loc
 
-unwrapLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
-unwrapLocationsAndMoves (Just (Right evt)) = evt
+unwrapJustRight :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
+unwrapJustRight (Just (Right evt)) = evt
 
 filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
 filterLocationsAndMoves (Just (Right (LocationEvent _))) = True
@@ -73,6 +80,10 @@ filterLocationsAndMoves _ = False
 filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
 filterLocations (Just (Right (LocationEvent _))) = True
 filterLocations _ = False
+
+filterItems :: Maybe (Either ParsingError ServerEvent) -> Bool
+filterItems (Just (Right (ItemStatsEvent item))) = True
+filterItems _ = False
 
 type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
 
@@ -97,8 +108,8 @@ oppositeDir "юг" = "север"
 oppositeDir "запад" = "восток"
 oppositeDir "восток" = "запад"
 
-accLocations :: Set Location -> Location -> Set Location
-accLocations locations newLocation = S.insert newLocation locations
+foldToSet :: Ord a => Set a -> a -> Set a
+foldToSet acc item = S.insert item acc
 
 toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
 toPairs acc event

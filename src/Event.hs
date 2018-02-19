@@ -69,12 +69,12 @@ data ServerEvent = CodepagePrompt
                  | ItemStatsEvent Item
                  deriving (Eq, Show, Generic)
 
-data Slot = Body | Head | Arms | Legs | RightHand | LeftHand | BothHands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic)
+data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
 data EquippedItem = EquippedItem Slot Text deriving (Eq, Show, Generic)
 data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic)
-data Item = Weapon Text WeaponClass [Slot] AvgDamage | Armor Text [Slot] AC ArmorVal deriving (Eq, Show, Generic)
+data Item = Weapon Text WeaponClass [Slot] AvgDamage | Armor Text [Slot] AC ArmorVal deriving (Eq, Show, Generic, Ord)
 type AvgDamage = Double
-data WeaponClass = LongBlade | ShortBlade | Axe deriving (Eq, Show, Generic)
+data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other deriving (Eq, Show, Generic, Ord)
 type AC = Int
 type ArmorVal = Int
 

@@ -121,8 +121,9 @@ equipItems events triggerEvent toOuterBus itemsEvent = do
           equipItemAction item = triggerEvent $ equipServerCommand item :: IO ()
 
 equipCommand :: Slot -> Text
-equipCommand RightHand = "вооруж"
-equipCommand LeftHand = "держ"
+equipCommand Wield = "вооруж"
+equipCommand Hold = "держ"
+equipCommand DualWield = "вооруж две"
 equipCommand _ = "одеть"
 
 getItems :: B.Event E.Event -> Handler E.Event -> B.Event [EquippedItem] -> MomentIO (B.Event [EquippedItem])
@@ -142,8 +143,8 @@ checkMissingItems event triggerEvent checkEquipEvent = return missingEquipmentEv
     where missingEquipmentEvent = missingEquipment <$> filterE isListEquipEvent event
           missingEquipment (ServerEvent (ListEquipmentEvent l)) = equipPlan \\ (fst <$> l)
           itemName (EquippedItem _ name) = name
-          equipPlan = [ EquippedItem RightHand "длинный бронзовый меч"
-                      , EquippedItem LeftHand "бронзовый топорик"
+          equipPlan = [ EquippedItem Wield "длинный бронзовый меч"
+                      , EquippedItem Hold "бронзовый топорик"
                       , EquippedItem Body "легкий латный доспех"
                       , EquippedItem Head "легкий латный шлем"
                       , EquippedItem Legs "легкие латные поножи"
@@ -433,14 +434,24 @@ loadLocations ioLocs file = do
   hClose hLog
   return newLocations
 
+loadItems :: IO (Set Item) -> FilePath -> IO (Set Item)
+loadItems accIO file = do
+  hLog <- openFile file ReadMode
+  items <- accIO
+  result <- foldToItems items $ parseProducer (PBS.fromHandle hLog)
+  hClose hLog
+  return result
+
 loadWorld :: FilePath -> IO World
 loadWorld dir = do
   files <- listDirectory dir
   directions <- loadDirs files
   locations <- loadLocs files
-  return $ World locations directions
+  items <- loadItms files
+  return $ World locations directions items
     where loadDirs files = F.foldl (\acc item -> loadDirections acc (dir ++ item)) (return S.empty) files
           loadLocs files = F.foldl (\acc item -> loadLocations acc (dir ++ item)) (return S.empty) files
+          loadItms files = F.foldl (\acc item -> loadItems acc (dir ++ item)) (return S.empty) files
 
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do
