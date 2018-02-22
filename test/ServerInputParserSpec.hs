@@ -97,6 +97,14 @@ spec = describe "Parser" $ do
                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor "легкий латный доспех" [Body] 3 4)
         it "parse weapon stats" $ do log <- readFile "test/logs/statsWeaponScroll.log"
                                      log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon "бронзовый топорик" Axe [Wield, Hold] 3.5)
+        it "parse shop items" $ do hLog <- openFile "test/logs/shopList.log" ReadMode
+                                   serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter isShopListIemEvent
+                                   length serverEventList `shouldBe` 43
+                                   hClose hLog
+
+isShopListIemEvent :: ServerEvent -> Bool
+isShopListIemEvent (ShopListItemEvent _ _) = True
+isShopListIemEvent _ = False
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation (MoveEvent _) = True

@@ -67,6 +67,7 @@ data ServerEvent = CodepagePrompt
                  | ListEquipmentEvent [(EquippedItem, ItemState)]
                  | ListInventoryEvent [(Text, ItemState)]
                  | ItemStatsEvent Item
+                 | ShopListItemEvent ItemName Price
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -77,6 +78,8 @@ type AvgDamage = Double
 data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other deriving (Eq, Show, Generic, Ord)
 type AC = Int
 type ArmorVal = Int
+type ItemName = Text
+type Price = Int
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle

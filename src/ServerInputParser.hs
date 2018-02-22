@@ -31,6 +31,7 @@ serverInputParser = codepagePrompt
                     <|> listEquipment
                     <|> listInventory
                     <|> itemStats
+                    <|> shopList
                     <|> darkness
                     <|> unknownMessage
 
@@ -147,6 +148,32 @@ dblCrnl = do C.endOfLine
 darkness :: A.Parser ServerEvent
 darkness = do string $ encodeUtf8 "Слишком темно..."
               return DarknessEvent
+
+shopList :: A.Parser ServerEvent
+shopList = do skipMany shopHeadParser
+              C.skipSpace
+              C.decimal
+              A.word8 _parenright
+              C.skipSpace
+              eitherP C.decimal (string $ encodeUtf8 "Навалом")
+              C.skipSpace
+              name <- itemNameParser
+              C.skipSpace
+              price <- C.decimal
+              return $ ShopListItemEvent name price
+
+shopHeadParser :: A.Parser ()
+shopHeadParser = do C.skipSpace
+                    string "##"
+                    C.skipSpace
+                    string $ encodeUtf8 "Доступно"
+                    C.skipSpace
+                    string $ encodeUtf8 "Предмет"
+                    C.skipSpace
+                    string $ encodeUtf8 "Цена (куны)"
+                    C.endOfLine
+                    skipMany1 $ A.word8 _hyphen
+                    C.endOfLine
 
 itemStats :: A.Parser ServerEvent
 itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
