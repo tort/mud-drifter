@@ -78,65 +78,59 @@ personTask world outerBus = do
   fireServerEventsTask outerBus innerBus triggerInnerEvent
   bCurrentLoc <- mapperTask world graph (fst outerBus) innerBus
   travelTask world graph bCurrentLoc innerBus triggerInnerEvent
-  equipTask innerBus triggerInnerEvent (fst outerBus)
+  updateEquipTask innerBus triggerInnerEvent (fst outerBus)
   return ()
 
-equipTask :: B.Event E.Event -> Handler E.Event -> Output E.Event -> MomentIO ()
-equipTask event triggerEvent toOuterBus = do
-  (bTaskOn, setTaskOn) <- newBehavior False
-  let eventIfTaskOn = whenE bTaskOn event
-      reportResult (x:y:xs)
-        | x == [] && y == [] = successResult
-        | x /= [] && y == [] = successResult
-        | x /= [] && y /= [] && x /= y = failureResult
-      reportResult ([]:[]) = successResult
-      reportResult xs = return ()
-      successResult = do sendToConsole toOuterBus "\n## EQUIPPED\n"
-                         setTaskOn False
-      failureResult = do sendToConsole toOuterBus "\n## EQUIP TASK FAILED\n"
-                         setTaskOn False
+updateEquipTask :: B.Event E.Event -> Handler E.Event -> Output E.Event -> MomentIO ()
+updateEquipTask event triggerEvent toOuterBus = do
+  let identifiedItems = []
+  equippedItems <- checkEquipTask
+  inventoryItems <- checkInventory
+  containerItems <- checkContainer
+  shopItems <- checkShop
+  equipItems event triggerEvent =<< getItems =<< itemsToGet identifiedItems equippedItems inventoryItems containerItems shopItems
+  return ()
+    where checkEquipTask = return ()
+          checkInventory = return ()
+          checkContainer = return ()
+          checkShop = return ()
 
-  reactimate $ triggerEvent listEquipCmd <$ equipEvent
-  missingItemsEvent <- checkMissingItems eventIfTaskOn triggerEvent equipEvent
-  pairsStream <- accumE [] $ B.unions [ scanPairs <$> missingItemsEvent
-                                      , (\acc -> []) <$ filterE isEquipEvent event
-                                      ]
-  reactimate $ setTaskOn True <$ filterE isEquipEvent event
-  reactimate $ reportResult <$> pairsStream
-  equipItems eventIfTaskOn triggerEvent toOuterBus =<< getItems eventIfTaskOn triggerEvent missingItemsEvent
-    where equipEvent = filterE isEquipEvent event
-          isEquipEvent (PersonCommand Equip) = True
-          isEquipEvent _ = False
-          scanPairs item = \acc -> case acc of [] -> [item]
-                                               (x:[]) -> acc ++ [item]
-                                               xs -> (P.drop 1 acc) ++ [item]
+itemsToGet :: [a] -> () -> () -> () -> () -> MomentIO (B.Event EquippedItem)
+itemsToGet identifiedItems equippedItems inventoryItems containerItems shopItems = do
+  (itemEvt, triggerItemEvt) <- newEvent
+  return itemEvt
 
-equipItems :: B.Event E.Event -> Handler E.Event -> Output E.Event -> B.Event [EquippedItem] -> MomentIO ()
-equipItems events triggerEvent toOuterBus itemsEvent = do
-  reactimate $ equipListAction <$> itemsEvent
-    where equipServerCommand (EquippedItem slot itemName) = ServerCommand $ equipCommand slot <> " " <> (replace " " "." itemName)
+getItems :: B.Event EquippedItem -> MomentIO ((B.Event E.Event, B.Event EquippedItem))
+getItems itemToGetEvent = do
+  (gotItemEvent, triggerEvt) <- newEvent
+  (pulseEvent, triggerPulse) <- newEvent
+  return (gotItemEvent, pulseEvent)
+
+equipItems :: B.Event E.Event -> Handler E.Event -> (B.Event E.Event, B.Event EquippedItem) -> MomentIO (B.Event E.Event)
+equipItems events triggerEvent (pulseEvent, itemsEvent) = do
+  eithers <- accumE (Left []) $ B.unions [ accumItem <$> itemsEvent
+                                         , accumPulse <$> pulseEvent
+                                         ]
+  let (unusedTickEvent, equipItemEvent) = B.split eithers
+  reactimate $ equipListAction <$> equipItemEvent
+  return $ PulseEvent <$ unusedTickEvent
+    where accumPulse PulseEvent = \acc -> case acc of (Left []) -> Left []
+                                                      (Left acc) -> Right acc
+                                                      (Right _) -> Left []
+          accumItem item@(EquippedItem _ _) = \acc -> case acc of (Left _) -> (++[item]) <$> acc
+                                                                  (Right _) -> Left [item]
+          equipServerCommand (EquippedItem slot itemName) = ServerCommand $ equipCommand slot <> " " <> (replace " " "." itemName)
+          equipItemAction item = triggerEvent $ equipServerCommand item :: IO ()
           equipListAction items = do mapM_ equipItemAction items :: IO ()
                                      case items of [] -> return ()
                                                    xs -> triggerEvent listEquipCmd
-          equipItemAction item = triggerEvent $ equipServerCommand item :: IO ()
+
 
 equipCommand :: Slot -> Text
 equipCommand Wield = "вооруж"
 equipCommand Hold = "держ"
 equipCommand DualWield = "вооруж две"
 equipCommand _ = "одеть"
-
-getItems :: B.Event E.Event -> Handler E.Event -> B.Event [EquippedItem] -> MomentIO (B.Event [EquippedItem])
-getItems event triggerEvent missingItemsEvent = do
-  return missingItemsEvent
-  {-return gotItemsEvent <* (reactimate $ getItemsAction <$> missingItemsEvent)
-    where gotItemsEvent = ["длинный бронзовый меч"] <$ filterE isGotItem event
-           getItemsAction missingItems = mapM_ (triggerEvent . getItemCmd) missingItems :: IO ()
-           getItemCmd item = ServerCommand ("взять " <> (replace " " "." item))
-           isGotItem (ServerEvent (UnknownServerEvent txt)) = DBC8.isInfixOf (encodeUtf8 "Вы подняли длинный бронзовый меч") txt
-           isGotItem _ = False-}
-
-type EquipmentItemName = Text
 
 checkMissingItems :: B.Event Event -> Handler Event -> B.Event Event -> MomentIO (B.Event [EquippedItem])
 checkMissingItems event triggerEvent checkEquipEvent = return missingEquipmentEvent
@@ -154,22 +148,6 @@ checkMissingItems event triggerEvent checkEquipEvent = return missingEquipmentEv
 
 listEquipCmd :: E.Event
 listEquipCmd = ServerCommand "экипировка"
-{-
-wieldPrime :: Handler E.Event -> B.Event Text -> MomentIO ()
-wieldPrime triggerEvent primeEvent = reactimate $ (triggerEvent . wieldCommand) <$> primeEvent
-    where wieldCommand weapon = ServerCommand $ "вооруж " <> weapon-}
-
-{-
-checkPrime :: B.Event E.Event -> Handler E.Event -> MomentIO (B.Event [Text])
-checkPrime event triggerEvent = undefined
-
-getPrime :: B.Event E.Event -> Handler E.Event -> B.Event E.Event -> MomentIO(B.Event Text)
-getPrime event triggerEvent primeMissingEvent = do
-  let gotPrimeEvent = "меч" <$ filterE hasItemInInv event
-      hasItemInInv (ServerEvent (UnknownServerEvent txt)) = DBC8.isInfixOf (encodeUtf8 "длинный бронзовый меч") txt
-      hasItemInInv _ = False
-  reactimate $ (triggerEvent $ ServerCommand "инвент") <$ primeMissingEvent
-  return gotPrimeEvent-}
 
 mapOuterEventsToInner :: Input E.Event -> Handler E.Event -> MomentIO ()
 mapOuterEventsToInner fromOuterBus triggerInnerEvent = do
