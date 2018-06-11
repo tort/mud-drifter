@@ -56,6 +56,8 @@ import Event
 import qualified Event as E
 import Control.Monad
 import qualified Pipes.Safe as PS
+import Control.Concurrent.Timer
+import Control.Concurrent.Suspend.Lifted
 
 data MoveRequest = MoveRequest TaskKey Location
 type TaskKey = Int
@@ -69,6 +71,7 @@ personTask :: World -> EventBus -> MomentIO ()
 personTask world outerBus = do
   let graph = buildMap $ directions world
   (innerBus, triggerInnerEvent) <- newEvent
+  liftIOLater (runPulses triggerInnerEvent)
   mapOuterEventsToInner (snd outerBus) triggerInnerEvent
   firePersonCommands outerBus innerBus triggerInnerEvent
   bSocket <- keepConnectedTask innerBus triggerInnerEvent (fst outerBus)
@@ -80,6 +83,11 @@ personTask world outerBus = do
   travelTask world graph bCurrentLoc innerBus triggerInnerEvent
   updateEquipTask innerBus triggerInnerEvent (fst outerBus)
   return ()
+
+runPulses :: Handler Event -> IO ()
+runPulses triggerEvent = do repeatedTimer emitPulse (msDelay 1000)
+                            return ()
+  where emitPulse = triggerEvent PulseEvent
 
 updateEquipTask :: B.Event E.Event -> Handler E.Event -> Output E.Event -> MomentIO ()
 updateEquipTask event triggerEvent toOuterBus = do
@@ -358,22 +366,33 @@ isFindLoc _ = False
 matchingLocs :: World -> E.Event -> ByteString
 matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
 
+travelTo :: World -> B.Event E.Event -> MomentIO (B.Event E.Event)
+travelTo world innerEvent = do
+  (bPath, updatePath) <- newBehavior []
+  (outEvt, triggerOutEvt) <- newEvent
+  let onChangeLocAction [] = return ()
+      onChangeLocAction path = updatePath $ P.tail path
+      moveAction path = moveActionFromPath path
+                             where moveActionFromPath (x:y:xs) = triggerOutEvt $ moveCommand x y
+                                   moveActionFromPath _ = return ()
+                                   moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
+  reactimate $ onChangeLocAction <$> bPath <@ filterE isMove innerEvent
+  reactimate $ (\(TravelRequest path) -> updatePath path) <$> filterE isTravelRequestPath innerEvent
+  reactimate $ moveAction <$> bPath <@ filterE (== PulseEvent) innerEvent
+  return outEvt
+    where isTravelRequestPath (TravelRequest _) = True
+          isTravelRequestPath _ = False
+
 travelTask :: World -> Gr () Int -> Behavior (Maybe LocId) -> B.Event E.Event -> Handler E.Event -> MomentIO ()
 travelTask world graph currentLoc innerEvent triggerEvent = do
-  (bPath, updatePath) <- newBehavior []
-  let moveAction path = do updatePath path
-                           moveActionFromPath path
-                             where moveActionFromPath (x:y:xs) = triggerEvent $ moveCommand x y
-                                   moveActionFromPath _ = return ()
-      onTravelRequestAction Nothing (PersonCommand (GoToLocId locTo)) = return ()
-      onTravelRequestAction (Just currentLocId) (PersonCommand (GoToLocId locTo)) = moveAction $ GA.sp currentLocId locTo graph
-      onChangeLocAction [] = return ()
-      onChangeLocAction path = moveAction $ P.tail path
-  reactimate $ onTravelRequestAction <$> currentLoc <@> filterE isGoRequest innerEvent
-  reactimate $ onChangeLocAction <$> bPath <@ filterE isMove innerEvent
+  outEvts <- travelTo world $ B.unionWith (\l r -> l) travelRequestEvt nonTravelRequestEvt
+  reactimate $ triggerEvent <$> outEvts
     where isGoRequest (PersonCommand (GoToLocId _)) = True
           isGoRequest _ = False
-          moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
+          travelRequest Nothing (PersonCommand (GoToLocId locTo)) = TravelRequest []
+          travelRequest (Just currentLocId) (PersonCommand (GoToLocId locTo)) = TravelRequest $ GA.sp currentLocId locTo graph
+          travelRequestEvt = travelRequest <$> currentLoc <@> filterE isGoRequest innerEvent
+          nonTravelRequestEvt = filterE (not . isGoRequest) innerEvent
 
 changeCurrLocEvent :: B.Event E.Event -> B.Event (Maybe LocId)
 changeCurrLocEvent innerEvent = changeCurrLocEvent

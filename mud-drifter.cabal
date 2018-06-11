@@ -49,6 +49,8 @@ library
                      , parsec
                      , containers
                      , binary
+                     , timers
+                     , suspend
   default-language:    Haskell2010
 
 executable mud-drifter
