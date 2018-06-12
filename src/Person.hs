@@ -76,11 +76,11 @@ personTask world outerBus = do
   firePersonCommands outerBus innerBus triggerInnerEvent
   bSocket <- keepConnectedTask innerBus triggerInnerEvent (fst outerBus)
   keepLoggedTask innerBus triggerInnerEvent (fst outerBus)
-  sendServerCommandTask bSocket innerBus (fst outerBus)
   redirectNonPersonCommandsToServerTask innerBus triggerInnerEvent
   fireServerEventsTask outerBus innerBus triggerInnerEvent
   bCurrentLoc <- mapperTask world graph (fst outerBus) innerBus
-  travelTask world graph bCurrentLoc innerBus triggerInnerEvent
+  evts <- travelTask world graph bCurrentLoc innerBus triggerInnerEvent
+  sendServerCommandTask bSocket evts (fst outerBus)
   updateEquipTask innerBus triggerInnerEvent (fst outerBus)
   return ()
 
@@ -219,8 +219,10 @@ sendServerCommandTask :: Behavior (Maybe Socket) -> B.Event E.Event -> Output Ev
 sendServerCommandTask bSocket innerEvent toOuterBus = do
   let evtTxt = (\(ServerCommand txt) -> txt) <$> filterE isServerCommand innerEvent
   reactimate $ sendCommand toOuterBus <$> bSocket <@> evtTxt
-    where isServerCommand (ServerCommand _) = True
-          isServerCommand _ = False
+
+isServerCommand :: E.Event -> Bool
+isServerCommand (ServerCommand _) = True
+isServerCommand _ = False
 
 sendCommand :: Output Event -> Maybe Socket -> Text -> IO ()
 sendCommand _ (Just sock) txt = do async $ NST.send sock $ encodeUtf8 $ snoc txt '\n'
@@ -374,19 +376,19 @@ travelTo world innerEvent = do
       onChangeLocAction path = updatePath $ P.tail path
       moveAction path = moveActionFromPath path
                              where moveActionFromPath (x:y:xs) = triggerOutEvt $ moveCommand x y
-                                   moveActionFromPath _ = return ()
+                                   moveActionFromPath _ = triggerOutEvt $ PulseEvent
                                    moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
   reactimate $ onChangeLocAction <$> bPath <@ filterE isMove innerEvent
   reactimate $ (\(TravelRequest path) -> updatePath path) <$> filterE isTravelRequestPath innerEvent
   reactimate $ moveAction <$> bPath <@ filterE (== PulseEvent) innerEvent
-  return outEvt
+  return $ B.unionWith (\l r -> l) outEvt (filterE (/= PulseEvent) innerEvent)
     where isTravelRequestPath (TravelRequest _) = True
           isTravelRequestPath _ = False
 
-travelTask :: World -> Gr () Int -> Behavior (Maybe LocId) -> B.Event E.Event -> Handler E.Event -> MomentIO ()
+travelTask :: World -> Gr () Int -> Behavior (Maybe LocId) -> B.Event E.Event -> Handler E.Event -> MomentIO (B.Event E.Event)
 travelTask world graph currentLoc innerEvent triggerEvent = do
   outEvts <- travelTo world $ B.unionWith (\l r -> l) travelRequestEvt nonTravelRequestEvt
-  reactimate $ triggerEvent <$> outEvts
+  return outEvts
     where isGoRequest (PersonCommand (GoToLocId _)) = True
           isGoRequest _ = False
           travelRequest Nothing (PersonCommand (GoToLocId locTo)) = TravelRequest []
