@@ -129,5 +129,5 @@ showLocs locs = encodeUtf8 $ renderMsg locs
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> Set Location
-locsByRegex world regex = S.filter (T.isInfixOf regex . locTitle) locs
+locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . locTitle) locs
   where locs = locations world
