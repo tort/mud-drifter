@@ -101,6 +101,10 @@ spec = describe "Parser" $ do
                                    serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter isShopListIemEvent
                                    length serverEventList `shouldBe` 43
                                    hClose hLog
+        it "parse single line prompt event" $ do log <- readFile "test/logs/prompt.1.log"
+                                                 log ~> serverInputParser `shouldParse` PromptEvent
+        it "parse two-line prompt event" $ do log <- readFile "test/logs/prompt.2.log"
+                                              log ~> serverInputParser `shouldParse` PromptEvent
 
 isShopListIemEvent :: ServerEvent -> Bool
 isShopListIemEvent (ShopListItemEvent _ _) = True

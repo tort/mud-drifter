@@ -69,6 +69,7 @@ data ServerEvent = CodepagePrompt
                  | ListInventoryEvent [(Text, ItemState)]
                  | ItemStatsEvent Item
                  | ShopListItemEvent ItemName Price
+                 | PromptEvent
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)

@@ -33,6 +33,7 @@ serverInputParser = codepagePrompt
                     <|> itemStats
                     <|> shopList
                     <|> darkness
+                    <|> prompt
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -148,6 +149,31 @@ dblCrnl = do C.endOfLine
 darkness :: A.Parser ServerEvent
 darkness = do string $ encodeUtf8 "Слишком темно..."
               return DarknessEvent
+
+ansiColor :: A.Parser ()
+ansiColor = do cs
+               C.digit
+               C.char ';'
+               C.digit
+               C.digit
+               C.char 'm'
+               return ()
+
+prompt :: A.Parser ServerEvent
+prompt = do many' C.endOfLine
+            many' clearColors
+            ansiColor
+            hp <- C.decimal
+            C.char 'H'
+            ansiColor
+            C.space
+            ansiColor
+            mv <- C.decimal
+            C.char 'M'
+            ansiColor
+            C.space
+            skipTillIACGA
+            return PromptEvent
 
 shopList :: A.Parser ServerEvent
 shopList = do skipMany shopHeadParser
