@@ -399,18 +399,19 @@ travelTask world graph currentLoc innerEvent triggerEvent = do
 changeCurrLocEvent :: B.Event E.Event -> B.Event (Maybe LocId)
 changeCurrLocEvent innerEvent = changeCurrLocEvent
   where locEvent = filterE isLocEvent innerEvent
-        isLocEvent (ServerEvent (LocationEvent _)) = True
+        isLocEvent (ServerEvent (LocationEvent _ _)) = True
         isLocEvent (ServerEvent DarknessEvent) = True
         isLocEvent _ = False
         changeCurrLocEvent = toLocId <$> locEvent
-        toLocId (ServerEvent (LocationEvent loc)) = Just $ locId loc
+        toLocId (ServerEvent (LocationEvent loc _)) = Just $ locId loc
         toLocId (ServerEvent DarknessEvent) = Nothing
 
 addRequestEvent :: B.Event MoveRequest -> B.Event ([(TaskKey, Location)] -> [(TaskKey, Location)])
 addRequestEvent moveRequest = (\mr@(MoveRequest k dest) acc -> (k, dest) : acc) <$> moveRequest
 
+--clarify if darkness should be included
 isLocation :: E.Event -> Bool
-isLocation (ServerEvent (LocationEvent _)) = True
+isLocation (ServerEvent (LocationEvent _ _)) = True
 isLocation _ = False
 
 isMove :: E.Event -> Bool

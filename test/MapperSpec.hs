@@ -27,18 +27,18 @@ spec = describe "Mapper" $ do
   it "map world data to graph" pending
   it "fold move events to directions" $ foldToDirectionsProperty moveEvents
     where moveEvents = [ MoveEvent "north"
-                       , LocationEvent $ Location 2 "2"
-                       , LocationEvent $ Location 1 "1"
+                       , LocationEvent (Location 2 "2") []
+                       , LocationEvent (Location 1 "1") []
                        , MoveEvent "north"
-                       , LocationEvent $ Location 1 "1"
+                       , LocationEvent (Location 1 "1") []
                        , MoveEvent "north"
-                       , LocationEvent $ Location 2 "2"
+                       , LocationEvent (Location 2 "2") []
                        , MoveEvent "north"
-                       , LocationEvent $ Location 2 "2"
+                       , LocationEvent (Location 2 "2") []
                        , MoveEvent "north"
-                       , LocationEvent $ Location 2 "2"
+                       , LocationEvent (Location 2 "2") []
                        , MoveEvent "north"
-                       , LocationEvent $ Location 3 "3"
+                       , LocationEvent (Location 3 "3") []
                        ]
 
 foldToDirectionsProperty :: [ServerEvent] -> Expectation

@@ -59,7 +59,7 @@ foldToDirections initialDirections eventProducer = PP.fold accDirections initial
 foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
 foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs id (eventProducer >-> PP.filter filterLocations
                                                                                          >-> PP.map unwrapJustRight
-                                                                                         >-> PP.map (\(LocationEvent loc) -> loc))
+                                                                                         >-> PP.map (\(LocationEvent loc _) -> loc))
 
 foldToItems :: Monad m => Set Item -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Item)
 foldToItems prevItems eventProducer = PP.fold foldToSet prevItems id (eventProducer >-> PP.filter filterItems
@@ -67,18 +67,18 @@ foldToItems prevItems eventProducer = PP.fold foldToSet prevItems id (eventProdu
                                                                                    >-> PP.map (\(ItemStatsEvent item) -> item))
 
 evtToLocation :: ServerEvent -> Location
-evtToLocation (LocationEvent loc) = loc
+evtToLocation (LocationEvent loc _) = loc
 
 unwrapJustRight :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
 unwrapJustRight (Just (Right evt)) = evt
 
 filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocationsAndMoves (Just (Right (LocationEvent _))) = True
+filterLocationsAndMoves (Just (Right (LocationEvent _ _))) = True
 filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
 filterLocationsAndMoves _ = False
 
 filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocations (Just (Right (LocationEvent _))) = True
+filterLocations (Just (Right (LocationEvent _ _))) = True
 filterLocations _ = False
 
 filterItems :: Maybe (Either ParsingError ServerEvent) -> Bool
@@ -97,7 +97,7 @@ accDirections directions pair =
         | otherwise = insertOpposite $ insertAhead directions
           where insertAhead = insert (Direction (locId locFrom) (locId locTo) dir)
                 insertOpposite = insert (Direction (locId locTo) (locId locFrom) $ oppositeDir dir)
-             in case pair of ((LocationEvent locTo):(MoveEvent dir):(LocationEvent locFrom):[]) -> updateWorld locFrom locTo dir
+             in case pair of ((LocationEvent locTo _):(MoveEvent dir):(LocationEvent locFrom _):[]) -> updateWorld locFrom locTo dir
                              _ -> directions
 
 oppositeDir :: Text -> Text
@@ -117,7 +117,7 @@ toPairs acc event
   | otherwise = event : P.take 2 acc
 
 mappableMove :: [ServerEvent] -> Bool
-mappableMove ((LocationEvent _) : (MoveEvent _) : (LocationEvent _) : []) = True
+mappableMove ((LocationEvent _ _) : (MoveEvent _) : (LocationEvent _ _) : []) = True
 mappableMove _ = False
 
 showLocs :: Set Location -> ByteString

@@ -6,6 +6,7 @@ module ServerInputParser ( serverInputParser
                          ) where
 
 import Control.Applicative
+import Control.Monad
 import Pipes.Attoparsec
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Char8 as C
@@ -119,8 +120,33 @@ location = do
     A.word8 _bracketleft
     locationId <- C.decimal
     A.word8 _bracketright
-    _ <- manyTill (skip (const True)) clearColors
-    return $ LocationEvent $ Location locationId (decodeUtf8 locationName)
+    cs
+    string "0;37m"
+    desc <- takeTill (== telnetEscape)
+    exits <- many' exitsParser
+    objects <- roomObjects "1;33m"
+    mobs <- roomObjects "1;31m"
+    clearColors
+    let location = Location locationId (strip $ decodeUtf8 locationName)
+     in return $ LocationEvent location objects
+    where exitsParser = do cs
+                           string "0;36m"
+                           A.word8 _bracketleft
+                           C.space
+                           string "Exits: "
+                           exitsStr <- takeTill (== _bracketright)
+                           A.word8 _bracketright
+                           cs
+                           string "0;37m"
+                           C.endOfLine
+
+roomObjects :: DBC8.ByteString -> A.Parser [Text]
+roomObjects colorCode = do cs
+                           string colorCode
+                           objectsStr <- takeTill (== telnetEscape)
+                           return $ toObjects objectsStr
+                             where toObjects = dropTrailingCr . T.lines . decodeUtf8
+                                   dropTrailingCr strings = T.dropWhileEnd (== '\r') <$> strings
 
 move :: A.Parser ServerEvent
 move = do
@@ -141,6 +167,9 @@ cs :: A.Parser ()
 cs = do C.char '\ESC'
         C.char '['
         return ()
+
+telnetEscape :: Word8
+telnetEscape = 0x1b
 
 dblCrnl :: A.Parser ()
 dblCrnl = do C.endOfLine
@@ -208,11 +237,7 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                  where armorParser = do C.endOfLine
                                         name <- armorNameParser
                                         slots <- many1 armorSlot
-                                        line
-                                        line
-                                        line
-                                        line
-                                        line
+                                        fiveLines
                                         C.endOfLine
                                         acVal <- acParser
                                         C.endOfLine
@@ -232,21 +257,17 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                          C.endOfLine
                                          weaponClass <- weaponClassParser
                                          slots <- many1 wpnSlot
-                                         line
-                                         line
-                                         line
-                                         line
-                                         line
+                                         fiveLines
                                          C.endOfLine
                                          damageAvg <- damageAvgParser
                                          return $ Weapon name weaponClass slots damageAvg
                        line = do C.endOfLine
-                                 A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                 A.skipWhile (not . C.isEndOfLine)
                        armorSlot = do C.endOfLine
                                       string $ encodeUtf8 "Можно"
                                       C.skipSpace
                                       slot <- generalSlot <|> feetSlot
-                                      A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                      A.skipWhile (not . C.isEndOfLine)
                                       return slot
                        generalSlot = do string $ encodeUtf8 "надеть на"
                                         C.skipSpace
@@ -271,7 +292,7 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                     string $ encodeUtf8 "Можно взять в"
                                     C.skipSpace
                                     slot <- rh <|> lh <|> bh
-                                    A.skipWhile (\c -> not $ C.isEndOfLine c)
+                                    A.skipWhile (not . C.isEndOfLine)
                                     return slot
                        rh = do string $ encodeUtf8 "правую руку"
                                return Wield
@@ -314,13 +335,14 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                        damageAvgParser = do cs
                                             string $ encodeUtf8 "0;37mНаносимые повреждения"
                                             C.skipSpace
-                                            C.skipWhile (\c -> not $ C.isSpace c)
+                                            C.skipWhile (not . C.isSpace)
                                             C.skipSpace
                                             string $ encodeUtf8 "среднее"
                                             C.skipSpace
                                             dmgAvg <- C.double
                                             A.word8 _period
                                             return dmgAvg
+                       fiveLines = line >> line >> line >> line >> line
 
 listInventory :: A.Parser ServerEvent
 listInventory = do string $ encodeUtf8 "Вы несете:"
@@ -333,8 +355,8 @@ listInventory = do string $ encodeUtf8 "Вы несете:"
                            inventoryItem = do C.endOfLine
                                               itemName <- itemNameParser
                                               itemState <- itemStateParser
-                                              A.skipWhile (\c -> not $ C.isEndOfLine c)
-                                              return $ (itemName, itemState)
+                                              A.skipWhile (not . C.isEndOfLine)
+                                              return (itemName, itemState)
 
 listEquipment :: A.Parser ServerEvent
 listEquipment = do string $ encodeUtf8 "На вас надето:"
@@ -362,8 +384,8 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                               skipMany1 C.space
                                               itemName <- itemNameParser
                                               state <- itemStateParser
-                                              A.skipWhile (\c -> not $ C.isEndOfLine c)
-                                              return $ (EquippedItem bp itemName, state)
+                                              A.skipWhile (not . C.isEndOfLine)
+                                              return (EquippedItem bp itemName, state)
 
 itemNameParser :: A.Parser Text
 itemNameParser = do itemName <- manyTill C.anyChar (string $ encodeUtf8 "  ")

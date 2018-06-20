@@ -61,7 +61,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent Location
+                 | LocationEvent Location [RoomObject]
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -82,6 +82,7 @@ type AC = Int
 type ArmorVal = Int
 type ItemName = Text
 type Price = Int
+type RoomObject = Text
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle

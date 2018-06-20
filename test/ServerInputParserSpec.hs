@@ -38,7 +38,7 @@ spec = describe "Parser" $ do
         it "parse post welcome message" $ do log <- readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
-                                 log ~> serverInputParser `shouldParse` (LocationEvent (Location 35040 "В корчме "))
+                                 log ~> serverInputParser `shouldParse` (LocationEvent (Location 35040 "В корчме") [])
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
         it "parse move in darkness with nightvision" $ do log <- readFile "test/logs/inDarknessWithInfra.log"
@@ -72,7 +72,7 @@ spec = describe "Parser" $ do
                                             hClose hLog
         it "parse move and location on agromob" $ do hLog <- openFile "test/logs/enterRoomWithFight.log" ReadMode
                                                      serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter moveOrLocation
-                                                     serverEventList `shouldBe` [MoveEvent "восток", (LocationEvent $ Location 5112 "На кухне")]
+                                                     serverEventList `shouldBe` [MoveEvent "восток", (LocationEvent (Location 5112 "На кухне") [])]
                                                      hClose hLog
         it "parse equipment list" $ do log <- readFile "test/logs/listEquipment2.log"
                                        log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body "легкий латный доспех", Excellent)
@@ -105,6 +105,10 @@ spec = describe "Parser" $ do
                                                  log ~> serverInputParser `shouldParse` PromptEvent
         it "parse two-line prompt event" $ do log <- readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent
+        it "parse objects in the room" $ do log <- readFile "test/logs/roomWithObjects.2.log"
+                                            log ~> serverInputParser `shouldParse` (LocationEvent location objects)
+                                              where objects = ["Неочищенная руда лежит у Вас под ногами.", "На полу лежит лестница."]
+                                                    location = Location 5104 "На сеновале"
 
 isShopListIemEvent :: ServerEvent -> Bool
 isShopListIemEvent (ShopListItemEvent _ _) = True
@@ -112,7 +116,7 @@ isShopListIemEvent _ = False
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation (MoveEvent _) = True
-moveOrLocation (LocationEvent _) = True
+moveOrLocation (LocationEvent _ _) = True
 moveOrLocation _ = False
 
 nonEmptyUnknown :: ServerEvent -> Bool
@@ -132,10 +136,10 @@ locationsAndCounts file = do
   let locationEventsCount = length (filter isLocation serverEventList)
   let moveEventsCount = length (filter isMove serverEventList)
   return (locationEventsCount, moveEventsCount)
-  where isLocation (Just (Right (LocationEvent _))) = True
-        isLocation _ = False
-        isMove (Just (Right (MoveEvent _))) = True
-        isMove _ = False
+    where isLocation (Just (Right (LocationEvent _ _))) = True
+          isLocation _ = False
+          isMove (Just (Right (MoveEvent _))) = True
+          isMove _ = False
 
 expectedLocsAndMovesCounts :: String -> IO (Int, Int)
 expectedLocsAndMovesCounts file = do
