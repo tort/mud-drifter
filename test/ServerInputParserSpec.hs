@@ -105,6 +105,10 @@ spec = describe "Parser" $ do
                                                  log ~> serverInputParser `shouldParse` PromptEvent
         it "parse two-line prompt event" $ do log <- readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent
+        it "parse school entrance location" $ let location = Location 5000 "Комнаты отдыха"
+                                                  objects = ["Доска для различных заметок и объявлений прибита тут ..блестит!"]
+                                               in do log <- readFile "test/logs/schoolEntrance.log"
+                                                     log ~> serverInputParser `shouldParse` (LocationEvent location objects)
         it "parse objects in the room" $ do log <- readFile "test/logs/roomWithObjects.2.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects)
                                               where objects = ["Неочищенная руда лежит у Вас под ногами.", "На полу лежит лестница."]
