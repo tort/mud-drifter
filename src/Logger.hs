@@ -1,9 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Logger ( runLogger
-              , readLog
+              , withLog
               , printEvents
               , printQuestEvents
+              , obstacleActions
+              , filterQuestEvents
+              , filterTravelActions
               ) where
 
 import Pipes
@@ -23,11 +26,16 @@ import Control.Monad
 import Data.Maybe
 import Data.Binary
 import Data.Binary.Get
-import Data.ByteString.Lazy
+import Data.ByteString.Lazy hiding (foldl)
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Char8 as DBC8
 import qualified Data.Text.IO as DTIO
 import Data.Monoid
+import Data.Map.Strict hiding (foldl)
+import qualified Data.Foldable
+import qualified Data.Map.Strict as M
+import Data.Text (isPrefixOf)
+import qualified Data.Text as T
 
 runLogger :: Input Event -> IO ()
 runLogger evtBusInput = do async $ (bracketWithError
@@ -37,13 +45,13 @@ runLogger evtBusInput = do async $ (bracketWithError
                                     (\h -> runEffect $ fromInput evtBusInput >-> PP.map (toStrict . encode) >-> PBS.toHandle h >> liftIO (IO.putStr "logger input stream ceased")))
                            return ()
 
-readLog :: String -> IO [E.Event]
-readLog filePath = do contents <- BSL.readFile filePath
-                      return $ parse contents
-                        where parse "" = []
-                              parse input = let (Right (rem, _, evt)) = decodeEvent input
-                                             in evt : parse rem
-                                            where decodeEvent input = decodeOrFail input :: Either (BSL.ByteString, ByteOffset, String) (BSL.ByteString, ByteOffset, E.Event)
+withLog :: String -> ([Event] -> IO ()) -> IO ()
+withLog filePath action = withFile filePath ReadMode $ \handle ->
+  parse <$> BSL.hGetContents handle >>= action
+    where parse "" = []
+          parse input = let (Right (rem, _, evt)) = decodeEvent input
+                         in evt : parse rem
+          decodeEvent input = decodeOrFail input :: Either (BSL.ByteString, ByteOffset, String) (BSL.ByteString, ByteOffset, E.Event)
 
 printEvents :: [Event] -> IO ()
 printEvents events = mapM_ printEvent events
@@ -52,7 +60,10 @@ printEvents events = mapM_ printEvent events
         printEvent event = IO.print event
 
 printQuestEvents :: [Event] -> IO ()
-printQuestEvents events = printEvents $ P.filter questEvents events
+printQuestEvents events = printEvents $ filterQuestEvents events
+
+filterQuestEvents :: [Event] -> [Event]
+filterQuestEvents events =  P.filter questEvents events
   where questEvents e = (not $ isServerInput e)
                         && (not $ isMoveEvent e)
                         && (e /= (ServerEvent PromptEvent))
@@ -66,3 +77,28 @@ printQuestEvents events = printEvents $ P.filter questEvents events
         emptyUnknownServerEvent _ = False
         isConsoleOutput (ConsoleOutput _) = True
         isConsoleOutput _ = False
+
+filterTravelActions :: [Event] -> [Event]
+filterTravelActions events = P.filter questEvents events
+  where questEvents e = (not $ botCommand e) && (not $ simpleMoveCommands e) && (isLocationEvent e || isConsoleOutput e)
+        isLocationEvent (ServerEvent (LocationEvent loc _)) = True
+        isLocationEvent _ = False
+        isConsoleOutput (ConsoleInput _) = True
+        isConsoleOutput _ = False
+        botCommand (ConsoleInput cmd) = T.isPrefixOf "/" cmd
+        botCommand _ = False
+        simpleMoveCommands e = e == (ConsoleInput "с")
+                               || e == (ConsoleInput "в")
+                               || e == (ConsoleInput "з")
+                               || e == (ConsoleInput "ю")
+                               || e == (ConsoleInput "вн")
+                               || e == (ConsoleInput "вв")
+
+obstacleActions :: [Event] -> Map (LocId, LocId) [Event]
+obstacleActions questEvents = snd $ foldl toActionMap ((Nothing, []), M.empty) questEvents
+  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _)) = ((Just $ locId loc, []), travelActions)
+        toActionMap acc@((Nothing, actions), travelActions) _ = acc
+        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _)) = let newTravelActions = case actions of [] -> travelActions
+                                                                                                                                            _ -> insert (leftLocId, locId loc) actions travelActions
+                                                                                                                                         in ((Just $ locId loc, []), newTravelActions)
+        toActionMap ((leftLoc, actions), travelActions) evt@(ConsoleInput input) = ((leftLoc, evt : actions), travelActions)
