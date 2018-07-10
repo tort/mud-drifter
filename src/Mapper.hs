@@ -35,10 +35,12 @@ import qualified Prelude as P
 import Data.Set
 import qualified Data.Set as S
 import Event
+import Data.Map hiding (insert)
 
 data World = World { locations :: Set Location
                    , directions :: Set Direction
                    , items :: Set Item
+                   , questActions :: Map (LocId, LocId) [Event]
                    }
 type WorldMap = Gr Text Int
 data Direction = Direction { locIdFrom :: LocIdFrom

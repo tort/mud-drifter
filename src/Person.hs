@@ -49,6 +49,7 @@ import qualified Data.Graph.Inductive.Query.SP as GA
 import Data.Set hiding ((\\))
 import qualified Data.Set as S
 import Data.List
+import qualified Data.List as L
 import Prelude
 import qualified Prelude as P
 import Debug.Trace
@@ -58,6 +59,9 @@ import Control.Monad
 import qualified Pipes.Safe as PS
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted
+import Data.Map hiding ((\\), mapAccum)
+import qualified Data.Map as M
+import Logger
 
 data MoveRequest = MoveRequest TaskKey Location
 type TaskKey = Int
@@ -368,22 +372,33 @@ isFindLoc _ = False
 matchingLocs :: World -> E.Event -> ByteString
 matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
 
+questEvent :: B.Event E.Event -> MomentIO (B.Event E.Event)
+questEvent innerEvent = do
+  (bQuestChain, updateQuestChain) <- newBehavior []
+  (outEvt, triggerOutEvt) <- newEvent
+  let questAction [] = triggerOutEvt PulseEvent
+  reactimate $ questAction <$> bQuestChain <@ filterE (== PulseEvent) innerEvent
+  return $ B.unionWith (\l r -> l) outEvt (filterE (/= PulseEvent) innerEvent)
+
 travelTo :: World -> B.Event E.Event -> MomentIO (B.Event E.Event)
 travelTo world innerEvent = do
   (bPath, updatePath) <- newBehavior []
   (outEvt, triggerOutEvt) <- newEvent
-  let onChangeLocAction [] = return ()
-      onChangeLocAction path = updatePath $ P.tail path
+  qe <- questEvent innerEvent
+  let onChangeLocAction [] _ = return ()
+      onChangeLocAction path (ServerEvent (LocationEvent loc _))  = updatePath $ if (L.elem (locId loc) path) then L.dropWhile (/= (locId loc)) path
+                                                                                                              else path
       moveAction path = moveActionFromPath path
-                             where moveActionFromPath (x:y:xs) = triggerOutEvt $ moveCommand x y
-                                   moveActionFromPath _ = triggerOutEvt $ PulseEvent
-                                   moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
-  reactimate $ onChangeLocAction <$> bPath <@ filterE isMove innerEvent
-  reactimate $ (\(TravelRequest path) -> updatePath path) <$> filterE isTravelRequestPath innerEvent
-  reactimate $ moveAction <$> bPath <@ filterE (== PulseEvent) innerEvent
-  return $ B.unionWith (\l r -> l) outEvt (filterE (/= PulseEvent) innerEvent)
+        where moveActionFromPath (x:y:xs) = triggerOutEvt $ moveCommand x y
+              moveActionFromPath _ = triggerOutEvt $ PulseEvent
+              moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
+  reactimate $ onChangeLocAction <$> bPath <@> filterE isLocation qe
+  reactimate $ (\(TravelRequest path) -> updatePath path) <$> filterE isTravelRequestPath qe
+  reactimate $ moveAction <$> bPath <@ filterE (== PulseEvent) qe
+  return $ B.unionWith (\l r -> l) outEvt (filterE (/= PulseEvent) qe)
     where isTravelRequestPath (TravelRequest _) = True
           isTravelRequestPath _ = False
+          questActs fromLoc toLoc = M.lookup (fromLoc, toLoc) (questActions world)
 
 travelTask :: World -> Gr () Int -> Behavior (Maybe LocId) -> B.Event E.Event -> Handler E.Event -> MomentIO (B.Event E.Event)
 travelTask world graph currentLoc innerEvent triggerEvent = do
@@ -442,16 +457,24 @@ loadItems accIO file = do
   hClose hLog
   return result
 
+loadQuestActions :: IO (Map (Int, Int) [Event]) -> FilePath -> IO (Map (Int, Int) [Event])
+loadQuestActions accIO file = withLog file $ obstacleActions . filterQuestEvents
+
 loadWorld :: FilePath -> IO World
-loadWorld dir = do
-  files <- listDirectory dir
-  directions <- loadDirs files
-  locations <- loadLocs files
-  items <- loadItms files
-  return $ World locations directions items
-    where loadDirs files = F.foldl (\acc item -> loadDirections acc (dir ++ item)) (return S.empty) files
-          loadLocs files = F.foldl (\acc item -> loadLocations acc (dir ++ item)) (return S.empty) files
-          loadItms files = F.foldl (\acc item -> loadItems acc (dir ++ item)) (return S.empty) files
+loadWorld archiveDir = do
+  serverLogFiles <- listDirectory serverLogDir
+  evtLogFiles <- listDirectory evtLogDir
+  directions <- loadDirs serverLogFiles
+  locations <- loadLocs serverLogFiles
+  items <- loadItms serverLogFiles
+  questActions <- loadQuestActs evtLogFiles
+  return $ World locations directions items questActions
+    where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
+          loadLocs files = F.foldl (\acc item -> loadLocations acc (serverLogDir ++ item)) (return S.empty) files
+          loadItms files = F.foldl (\acc item -> loadItems acc (serverLogDir ++ item)) (return S.empty) files
+          loadQuestActs files = F.foldl (\acc item -> loadQuestActions acc (evtLogDir ++ item)) (return M.empty) files
+          serverLogDir = archiveDir ++ "server-input-log/"
+          evtLogDir = archiveDir ++ "evt-log/"
 
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do

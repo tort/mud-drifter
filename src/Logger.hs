@@ -26,13 +26,14 @@ import Control.Monad
 import Data.Maybe
 import Data.Binary
 import Data.Binary.Get
-import Data.ByteString.Lazy hiding (foldl)
+import Data.ByteString.Lazy hiding (foldl, foldl')
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString.Char8 as DBC8
+import qualified Data.ByteString as BS
 import qualified Data.Text.IO as DTIO
 import Data.Monoid
-import Data.Map.Strict hiding (foldl)
-import qualified Data.Foldable
+import Data.Map.Strict hiding (foldl, foldl')
+import qualified Data.Foldable as F
 import qualified Data.Map.Strict as M
 import Data.Text (isPrefixOf)
 import qualified Data.Text as T
@@ -45,9 +46,9 @@ runLogger evtBusInput = do async $ (bracketWithError
                                     (\h -> runEffect $ fromInput evtBusInput >-> PP.map (toStrict . encode) >-> PBS.toHandle h >> liftIO (IO.putStr "logger input stream ceased")))
                            return ()
 
-withLog :: String -> ([Event] -> IO ()) -> IO ()
+withLog :: String -> ([Event] -> r) -> IO r
 withLog filePath action = withFile filePath ReadMode $ \handle ->
-  parse <$> BSL.hGetContents handle >>= action
+  action <$> parse . BSL.fromStrict <$> BS.hGetContents handle
     where parse "" = []
           parse input = let (Right (rem, _, evt)) = decodeEvent input
                          in evt : parse rem
@@ -80,13 +81,15 @@ filterQuestEvents events =  P.filter questEvents events
 
 filterTravelActions :: [Event] -> [Event]
 filterTravelActions events = P.filter questEvents events
-  where questEvents e = (not $ botCommand e) && (not $ simpleMoveCommands e) && (isLocationEvent e || isConsoleOutput e)
+  where questEvents e = (not $ botCommand e) && (not $ simpleMoveCommands e) && (isLocationEvent e || isConsoleOutput e || isUnknownServerEvent e)
         isLocationEvent (ServerEvent (LocationEvent loc _)) = True
         isLocationEvent _ = False
         isConsoleOutput (ConsoleInput _) = True
         isConsoleOutput _ = False
         botCommand (ConsoleInput cmd) = T.isPrefixOf "/" cmd
         botCommand _ = False
+        isUnknownServerEvent (ServerEvent (UnknownServerEvent _)) = True
+        isUnknownServerEvent _ = False
         simpleMoveCommands e = e == (ConsoleInput "с")
                                || e == (ConsoleInput "в")
                                || e == (ConsoleInput "з")
@@ -95,10 +98,10 @@ filterTravelActions events = P.filter questEvents events
                                || e == (ConsoleInput "вв")
 
 obstacleActions :: [Event] -> Map (LocId, LocId) [Event]
-obstacleActions questEvents = snd $ foldl toActionMap ((Nothing, []), M.empty) questEvents
+obstacleActions questEvents = snd $ F.foldl' toActionMap ((Nothing, []), M.empty) questEvents
   where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _)) = ((Just $ locId loc, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
         toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _)) = let newTravelActions = case actions of [] -> travelActions
-                                                                                                                                            _ -> insert (leftLocId, locId loc) actions travelActions
+                                                                                                                                            _ -> insert (leftLocId, locId loc) (Prelude.reverse actions) travelActions
                                                                                                                                          in ((Just $ locId loc, []), newTravelActions)
-        toActionMap ((leftLoc, actions), travelActions) evt@(ConsoleInput input) = ((leftLoc, evt : actions), travelActions)
+        toActionMap ((leftLoc, actions), travelActions) evt = ((leftLoc, evt : actions), travelActions)
