@@ -40,7 +40,7 @@ data Event = ConsoleInput Text
            | ConsoleOutput ByteString
            | ServerDisconnection
            | PulseEvent
-           | TravelRequest [Int]
+           | TravelRequest [LocId]
            deriving (Eq, Show, Generic)
 
 type EventBus = (Output Event, Input Event)

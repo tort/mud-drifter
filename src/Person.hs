@@ -3,6 +3,7 @@
 module Person ( runPerson
               , loadWorld
               , parseProducer
+              , travelTo
               ) where
 
 import Control.Applicative ((<|>))
