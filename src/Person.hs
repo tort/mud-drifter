@@ -59,8 +59,8 @@ import Control.Monad
 import qualified Pipes.Safe as PS
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted
-import Data.Map hiding ((\\), mapAccum)
-import qualified Data.Map as M
+import Data.Map.Strict hiding ((\\), mapAccum)
+import qualified Data.Map.Strict as M
 import Logger
 
 data MoveRequest = MoveRequest TaskKey Location
@@ -112,7 +112,7 @@ itemsToGet identifiedItems equippedItems inventoryItems containerItems shopItems
   (itemEvt, triggerItemEvt) <- newEvent
   return itemEvt
 
-getItems :: B.Event EquippedItem -> MomentIO ((B.Event E.Event, B.Event EquippedItem))
+getItems :: B.Event EquippedItem -> MomentIO (B.Event E.Event, B.Event EquippedItem)
 getItems itemToGetEvent = do
   (gotItemEvent, triggerEvt) <- newEvent
   (pulseEvent, triggerPulse) <- newEvent
@@ -372,38 +372,40 @@ isFindLoc _ = False
 matchingLocs :: World -> E.Event -> ByteString
 matchingLocs graph (PersonCommand (FindLoc regex)) = showLocs $ locsByRegex graph regex
 
-questEvent :: B.Event E.Event -> MomentIO (B.Event E.Event)
-questEvent innerEvent = do
-  (bQuestChain, updateQuestChain) <- newBehavior []
-  (outEvt, triggerOutEvt) <- newEvent
-  let questAction [] = triggerOutEvt PulseEvent
-  reactimate $ questAction <$> bQuestChain <@ filterE (== PulseEvent) innerEvent
-  return $ B.unionWith (\l r -> l) outEvt (filterE (/= PulseEvent) innerEvent)
-
 travelTo :: World -> B.Event E.Event -> MomentIO (B.Event E.Event)
 travelTo world innerEvent = do
   (bPath, updatePath) <- newBehavior []
+  (bQuestActions, updateQuestActions) <- newBehavior []
+  questActionsEvent <- changes bPath
   (outEvt, triggerOutEvt) <- newEvent
-  qe <- questEvent innerEvent
   let onChangeLocAction [] _ = return ()
-      onChangeLocAction path (ServerEvent (LocationEvent loc _))  = updatePath $ if (L.elem (locId loc) path) then L.dropWhile (/= (locId loc)) path
-                                                                                                              else path
-      moveAction path = moveActionFromPath path
-        where moveActionFromPath (x:y:xs) = triggerOutEvt $ moveCommand x y
-              moveActionFromPath _ = triggerOutEvt $ PulseEvent
-              moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
-  reactimate $ onChangeLocAction <$> bPath <@> filterE isLocation qe
-  reactimate $ (\(TravelRequest path) -> updatePath path) <$> filterE isTravelRequestPath qe
-  reactimate $ moveAction <$> bPath <@ filterE (== PulseEvent) qe
-  return $ B.unionWith (\l r -> l) outEvt (filterE (/= PulseEvent) qe)
+      onChangeLocAction path (ServerEvent (LocationEvent loc _))  =
+        if L.elem (locId loc) path then let p = L.dropWhile (/= (locId loc)) path
+                                         in updatePath $ trace ("path ###> " ++ show p) p
+                                   else return ()
+      moveAction (x:y:xs) [] = triggerOutEvt $ moveCommand x y
+      moveAction _ _ = triggerOutEvt PulseEvent
+      moveCommand fromLoc toLoc = ServerCommand $ trigger $ nodePairToDirection (directions world) (fromLoc, toLoc)
+      cutByQuestEvt questActions e = if L.elem e questActions then updateQuestActions $ L.dropWhile (/= e) questActions
+                                                              else return ()
+  reactimate $ onChangeLocAction <$> bPath <@> filterE isLocation innerEvent
+  reactimate $ (\(TravelRequest path) -> updatePath path) <$> filterE isTravelRequestPath innerEvent
+  reactimate $ moveAction <$> bPath <@> (bQuestActions <@ filterE (== PulseEvent) innerEvent)
+  reactimate' $ fmap (updateQuestActions . questActionsForLoc) <$> questActionsEvent
+  reactimate $ cutByQuestEvt <$> bQuestActions <@> filterE isUnknownServerEvent innerEvent
+  return $ B.unionWith const outEvt (filterE (/= PulseEvent) innerEvent)
     where isTravelRequestPath (TravelRequest _) = True
           isTravelRequestPath _ = False
-          questActs fromLoc toLoc = M.lookup (fromLoc, toLoc) (questActions world)
+          questActionsForLoc path@(fromLoc:toLoc:xs) = let qa = M.lookup (fromLoc, toLoc) (questActions world)
+                                                        in case qa of (Just x) -> trace ("quest-actions ###> " ++ show x) x
+                                                                      _ -> []
+          questActionsForLoc _ = []
+          isUnknownServerEvent (ServerEvent (UnknownServerEvent _)) = True
+          isUnknownServerEvent _ = False
 
 travelTask :: World -> Gr () Int -> Behavior (Maybe LocId) -> B.Event E.Event -> Handler E.Event -> MomentIO (B.Event E.Event)
-travelTask world graph currentLoc innerEvent triggerEvent = do
-  outEvts <- travelTo world $ B.unionWith (\l r -> l) travelRequestEvt nonTravelRequestEvt
-  return outEvts
+travelTask world graph currentLoc innerEvent triggerEvent =
+  travelTo world $ B.unionWith const travelRequestEvt nonTravelRequestEvt
     where isGoRequest (PersonCommand (GoToLocId _)) = True
           isGoRequest _ = False
           travelRequest Nothing (PersonCommand (GoToLocId locTo)) = TravelRequest []
@@ -458,7 +460,7 @@ loadItems accIO file = do
   return result
 
 loadQuestActions :: IO (Map (Int, Int) [Event]) -> FilePath -> IO (Map (Int, Int) [Event])
-loadQuestActions accIO file = withLog file $ obstacleActions . filterQuestEvents
+loadQuestActions accIO file = withLog file $ obstacleActions . filterTravelActions
 
 loadWorld :: FilePath -> IO World
 loadWorld archiveDir = do
@@ -482,5 +484,5 @@ parseProducer src = do
     continue result partial
     where continue result@(Just (Right _)) partial = do yield result
                                                         parseProducer partial
-          continue (Just (Left (ParsingError ctxts err))) _ = liftIO $ DBC8.putStr $ "error: " <> (DBC8.pack err) <> (DBC8.pack $ P.concat ctxts) <> "\n"
+          continue (Just (Left (ParsingError ctxts err))) _ = liftIO $ DBC8.putStr $ "error: " <> DBC8.pack err <> DBC8.pack (P.concat ctxts) <> "\n"
           continue Nothing _ = liftIO $ DBC8.putStr "parsed entire stream\n"
