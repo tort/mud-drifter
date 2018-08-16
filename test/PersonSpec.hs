@@ -7,9 +7,9 @@ import Protolude
 import Test.Hspec
 import Test.QuickCheck
 import Test.QuickCheck.Instances
-import Person
+import PersonTask
 
 
 spec :: Spec
 spec = describe "Person" $ do
-  it "provide locations by substring" pending
+  it "can travel" pending
