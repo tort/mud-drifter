@@ -18,10 +18,11 @@ import Data.Text hiding (isInfixOf, isPrefixOf, length, filter, lines)
 import Data.Text.Encoding
 import Control.Monad
 
-import ServerInputParser
 import Person
+import ServerInputParser
 import RemoteConsole
 import Event
+import World
 
 spec :: Spec
 spec = describe "Parser" $ do

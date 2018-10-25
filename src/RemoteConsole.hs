@@ -2,7 +2,6 @@
 
 module RemoteConsole ( runRemoteConsole ) where
 
-import Person
 import Pipes.Concurrent hiding (send)
 import qualified Pipes.Prelude as PPR
 import qualified Pipes.Prelude.Text as PPT

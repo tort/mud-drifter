@@ -1,135 +1,70 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
-module Mapper ( foldToDirections
-              , foldToLocations
-              , foldToItems
-              , locsByRegex
-              , showLocs
-              , World(..)
-              , Direction(..)
+module Mapper ( mapper
               ) where
 
-import Data.ByteString hiding (head, empty, putStrLn)
+import Protolude hiding ((<>), Location, runStateT, head, intercalate)
+import Data.ByteString.Char8()
 import ServerInputParser
+import Pipes
+import Pipes.Parse
+import qualified Pipes.Prelude as PP
+import Data.Text
+import Event
+import World
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph
-import qualified Data.Graph.Inductive.Graph as DG
-import System.IO hiding (putStrLn)
-import Pipes
-import Pipes.Prelude hiding (head, fromHandle)
-import qualified Pipes.Prelude as PP
-import Pipes.Attoparsec
-import Pipes.ByteString hiding (head)
-import qualified Pipes.ByteString as BS
-import Data.Text hiding (head, empty)
-import qualified Data.Text as T
-import Data.Text.Encoding
-import Data.Either
-import Data.Maybe
-import Control.Applicative
-import Control.Arrow
-import Data.Monoid
-import Debug.Trace
-import Prelude
-import qualified Prelude as P
-import Data.Set
+import qualified Data.List as L
 import qualified Data.Set as S
-import Event
-import Data.Map hiding (insert)
+import qualified Data.Graph.Inductive.Query.SP as GA
 
-data World = World { locations :: Set Location
-                   , directions :: Set Direction
-                   , items :: Set Item
-                   , questActions :: Map (LocId, LocId) [Event]
-                   }
-type WorldMap = Gr Text Int
-data Direction = Direction { locIdFrom :: LocIdFrom
-                           , locIdTo :: LocIdTo
-                           , trigger :: Trigger
-                           } deriving (Eq, Show, Ord)
-type LocIdFrom = LocId
-type LocIdTo = LocId
-type Trigger = Text
+mapper :: MonadIO m => Pipe Event Event m ()
+mapper = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
+            let mapperWithPosition currLoc = do evt <- await
+                                                case evt of (ServerEvent (LocationEvent loc _)) -> mapperWithPosition (Just $ locId loc)
+                                                            _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
+                                                                                        (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
+                                                                                        (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
+                                                                                        (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
+                                                                                                                             in ConsoleOutput $ case S.toList $ matchingLocs of
+                                                                                                                                  [] -> "no matching locations found"
+                                                                                                                                  d:[] -> showPathBy world currLoc (locId d)
+                                                                                                                                  _ -> showLocs matchingLocs
+                                                                                        x -> x
+                                                                    mapperWithPosition currLoc
+             in mapperWithPosition Nothing
 
-foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
-foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections id (eventProducer >-> PP.filter filterLocationsAndMoves
-                                                                                                             >-> PP.map unwrapJustRight
-                                                                                                             >-> PP.scan toPairs [] id
-                                                                                                             >-> PP.filter mappableMove
-                                                                                              )
 
-foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
-foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs id (eventProducer >-> PP.filter filterLocations
-                                                                                         >-> PP.map unwrapJustRight
-                                                                                         >-> PP.map (\(LocationEvent loc _) -> loc))
 
-foldToItems :: Monad m => Set Item -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Item)
-foldToItems prevItems eventProducer = PP.fold foldToSet prevItems id (eventProducer >-> PP.filter filterItems
-                                                                                   >-> PP.map unwrapJustRight
-                                                                                   >-> PP.map (\(ItemStatsEvent item) -> item))
+showPath :: World -> Path -> ByteString
+showPath world [] = "path is empty\n"
+showPath world path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nodePairToDirection world) <$> toJust <$> nodePairs)
+  where joinToOneMsg = intercalate "\n"
+        showDirection = trigger
+        addRet txt = snoc txt '\n'
+        nodePairs = filterDirs $ L.scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
+        filterDirs = L.filter (\pair -> isJust (fst pair) && isJust (snd pair))
+        toJust (Just left, Just right) = (left, right)
 
-evtToLocation :: ServerEvent -> Location
-evtToLocation (LocationEvent loc _) = loc
+nodePairToDirection :: World -> (LocId, LocId) -> Direction
+nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\d -> locIdFrom d == from && locIdTo d == to) (directions world)
 
-unwrapJustRight :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
-unwrapJustRight (Just (Right evt)) = evt
+showPathBy :: World -> Maybe Int -> Int -> ByteString
+showPathBy world Nothing _ = "current location is unknown\n"
+showPathBy world (Just f) t = if (f == t) then "you are already there!"
+                                          else (showPath $ world) $ GA.sp f t (worldMap world)
 
-filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocationsAndMoves (Just (Right (LocationEvent _ _))) = True
-filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
-filterLocationsAndMoves _ = False
-
-filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocations (Just (Right (LocationEvent _ _))) = True
-filterLocations _ = False
-
-filterItems :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterItems (Just (Right (ItemStatsEvent item))) = True
-filterItems _ = False
-
-type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
-
-edgeWeight :: Int
-edgeWeight = 1
-
-accDirections :: Set Direction -> [ServerEvent] -> Set Direction
-accDirections directions pair =
-  let updateWorld locFrom locTo dir
-        | locFrom == locTo = directions
-        | otherwise = insertOpposite $ insertAhead directions
-          where insertAhead = insert (Direction (locId locFrom) (locId locTo) dir)
-                insertOpposite = insert (Direction (locId locTo) (locId locFrom) $ oppositeDir dir)
-             in case pair of ((LocationEvent locTo _):(MoveEvent dir):(LocationEvent locFrom _):[]) -> updateWorld locFrom locTo dir
-                             _ -> directions
-
-oppositeDir :: Text -> Text
-oppositeDir "вверх" = "вниз"
-oppositeDir "вниз" = "вверх"
-oppositeDir "север" = "юг"
-oppositeDir "юг" = "север"
-oppositeDir "запад" = "восток"
-oppositeDir "восток" = "запад"
-
-foldToSet :: Ord a => Set a -> a -> Set a
-foldToSet acc item = S.insert item acc
-
-toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
-toPairs acc event
-  | P.length acc < 3 = event : acc
-  | otherwise = event : P.take 2 acc
-
-mappableMove :: [ServerEvent] -> Bool
-mappableMove ((LocationEvent _ _) : (MoveEvent _) : (LocationEvent _ _) : []) = True
-mappableMove _ = False
-
-showLocs :: Set Location -> ByteString
-showLocs locs = encodeUtf8 $ renderMsg locs
-  where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
-        joinToOneMsg = T.intercalate "\n"
-        renderLocs = S.map renderLoc
-        renderLoc node = (T.pack $ P.show $ locId node) <> " " <> locTitle node
-        addRet txt = T.snoc txt '\n'
-
-locsByRegex :: World -> Text -> Set Location
-locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . locTitle) locs
-  where locs = locations world
+{-showFindPathResponse :: World -> Maybe Int -> Event -> ByteString
+showFindPathResponse world currLoc userInput =
+  let destination = locsByRegex world
+   in case (currLoc, userInput) of
+        (_, (UserCommand (FindPathFromTo from to))) -> showPathBy from to
+        (Just currLoc, (UserCommand (FindPathToLocId to))) -> showPathBy currLoc to
+        (Just currLoc, (UserCommand (FindPathTo regex))) -> let matchingLocs = destination regex
+                                             in case S.toList $ matchingLocs of
+                                                  [] -> "no matching locations found"
+                                                  d:[] -> showPathBy currLoc (locId d)
+                                                  _ -> showLocs matchingLocs
+        (Nothing, _) -> "current location is unknown\n"
+-}

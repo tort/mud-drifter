@@ -1,4 +1,6 @@
 ÿûEÿûVÿûU
+Online: 91
+
 Using keytable
   0) Koi-8
   1) Alt
@@ -6,6 +8,8 @@ Using keytable
   3) Windows(zMUD)
   4) Windows(zMUD ver. 6+)
   5) UTF-8
+  6) Windows(zMUD <6.39)
+  9) TECT...
 Select one :     
  -----------------------------------------------------------------------------                   
           Based On CircleMUD v3.0   Created by Jeremy Elson,   

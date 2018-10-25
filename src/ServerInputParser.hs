@@ -43,6 +43,10 @@ codepagePrompt = do
     iacWill
     iacWill
     C.endOfLine
+    string "Online: "
+    C.decimal
+    C.endOfLine
+    C.endOfLine
     string "Using keytable"
     _ <- manyTill (skip (const True)) (string "Select one : ")
     return CodepagePrompt
@@ -124,7 +128,6 @@ location = do
     string "0;37m"
     desc <- takeTill (== telnetEscape)
     many' schoolEntrance
-    skipWhile (/= telnetEscape)
     exits <- many' exitsParser
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"

@@ -1,6 +1,8 @@
+
 {-# LANGUAGE OverloadedStrings #-}
 
 module UserInputParser (userInputParser
+                       , parseUserInput
                        ) where
 
 import Text.Parsec
@@ -10,11 +12,14 @@ import Data.Text
 import Text.Read
 import Event
 
-userInputParser :: Parser PersonCommand
+parseUserInput :: Text -> Either ParseError UserCommand
+parseUserInput text = parse userInputParser "" text
+
+userInputParser :: Parser UserCommand
 userInputParser = nonCommandInputParser
                   <|> try connParser
+                  <|> try zapParser
                   <|> try findLocParser
-                  <|> try unconnParser
                   <|> try emptyInputParser
                   <|> try findPathToLocIdParser
                   <|> try findPathFromToParser
@@ -23,41 +28,41 @@ userInputParser = nonCommandInputParser
                   <|> try equipCmdParser
                   <|> unknownCommandParser
 
-nonCommandInputParser :: Parser PersonCommand
+nonCommandInputParser :: Parser UserCommand
 nonCommandInputParser = do
   c <- noneOf "/"
   input <- many anyChar
-  return $ UserInputRedirect $ pack (c : input)
+  return $ ServerCommand $ pack (c : input)
 
-findLocParser :: Parser PersonCommand
+findLocParser :: Parser UserCommand
 findLocParser = do
   string $ "/лок"
   optional space
   input <- many anyChar
   return $ FindLoc $ pack input
 
-connParser :: Parser PersonCommand
+connParser :: Parser UserCommand
 connParser = do
   string "/conn"
-  return $ KeepConn True
+  return $ Connect
 
-unconnParser :: Parser PersonCommand
-unconnParser = do
-  string "/unconn"
-  return $ KeepConn False
+zapParser :: Parser UserCommand
+zapParser = do
+  string "/zap"
+  return $ Zap
 
-unknownCommandParser :: Parser PersonCommand
+unknownCommandParser :: Parser UserCommand
 unknownCommandParser = do
   lookAhead $ char '/'
   input <- many anyChar
   unexpected $ "command " ++ input ++ "\n"
 
-emptyInputParser :: Parser PersonCommand
+emptyInputParser :: Parser UserCommand
 emptyInputParser = do
   eof
-  return $ UserInputRedirect ""
+  return $ ServerCommand ""
 
-findPathFromToParser :: Parser PersonCommand
+findPathFromToParser :: Parser UserCommand
 findPathFromToParser = do
   string "/путь"
   many1 space
@@ -69,7 +74,7 @@ findPathFromToParser = do
     Nothing -> unexpected " /го format\n"
     Just cmd -> return cmd
 
-findPathToLocIdParser :: Parser PersonCommand
+findPathToLocIdParser :: Parser UserCommand
 findPathToLocIdParser = do
   string "/путь"
   many1 space
@@ -80,7 +85,7 @@ findPathToLocIdParser = do
     Nothing -> unexpected " /path format\n"
     Just cmd -> return cmd
 
-findPathToLocParser :: Parser PersonCommand
+findPathToLocParser :: Parser UserCommand
 findPathToLocParser = do
   string "/путь"
   many1 space
@@ -88,7 +93,7 @@ findPathToLocParser = do
   eof
   return $ FindPathTo $ stripEnd $ pack to
 
-goToParser :: Parser PersonCommand
+goToParser :: Parser UserCommand
 goToParser = do
   string "/го"
   many1 space
@@ -99,6 +104,6 @@ goToParser = do
     Nothing -> return $ GoTo $ strippedTo
     Just locId -> return $ GoToLocId locId
 
-equipCmdParser :: Parser PersonCommand
+equipCmdParser :: Parser UserCommand
 equipCmdParser = do string "/экип"
                     return Equip

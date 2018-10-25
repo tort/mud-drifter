@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Event ( Event(..)
-             , PersonCommand(..)
+             , UserCommand(..)
              , ServerEvent(..)
              , EventBus
              , Location(..)
@@ -23,7 +23,7 @@ import Data.Binary
 import GHC.Generics (Generic)
 
 instance Binary Event
-instance Binary PersonCommand
+instance Binary UserCommand
 instance Binary ServerEvent
 instance Binary Location
 instance Binary Slot
@@ -33,20 +33,23 @@ instance Binary Item
 instance Binary WeaponClass
 
 data Event = ConsoleInput Text
-           | PersonCommand PersonCommand
-           | ServerCommand Text
+           | ConsoleOutput ByteString
+           | UserCommand UserCommand
+           | SendToServer Text
            | ServerInput ByteString
            | ServerEvent ServerEvent
-           | ConsoleOutput ByteString
-           | ServerDisconnection
+           | ServerClosedChannel
+           | ServerIOException
            | PulseEvent
            | TravelRequest [LocId]
+           | TravelFailure
            deriving (Eq, Show, Generic)
 
 type EventBus = (Output Event, Input Event)
 
-data PersonCommand = UserInputRedirect Text
-               | KeepConn Bool
+data UserCommand = ServerCommand Text
+               | Connect
+               | Zap
                | FindLoc Text
                | FindPathFromTo Int Int
                | FindPathToLocId Int

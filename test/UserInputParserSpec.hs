@@ -20,18 +20,17 @@ import Text.Parsec.Error
 import Data.Either
 
 import UserInputParser
-import Person
 import RemoteConsole
 import Event
 
 spec :: Spec
 spec = describe "UserInputParser" $ do
-  it "parse non-command input" $ (parse userInputParser "" "blabla") `shouldBe` (Right $ UserInputRedirect "blabla")
+  it "parse non-command input" $ (parse userInputParser "" "blabla") `shouldBe` (Right $ ServerCommand "blabla")
   it "parse /findloc command" $ (parse userInputParser "" "/лок В таверне") `shouldBe` (Right $ FindLoc "В таверне")
   it "parse /findloc without param" $ (parse userInputParser "" "/лок") `shouldBe` (Right $ FindLoc "")
   it "parse /findloc without param" $ (parse userInputParser "" "/лок ") `shouldBe` (Right $ FindLoc "")
-  it "parse /conn command" $ (parse userInputParser "" "/conn") `shouldBe` (Right $ KeepConn True)
-  it "parse /unconn command" $ (parse userInputParser "" "/unconn") `shouldBe` (Right $ KeepConn False)
+  it "parse /conn command" $ (parse userInputParser "" "/conn") `shouldBe` (Right $ Connect)
+  it "parse /zap command" $ (parse userInputParser "" "/zap") `shouldBe` (Right $ Zap)
   it "parse /path regex" $ (parse userInputParser "" "/путь В избе") `shouldBe` (Right $ FindPathTo "В избе")
   it "parse /path toLocId" $ (parse userInputParser "" "/путь 34546") `shouldBe` (Right $ FindPathToLocId 34546)
   it "parse /path fromLocId toLocId" $ (parse userInputParser "" "/путь 111 222") `shouldBe` (Right $ FindPathFromTo 111 222)
@@ -41,5 +40,5 @@ spec = describe "UserInputParser" $ do
   it "parse /path" $ isLeft $ (parse userInputParser "" "/путь")
   it "parse /go locId command" $ (parse userInputParser "" "/го 34546") `shouldBe` (Right $ GoToLocId 34546)
   it "parse /go regex command" $ (parse userInputParser "" "/го В избе") `shouldBe` (Right $ GoTo "В избе")
-  it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ UserInputRedirect "")
+  it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ ServerCommand "")
   it "return error in case of misspelled command" $ isLeft $ parse userInputParser "" "/unknowncommand blabla"
