@@ -22,14 +22,16 @@ main = runDrifter
 
 runDrifter :: IO ()
 runDrifter = do toConsoleBox <- spawn $ newest 10
-                toLoggerBox <- spawn $ newest 10
+                toServerInputLoggerBox <- spawn $ newest 10
+                toEvtLoggerBox <- spawn $ newest 10
                 toDrifterBox <- spawn unbounded
-                let commonOutput = (fst toConsoleBox) `mappend` (fst toLoggerBox)
+                let commonOutput = (fst toConsoleBox) `mappend` (fst toServerInputLoggerBox) `mappend` (fst toEvtLoggerBox)
                     readConsoleInput = runEffect $ consoleInput >-> toOutput (fst toDrifterBox)
                     printConsoleOutput = runEffect $ fromInput (snd toConsoleBox) >-> consoleOutput
                     runDrifter = runEffect $ fromInput (snd toDrifterBox) >-> drifter >-> commandExecutor (fst toDrifterBox) >-> (toOutput commonOutput)
 
-                async $ runLogger (snd toLoggerBox)
+                async $ runServerInputLogger (snd toServerInputLoggerBox)
+                async $ runEvtLogger (snd toEvtLoggerBox)
                 async $ printConsoleOutput
                 async $ runDrifter
                 readConsoleInput
