@@ -39,7 +39,7 @@ spec = describe "Parser" $ do
         it "parse post welcome message" $ do log <- readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
-                                 log ~> serverInputParser `shouldParse` (LocationEvent (Location 35040 "В корчме") [])
+                                 log ~> serverInputParser `shouldParse` (LocationEvent (Location 5011 "У колодца") ["Колодец выкопан здесь."])
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
         it "parse move in darkness with nightvision" $ do log <- readFile "test/logs/inDarknessWithInfra.log"
@@ -110,10 +110,10 @@ spec = describe "Parser" $ do
                                                   objects = ["Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                in do log <- readFile "test/logs/schoolEntrance.log"
                                                      log ~> serverInputParser `shouldParse` (LocationEvent location objects)
-        it "parse objects in the room" $ do log <- readFile "test/logs/roomWithObjects.2.log"
+        it "parse objects in the room" $ do log <- readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects)
-                                              where objects = ["Неочищенная руда лежит у Вас под ногами.", "На полу лежит лестница."]
-                                                    location = Location 5104 "На сеновале"
+                                              where objects = ["Лужица дождевой воды разлита у ваших ног.", "У ваших ног лежит глиняная плошка."]
+                                                    location = Location 5007 "Лавка"
 
 isShopListIemEvent :: ServerEvent -> Bool
 isShopListIemEvent (ShopListItemEvent _ _) = True

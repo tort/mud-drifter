@@ -127,14 +127,25 @@ location = do
     cs
     string "0;37m"
     desc <- takeTill (== telnetEscape)
+    many' exitsParser
     many' schoolEntrance
-    exits <- many' exitsParser
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"
     clearColors
     let location = Location locationId (strip $ decodeUtf8 locationName)
      in return $ LocationEvent location objects
-    where schoolEntrance = string $ encodeUtf8 "\ESC[1;32mСовсем малых, да не обученных так и тянет \ESC[1;33mвойти \ESC[1;32mв \ESC[1;33mшколу\ESC[1;32m.\ESC[0;0m"
+    where schoolEntrance = do cs
+                              string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "
+                              cs
+                              string $ encodeUtf8 "1;33mвойти "
+                              cs
+                              string $ encodeUtf8 "1;32mв "
+                              cs
+                              string $ encodeUtf8 "1;33mшколу"
+                              cs
+                              "1;32m."
+                              clearColors
+                              C.endOfLine
           exitsParser = do cs
                            string "0;36m"
                            A.word8 _bracketleft
