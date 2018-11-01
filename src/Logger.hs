@@ -51,7 +51,7 @@ serverInteractions = forever $ await >>= \evt -> case evt of (SendToServer x) ->
                                                              _ -> return ()
 
 serverInput :: Pipe Event C8.ByteString IO ()
-serverInput = forever $ await >>= \evt -> case evt of (ServerInput input) -> yield $ input
+serverInput = forever $ await >>= \evt -> case evt of (ServerInput input) -> yield input
                                                       _ -> return ()
 
 withLog :: String -> ([Event] -> r) -> IO r

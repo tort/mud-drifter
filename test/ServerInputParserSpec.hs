@@ -148,7 +148,7 @@ locationsAndCounts file = do
 
 expectedLocsAndMovesCounts :: String -> IO (Int, Int)
 expectedLocsAndMovesCounts file = do
-  expectedLocationsCount <- countStringsWith (isInfixOf "1;36m") file
+  expectedLocationsCount <- countStringsWith (\s -> isInfixOf "1;36m" s && isInfixOf "[" s && isInfixOf "]" s) file
   expectedMoveCount <- countStringsWith (isInfixOf $ encodeUtf8 "Вы поплелись") file
   return (expectedLocationsCount, expectedMoveCount)
   where countStringsWith predicate file = do contents <- readFile file

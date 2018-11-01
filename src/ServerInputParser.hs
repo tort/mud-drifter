@@ -129,6 +129,10 @@ location = do
     desc <- takeTill (== telnetEscape)
     many' exitsParser
     many' schoolEntrance
+    snow <- many' $ do cs >> string "1;37m"
+                       string $ encodeUtf8 "Снежный ковер лежит у вас под ногами."
+                       cs >> string "0;37m"
+                       C.endOfLine
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"
     clearColors
