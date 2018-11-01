@@ -65,6 +65,7 @@ executables:
                   , protolude
                   , bytestring
                   , pipes
+                  , pipes-safe
                   , pipes-concurrency ]
 
 tests:

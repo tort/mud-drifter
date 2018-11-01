@@ -16,11 +16,13 @@ import qualified Data.Attoparsec.ByteString as A
 import Person
 import Mapper
 import ServerInputParser
+import Pipes.Safe
+import qualified Data.Foldable as F
 
-drifter :: Pipe Event Event IO ()
-drifter = parseUserInputPipe >-> mapper >-> person
+drifter :: MonadSafe m => Pipe Event Event m ()
+drifter = parseUserInputPipe >-> parseServerInputPipe >-> mapper >-> person
 
-parseUserInputPipe :: Pipe Event Event IO ()
+parseUserInputPipe :: MonadSafe m => Pipe Event Event m ()
 parseUserInputPipe = PP.map parse
   where parse (ConsoleInput text) = handleCmd $ parseUserInput text
         parse x = x
@@ -28,14 +30,18 @@ parseUserInputPipe = PP.map parse
         handleCmd (Right cmd) = UserCommand cmd
         handleCmd (Left err) = ConsoleOutput $ pack $ show err
 
-parseServerInputPipe :: Pipe Event Event IO ()
-parseServerInputPipe = parseWithState Nothing
+parseServerInputPipe :: MonadSafe m => Pipe Event Event m ()
+parseServerInputPipe = catchP (parseWithState Nothing) onerr
   where parseWithState state = do evt <- await
                                   yield evt
-                                  case evt of input@(ServerInput _) -> let (serverEvents, newState) = scanServerInput input state
-                                                                        in do mapM_ yield serverEvents
-                                                                              parseWithState newState
+                                  case evt of input@(ServerInput _) -> f $ scanServerInput input state
                                               x -> parseWithState state
+        f (serverEvents, state) = do F.mapM_ yield serverEvents
+                                     parseWithState state
+
+onerr :: MonadSafe m => SomeException -> Pipe Event Event m ()
+onerr ex = yield (ConsoleOutput "error!!")
+
 
 scanServerInput :: Event -> Maybe (Result ServerEvent) -> ([Event], Maybe (Result ServerEvent))
 scanServerInput (ServerInput text) Nothing = parseWholeServerInput (A.parse serverInputParser text) []

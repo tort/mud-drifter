@@ -102,6 +102,11 @@ spec = describe "Parser" $ do
                                    serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter isShopListIemEvent
                                    length serverEventList `shouldBe` 43
                                    hClose hLog
+        it "parse shop list with prompt" $ do hLog <- openFile "test/logs/shopListWithPrompt.log" ReadMode
+                                              serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight
+                                              (length $ filter isShopListIemEvent serverEventList) `shouldBe` 27
+                                              (length $ filter (== PromptEvent) serverEventList) `shouldBe` 1
+                                              hClose hLog
         it "parse single line prompt event" $ do log <- readFile "test/logs/prompt.1.log"
                                                  log ~> serverInputParser `shouldParse` PromptEvent
         it "parse two-line prompt event" $ do log <- readFile "test/logs/prompt.2.log"

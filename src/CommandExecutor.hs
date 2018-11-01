@@ -14,7 +14,7 @@ import Network.Simple.TCP
 import Data.Text
 import Event
 
-commandExecutor :: Output Event -> Pipe Event Event IO ()
+commandExecutor :: MonadSafe m => Output Event -> Pipe Event Event m ()
 commandExecutor toDrifterBoxOutput = executeDisconnected
   where executeDisconnected = await >>= \evt -> case evt of (UserCommand Connect) -> do yield $ ConsoleOutput "connecting...\n>"
                                                                                         (sock, _) <- connectSock "bylins.su" "4000"

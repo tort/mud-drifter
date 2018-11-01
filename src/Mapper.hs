@@ -18,8 +18,9 @@ import Data.Graph.Inductive.Graph
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Graph.Inductive.Query.SP as GA
+import Pipes.Safe
 
-mapper :: MonadIO m => Pipe Event Event m ()
+mapper :: MonadSafe m => Pipe Event Event m ()
 mapper = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
             let mapperWithPosition currLoc = do evt <- await
                                                 case evt of (ServerEvent (LocationEvent loc _)) -> mapperWithPosition (Just $ locId loc)

@@ -23,6 +23,7 @@ import Data.Attoparsec.ByteString as A
 import Pipes.Attoparsec
 import qualified Pipes.Attoparsec as PA
 import Pipes.Parse
+import Pipes.Safe
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
 import Mapper
@@ -42,7 +43,7 @@ import qualified Data.Map.Strict as M
 import Logger
 import World
 
-person :: Monad m => Pipe Event Event m ()
+person :: MonadSafe m => Pipe Event Event m ()
 person = PP.map identity
 
 loadConfigProperty :: Text -> IO (Maybe Text)
