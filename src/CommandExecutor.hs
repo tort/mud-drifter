@@ -35,8 +35,6 @@ commandExecutor toDrifterBoxOutput = executeDisconnected
                                    yield event
                                    case event of (SendToServer text) -> do liftIO $ sendCommand sock text
                                                                            executeConnected sock
-                                                 (ServerInput text) -> do yield $ ConsoleOutput text
-                                                                          executeConnected sock
                                                  ServerClosedChannel -> do yield $ ConsoleOutput "disconnected\n"
                                                                            executeDisconnected
                                                  ServerIOException -> do yield $ ConsoleOutput "connection broken\n"

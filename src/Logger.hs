@@ -34,16 +34,11 @@ import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.List as L
 
-runEvtLogger evtBusInput = runLogger "evt.log" evtBusInput serverInteractions
-runServerInputLogger evtBusInput = runLogger "server-input.log" evtBusInput serverInput
+runEvtLogger evtBusInput h = runLogger evtBusInput h serverInteractions
+runServerInputLogger evtBusInput h = runLogger evtBusInput h serverInput
 
-runLogger :: String -> Input Event -> Pipe Event C8.ByteString IO () -> IO ()
-runLogger filename evtBusInput msgFilter = (bracketWithError
-                                    (openFile filename IO.WriteMode)
-                                    (\e h -> do LC8.putStrLn $ show e
-                                                IO.hFlush h
-                                                IO.hClose h)
-                                    (\h -> runEffect $ fromInput evtBusInput >-> msgFilter >-> PBS.toHandle h >> liftIO (LC8.putStr "logger input stream ceased\n")))
+runLogger :: Input Event -> Handle -> Pipe Event C8.ByteString IO () -> IO ()
+runLogger evtBusInput h msgFilter = runEffect $ fromInput evtBusInput >-> msgFilter >-> PBS.toHandle h >> liftIO (C8.putStr "logger input stream ceased\n")
 
 serverInteractions :: Pipe Event C8.ByteString IO ()
 serverInteractions = forever $ await >>= \evt -> case evt of (SendToServer x) -> yield $ LC8.toStrict $ encode evt

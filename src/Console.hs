@@ -21,8 +21,9 @@ import qualified Text.Parsec as Parsec
 import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStrLn)
 import UserInputParser
 import Control.Monad (forever)
+import Pipes.Safe
 
-consoleInput :: Producer Event IO ()
+consoleInput :: MonadSafe m => Producer Event m ()
 consoleInput = PPT.stdinLn >-> PP.takeWhile(/= "/quit") >-> PP.map ConsoleInput >> liftIO (DTIO.putStr "console input stream finished\n")
 
 consoleOutput :: Consumer Event IO ()
@@ -37,4 +38,5 @@ runConsole evtBusOutput evtBusInput = do
 filterConsoleOutput :: Pipe Event ByteString IO ()
 filterConsoleOutput = forever $ do evt <- await
                                    case evt of (ConsoleOutput text) -> yield text
+                                               (ServerInput text) -> yield text
                                                e -> return ()
