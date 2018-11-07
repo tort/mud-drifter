@@ -23,7 +23,8 @@ import Pipes.Safe
 mapper :: MonadSafe m => Pipe Event Event m ()
 mapper = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
             let mapperWithPosition currLoc = do evt <- await
-                                                case evt of (ServerEvent (LocationEvent loc _)) -> mapperWithPosition (Just $ locId loc)
+                                                case evt of (ServerEvent (LocationEvent loc _)) -> do yield evt
+                                                                                                      mapperWithPosition (Just $ locId loc)
                                                             _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
                                                                                         (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
                                                                                         (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to

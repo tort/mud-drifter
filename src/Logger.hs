@@ -6,12 +6,14 @@ module Logger ( runEvtLogger
               , withLog
               , printEvents
               , printQuestEvents
+              , printMove
               , obstacleActions
               , filterQuestEvents
               , filterTravelActions
+              , scanDoorEvents
               ) where
 
-import Protolude hiding ((<>), toStrict)
+import Protolude hiding ((<>), toStrict, Location)
 import Pipes
 import Pipes.Concurrent
 import qualified Pipes.Prelude as PP
@@ -60,8 +62,15 @@ withLog filePath action = withFile filePath ReadMode $ \handle ->
 printEvents :: [Event] -> IO ()
 printEvents events = mapM_ printEvent events
   where printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerEvent: " <> txt <> "\ESC[0m")
+        printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
         printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
+        printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
         printEvent event = print event
+
+printMove :: [LocToLocActions] -> IO ()
+printMove moves = mapM_ printM moves
+  where printM m = do print (fst m)
+                      printEvents (snd m)
 
 printQuestEvents :: [Event] -> IO ()
 printQuestEvents events = printEvents $ filterQuestEvents events
@@ -108,3 +117,16 @@ obstacleActions questEvents = snd $ F.foldl' toActionMap ((Nothing, []), M.empty
                                                                                                                                             _ -> insert (leftLocId, locId loc) (L.reverse actions) travelActions
                                                                                                                                          in ((Just $ locId loc, []), newTravelActions)
         toActionMap ((leftLoc, actions), travelActions) evt = ((leftLoc, evt : actions), travelActions)
+
+type LocToLocActions = ([Int], [Event])
+type LocPair = [LocId]
+
+scanDoorEvents :: [Event] -> [LocToLocActions]
+scanDoorEvents evts = L.filter (\x -> (length $ fst x) >= 2) $ (\pair -> ((fst . snd) pair, (snd . fst) pair))  <$> (L.filter changeLocsOnly $ zipped)
+  where doorEvents ([], actions) (ServerEvent (LocationEvent (Location locId _) _)) = ([locId], [])
+        doorEvents (from:[], actions) (ServerEvent (LocationEvent (Location locId _) _)) = ([from, locId], [])
+        doorEvents (from:to:[], actions) (ServerEvent (LocationEvent (Location locId _) _)) = ([to, locId], [])
+        doorEvents (locPair, actions) ev = (locPair, ev:actions)
+        events = scanl doorEvents ([], []) evts :: [LocToLocActions]
+        zipped = events `zip` (L.tail events) :: [(LocToLocActions, LocToLocActions)]
+        changeLocsOnly (left, right) = fst left /= fst right
