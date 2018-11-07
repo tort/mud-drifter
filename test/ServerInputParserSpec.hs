@@ -90,6 +90,11 @@ spec = describe "Parser" $ do
                                                                                              , ("бронзовый топорик", VeryGood)
                                                                                              , ("длинный бронзовый меч", VeryGood)
                                                                                              ])
+        it "parse cr after unknown server event" $ do hLog <- openFile "test/logs/mobPortal.log" ReadMode
+                                                      serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight
+                                                      (length $ filter isLocationEvent serverEventList) `shouldBe` 3
+                                                      (length $ filter isMoveEvent serverEventList) `shouldBe` 1
+                                                      hClose hLog
         it "parse empty inventory" $ do log <- readFile "test/logs/inventoryEmpty.log"
                                         log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
         it "parse weapon stats in shop" $ do log <- readFile "test/logs/statsWeapon.log"
@@ -120,9 +125,17 @@ spec = describe "Parser" $ do
                                               where objects = ["Лужица дождевой воды разлита у ваших ног.", "У ваших ног лежит глиняная плошка."]
                                                     location = Location 5007 "Лавка"
 
+isMoveEvent :: ServerEvent -> Bool
+isMoveEvent (MoveEvent _) = True
+isMoveEvent _ = False
+
 isShopListIemEvent :: ServerEvent -> Bool
 isShopListIemEvent (ShopListItemEvent _ _) = True
 isShopListIemEvent _ = False
+
+isLocationEvent :: ServerEvent -> Bool
+isLocationEvent (LocationEvent _ _) = True
+isLocationEvent _ = False
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation (MoveEvent _) = True

@@ -118,6 +118,7 @@ postWelcome = do
 
 location :: A.Parser ServerEvent
 location = do
+    --many' $ A.word8 _cr
     cs
     string "1;36m"
     locationName <- takeTill (== _bracketleft)
@@ -434,9 +435,9 @@ iacGA = do iac
            ga
 
 takeTillEndOfLineOrGA :: A.Parser B.ByteString
-takeTillEndOfLineOrGA = do skipMany $ A.word8 _cr
-                           txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
+takeTillEndOfLineOrGA = do txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
                            eitherP C.endOfLine iacGA
+                           skipMany $ A.word8 _cr
                            return txt
 
 takeTillIACGA :: A.Parser B.ByteString
