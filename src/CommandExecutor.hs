@@ -27,8 +27,10 @@ commandExecutor toDrifterBoxOutput = executeDisconnected
                                                                                     executeDisconnected
                                                             ServerClosedChannel -> do yield $ ConsoleOutput "disconnected\n>"
                                                                                       executeDisconnected
-                                                            cmd@(ConsoleOutput _) -> do yield cmd
-                                                                                        executeDisconnected
+                                                            (ConsoleOutput _) -> do yield evt
+                                                                                    executeDisconnected
+                                                            PulseEvent -> do yield evt
+                                                                             executeDisconnected
                                                             _ -> do yield notConnectedOutput
                                                                     executeDisconnected
         executeConnected sock = do event <- await

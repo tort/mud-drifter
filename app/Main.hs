@@ -17,13 +17,17 @@ import CommandExecutor
 import Mapper
 import Person
 import Pipes.Safe
+import qualified Pipes.Concurrent as PC
 import System.IO
+import Control.Concurrent.Timer
+import Control.Concurrent.Suspend.Lifted
 
 main :: IO ()
 main = runDrifter
 
 runDrifter :: IO ()
-runDrifter = do serverInputLog <- openFile "server-input.log" WriteMode
+runDrifter = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
+                serverInputLog <- openFile "server-input.log" WriteMode
                 evtLog <- openFile "evt.log" WriteMode
                 toConsoleBox <- spawn $ newest 100
                 toServerInputLoggerBox <- spawn $ newest 100
@@ -32,7 +36,8 @@ runDrifter = do serverInputLog <- openFile "server-input.log" WriteMode
                 let commonOutput = (fst toConsoleBox) `mappend` (fst toServerInputLoggerBox) `mappend` (fst toEvtLoggerBox)
                     readConsoleInput = runEffect $ runSafeP $ consoleInput `catchP` onException >-> toOutput (fst toDrifterBox)
                     printConsoleOutput = runEffect $ fromInput (snd toConsoleBox) >-> consoleOutput
-                    runDrifter = runEffect $ runSafeP $ fromInput (snd toDrifterBox) >-> drifter >-> commandExecutor (fst toDrifterBox) >-> (toOutput commonOutput)
+                    runDrifter = runEffect $ runSafeP $ fromInput (snd toDrifterBox) >-> drifter world >-> commandExecutor (fst toDrifterBox) >-> (toOutput commonOutput)
+                    emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
                     onException (SomeException e) = liftIO $ do hFlush serverInputLog
                                                                 hClose serverInputLog
                                                                 hFlush evtLog
@@ -42,4 +47,5 @@ runDrifter = do serverInputLog <- openFile "server-input.log" WriteMode
                 async $ runEvtLogger (snd toEvtLoggerBox) evtLog
                 async $ printConsoleOutput
                 async $ runDrifter
+                repeatedTimer emitPulseEvery (sDelay 1)
                 readConsoleInput

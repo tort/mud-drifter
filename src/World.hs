@@ -10,9 +10,10 @@ module World ( foldToDirections
              , parseProducer
              , World(..)
              , Direction(..)
+             , TravelActionType(..)
              ) where
 
-import Protolude hiding ((<>), Location, runStateT)
+import Protolude hiding ((<>), Location, runStateT, Down)
 import qualified Data.ByteString.Char8 as C8
 import ServerInputParser
 import Data.Graph.Inductive.Tree
@@ -51,6 +52,7 @@ data World = World { worldMap :: Gr () Int
                    , directions :: Set Direction
                    , items :: Set Item
                    , questActions :: Map (LocId, LocId) [Event]
+                   , travelActions :: Map (LocId, LocId) TravelActionType
                    }
 data Direction = Direction { locIdFrom :: LocIdFrom
   , locIdTo :: LocIdTo
@@ -59,6 +61,16 @@ data Direction = Direction { locIdFrom :: LocIdFrom
 type LocIdFrom = LocId
 type LocIdTo = LocId
 type Trigger = Text
+data TravelActionType = OpenDoor RoomDir | PayFee
+data RoomDir = North | South | East | West | Up | Down deriving (Eq)
+
+instance Show RoomDir where
+  show North = "север"
+  show South = "юг"
+  show West = "запад"
+  show East = "восток"
+  show Up = "вверх"
+  show Down = "вниз"
 
 foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
 foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections id (eventProducer >-> PP.filter filterLocationsAndMoves
@@ -177,7 +189,7 @@ loadWorld archiveDir = do
   items <- loadItms serverLogFiles
   questActions <- loadQuestActs evtLogFiles
   let worldMap = buildMap directions
-  return $ World worldMap locations directions items questActions
+  return $ World worldMap locations directions items questActions $ M.fromList [((5102, 5103), OpenDoor South)]
     where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
           loadLocs files = F.foldl (\acc item -> loadLocations acc (serverLogDir ++ item)) (return S.empty) files
           loadItms files = F.foldl (\acc item -> loadItems acc (serverLogDir ++ item)) (return S.empty) files

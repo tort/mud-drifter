@@ -64,6 +64,8 @@ executables:
     dependencies: [ mud-drifter
                   , protolude
                   , bytestring
+                  , suspend
+                  , timers
                   , pipes
                   , pipes-safe
                   , pipes-concurrency ]

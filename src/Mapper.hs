@@ -20,22 +20,20 @@ import qualified Data.Set as S
 import qualified Data.Graph.Inductive.Query.SP as GA
 import Pipes.Safe
 
-mapper :: MonadSafe m => Pipe Event Event m ()
-mapper = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
-            let mapperWithPosition currLoc = do evt <- await
-                                                case evt of (ServerEvent (LocationEvent loc _)) -> do yield evt
-                                                                                                      mapperWithPosition (Just $ locId loc)
-                                                            _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
-                                                                                        (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
-                                                                                        (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
-                                                                                        (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
-                                                                                                                             in ConsoleOutput $ case S.toList $ matchingLocs of
+mapper :: MonadSafe m => World -> Pipe Event Event m ()
+mapper world = let mapperWithPosition currLoc = do evt <- await
+                                                   case evt of (ServerEvent (LocationEvent loc _)) -> yield evt >> mapperWithPosition (Just $ locId loc)
+                                                               _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
+                                                                                           (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
+                                                                                           (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
+                                                                                           (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
+                                                                                                                                in ConsoleOutput $ case S.toList $ matchingLocs of
                                                                                                                                   [] -> "no matching locations found"
                                                                                                                                   d:[] -> showPathBy world currLoc (locId d)
                                                                                                                                   _ -> showLocs matchingLocs
-                                                                                        x -> x
-                                                                    mapperWithPosition currLoc
-             in mapperWithPosition Nothing
+                                                                                           x -> x
+                                                                       mapperWithPosition currLoc
+                in mapperWithPosition Nothing
 
 
 

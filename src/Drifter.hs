@@ -18,9 +18,10 @@ import Mapper
 import ServerInputParser
 import Pipes.Safe
 import qualified Data.Foldable as F
+import World
 
-drifter :: MonadSafe m => Pipe Event Event m ()
-drifter = parseUserInputPipe >-> parseServerInputPipe >-> mapper >-> person
+drifter :: MonadSafe m => World -> Pipe Event Event m ()
+drifter world = parseUserInputPipe >-> parseServerInputPipe >-> mapper world >-> person world
 
 parseUserInputPipe :: MonadSafe m => Pipe Event Event m ()
 parseUserInputPipe = PP.map parse
