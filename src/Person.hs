@@ -77,9 +77,10 @@ travel world path = makeStep
 
 findMoveQuests :: MonadSafe m => World -> LocId -> LocId -> Pipe Event Event m ()
 findMoveQuests world from to = action $ M.lookup (from, to) ta
-  where action (Just $ OpenDoor dir) = do yield $ SendToServer ("смотр " <> show dir)
-                                          await >>= \evt -> case evt of (GlanceObstacle _ obstacle) -> yield $ SendToServer "открыть " <> obstacle <> " " <> dir
-                                                                        _ -> return ()
+  where action (Just (OpenDoor dir)) = do yield $ SendToServer ("смотр " <> show dir)
+                                          await >>= yield
+                                          await >>= \evt -> case evt of (ServerEvent (ObstacleEvent _ obstacle)) -> yield evt >> (yield $ SendToServer ("открыть " <> obstacle <> " " <> show dir))
+                                                                        e -> yield e
         action _ = return ()
         ta = travelActions world :: Map (LocId, LocId) TravelActionType
 
@@ -93,3 +94,16 @@ loadConfigProperty propertyName = do conf <- DC.load [Required personCfgFileName
 
 personCfgFileName :: String
 personCfgFileName = "person.cfg"
+
+travelActions :: MonadSafe m => [((LocId, LocId), (ServerEvent -> Pipe Event Event m ()))]
+travelActions = [ ((5102, 5103), openDoor South)
+                , ((5104, 5117), setupLadder)
+                ]
+
+setupLadder :: MonadSafe m => ServerEvent -> Pipe Event Event m ()
+setupLadder locEvt = yield $ SendToServer "приставить лестница"
+
+openDoor :: MonadSafe m => RoomDir -> ServerEvent -> Pipe Event Event m ()
+openDoor dir locEvt = do yield $ SendToServer ("смотр " <> show dir)
+                         await >>= yield
+                         await >>= \evt -> case evt of (ServerEvent (ObstacleEvent _ obstacle)) -> yield evt >> (yield $ SendToServer ("открыть " <> obstacle <> " " <> show dir))

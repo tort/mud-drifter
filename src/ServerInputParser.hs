@@ -35,6 +35,7 @@ serverInputParser = codepagePrompt
                     <|> shopList
                     <|> darkness
                     <|> prompt
+                    <|> obstacleEvent
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -209,6 +210,36 @@ ansiColor = do cs
                C.digit
                C.char 'm'
                return ()
+
+obstacleEvent :: A.Parser ServerEvent
+obstacleEvent = do cs >> "0;33m"
+                   dir <- direction
+                   A.word8 _colon
+                   cs >> "0;37m"
+                   C.space
+                   C.space
+                   string $ encodeUtf8 "закрыто"
+                   C.space
+                   A.word8 _parenleft
+                   many' $ string $ encodeUtf8 "вероятно "
+                   obs <- takeTill (== _parenright)
+                   A.word8 _parenright
+                   return $ ObstacleEvent dir (decodeUtf8 obs)
+
+direction :: A.Parser RoomDir
+direction = north <|> south <|> east <|> west <|> up <|> down
+  where north = do (string $ encodeUtf8 "север") <|> (string $ encodeUtf8 "Север")
+                   return North
+        south = do (string $ encodeUtf8 "юг") <|> (string $ encodeUtf8 "Юг")
+                   return South
+        east = do (string $ encodeUtf8 "восток") <|> (string $ encodeUtf8 "Восток")
+                  return East
+        west = do (string $ encodeUtf8 "запад") <|> (string $ encodeUtf8 "Запад")
+                  return West
+        up = do (string $ encodeUtf8 "вверх") <|> (string $ encodeUtf8 "Вверх")
+                return Up
+        down = do (string $ encodeUtf8 "вниз") <|> (string $ encodeUtf8 "Вниз")
+                  return Down
 
 prompt :: A.Parser ServerEvent
 prompt = do many' C.endOfLine

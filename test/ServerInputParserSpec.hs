@@ -120,6 +120,10 @@ spec = describe "Parser" $ do
                                                   objects = ["Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                in do log <- readFile "test/logs/schoolEntrance.log"
                                                      log ~> serverInputParser `shouldParse` (LocationEvent location objects)
+        it "parse unknown obstacle when glancing to direction" $ do log <- readFile "test/logs/openDoor.1.log"
+                                                                    log ~> serverInputParser `shouldParse` (ObstacleEvent South "дверь")
+        it "parse known obstacle when glancing to direction" $ do log <- readFile "test/logs/openDoor.2.log"
+                                                                  log ~> serverInputParser `shouldParse` (ObstacleEvent North "ворота")
         it "parse objects in the room" $ do log <- readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects)
                                               where objects = ["Лужица дождевой воды разлита у ваших ног.", "У ваших ног лежит глиняная плошка."]

@@ -13,6 +13,7 @@ module Event ( Event(..)
              , ItemState(..)
              , Item(..)
              , WeaponClass(..)
+             , RoomDir(..)
              ) where
 
 import Pipes.Concurrent
@@ -31,6 +32,7 @@ instance Binary EquippedItem
 instance Binary ItemState
 instance Binary Item
 instance Binary WeaponClass
+instance Binary RoomDir
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -73,6 +75,7 @@ data ServerEvent = CodepagePrompt
                  | ItemStatsEvent Item
                  | ShopListItemEvent ItemName Price
                  | PromptEvent
+                 | ObstacleEvent RoomDir Text
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -86,6 +89,15 @@ type ArmorVal = Int
 type ItemName = Text
 type Price = Int
 type RoomObject = Text
+data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
+
+instance Show RoomDir where
+  show North = "север"
+  show South = "юг"
+  show West = "запад"
+  show East = "восток"
+  show Up = "вверх"
+  show Down = "вниз"
 
 data Location = Location { locId :: LocId
                          , locTitle :: LocTitle

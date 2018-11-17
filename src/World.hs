@@ -10,7 +10,6 @@ module World ( foldToDirections
              , parseProducer
              , World(..)
              , Direction(..)
-             , TravelActionType(..)
              ) where
 
 import Protolude hiding ((<>), Location, runStateT, Down)
@@ -36,8 +35,6 @@ import Control.Applicative()
 import Control.Arrow
 import Data.Monoid
 import Debug.Trace
-import Prelude
-import qualified Prelude as P
 import Data.Set
 import qualified Data.Set as S
 import Event
@@ -52,7 +49,6 @@ data World = World { worldMap :: Gr () Int
                    , directions :: Set Direction
                    , items :: Set Item
                    , questActions :: Map (LocId, LocId) [Event]
-                   , travelActions :: Map (LocId, LocId) TravelActionType
                    }
 data Direction = Direction { locIdFrom :: LocIdFrom
   , locIdTo :: LocIdTo
@@ -61,31 +57,21 @@ data Direction = Direction { locIdFrom :: LocIdFrom
 type LocIdFrom = LocId
 type LocIdTo = LocId
 type Trigger = Text
-data TravelActionType = OpenDoor RoomDir | PayFee
-data RoomDir = North | South | East | West | Up | Down deriving (Eq)
-
-instance Show RoomDir where
-  show North = "север"
-  show South = "юг"
-  show West = "запад"
-  show East = "восток"
-  show Up = "вверх"
-  show Down = "вниз"
 
 foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
-foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections id (eventProducer >-> PP.filter filterLocationsAndMoves
+foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections identity (eventProducer >-> PP.filter filterLocationsAndMoves
                                                                                                              >-> PP.map unwrapJustRight
-                                                                                                             >-> PP.scan toPairs [] id
+                                                                                                             >-> PP.scan toPairs [] identity
                                                                                                              >-> PP.filter mappableMove
                                                                                               )
 
 foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
-foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs id (eventProducer >-> PP.filter filterLocations
+foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs identity (eventProducer >-> PP.filter filterLocations
                                                                                          >-> PP.map unwrapJustRight
                                                                                          >-> PP.map (\(LocationEvent loc _) -> loc))
 
 foldToItems :: Monad m => Set Item -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Item)
-foldToItems prevItems eventProducer = PP.fold foldToSet prevItems id (eventProducer >-> PP.filter filterItems
+foldToItems prevItems eventProducer = PP.fold foldToSet prevItems identity (eventProducer >-> PP.filter filterItems
                                                                                    >-> PP.map unwrapJustRight
                                                                                    >-> PP.map (\(ItemStatsEvent item) -> item))
 
@@ -133,8 +119,8 @@ foldToSet acc item = S.insert item acc
 
 toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
 toPairs acc event
-  | P.length acc < 3 = event : acc
-  | otherwise = event : P.take 2 acc
+  | length acc < 3 = event : acc
+  | otherwise = event : take 2 acc
 
 mappableMove :: [ServerEvent] -> Bool
 mappableMove ((LocationEvent _ _) : (MoveEvent _) : (LocationEvent _ _) : []) = True
@@ -145,7 +131,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
   where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
         joinToOneMsg = T.intercalate "\n"
         renderLocs = S.map renderLoc
-        renderLoc node = (T.pack $ P.show $ locId node) <> " " <> locTitle node
+        renderLoc node = (T.pack $ show $ locId node) <> " " <> locTitle node
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> Set Location
@@ -189,7 +175,7 @@ loadWorld archiveDir = do
   items <- loadItms serverLogFiles
   questActions <- loadQuestActs evtLogFiles
   let worldMap = buildMap directions
-  return $ World worldMap locations directions items questActions $ M.fromList [((5102, 5103), OpenDoor South)]
+  return $ World worldMap locations directions items questActions
     where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
           loadLocs files = F.foldl (\acc item -> loadLocations acc (serverLogDir ++ item)) (return S.empty) files
           loadItms files = F.foldl (\acc item -> loadItems acc (serverLogDir ++ item)) (return S.empty) files
