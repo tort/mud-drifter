@@ -37,6 +37,8 @@ serverInputParser = codepagePrompt
                     <|> prompt
                     <|> obstacleEvent
                     <|> cantGoDir
+                    <|> darkInDirection
+                    <|> glanceDir
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -118,9 +120,20 @@ postWelcome = do
     _ <- manyTill (skip (const True)) dblCrnl
     return PostWelcome
 
+glanceDir :: A.Parser ServerEvent
+glanceDir = do cs >> "0;33m"
+               dir <- direction
+               A.word8 _colon
+               cs >> "0;37m"
+               C.space
+               locTitle <- takeTill (C.isEndOfLine)
+               C.endOfLine
+               mobs <- roomObjects "1;31m"
+               clearColors
+               return $ GlanceEvent dir (decodeUtf8 locTitle) mobs
+
 location :: A.Parser ServerEvent
 location = do
-    --many' $ A.word8 _cr
     cs
     string "1;36m"
     locationName <- takeTill (== _bracketleft)
@@ -215,6 +228,16 @@ ansiColor = do cs
 cantGoDir :: A.Parser ServerEvent
 cantGoDir = do string $ encodeUtf8 "Вы не сможете туда пройти..."
                return CantGoDir
+
+darkInDirection :: A.Parser ServerEvent
+darkInDirection = do cs >> "0;33m"
+                     dir <- direction
+                     A.word8 _colon
+                     cs >> "0;37m"
+                     C.space
+                     C.space
+                     string $ encodeUtf8 "слишком темно."
+                     return $ DarkInDirection dir
 
 obstacleEvent :: A.Parser ServerEvent
 obstacleEvent = do cs >> "0;33m"

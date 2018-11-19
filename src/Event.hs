@@ -77,6 +77,8 @@ data ServerEvent = CodepagePrompt
                  | PromptEvent
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
+                 | DarkInDirection RoomDir
+                 | GlanceEvent RoomDir LocTitle [MobShort]
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -90,6 +92,7 @@ type ArmorVal = Int
 type ItemName = Text
 type Price = Int
 type RoomObject = Text
+type MobShort = Text
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
 instance Show RoomDir where

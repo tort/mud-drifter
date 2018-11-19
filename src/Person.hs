@@ -101,13 +101,22 @@ personCfgFileName = "person.cfg"
 
 travelActions :: MonadSafe m => [((LocId, LocId), (Pipe Event Event m ()))]
 travelActions = [ ((5102, 5103), openDoor South)
+                , ((5103, 5102), openDoor North)
                 , ((5104, 5117), setupLadder)
                 ]
 
 setupLadder :: MonadSafe m => Pipe Event Event m ()
-setupLadder = yield $ SendToServer "приставить лестница"
+setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
+  where waitLocEvt = await >>= checkRoomObjects
+        checkRoomObjects (ServerEvent (LocationEvent loc objs)) = if L.elem "На полу лежит лестница." objs
+                                                                    then yield $ SendToServer "приставить лестница"
+                                                                    else return ()
+        checkRoomObjects _ = waitLocEvt
 
 openDoor :: MonadSafe m => RoomDir -> Pipe Event Event m ()
-openDoor dir = do yield $ SendToServer ("смотр " <> show dir)
-                  await >>= yield
-                  await >>= \evt -> case evt of (ServerEvent (ObstacleEvent _ obstacle)) -> yield evt >> (yield $ SendToServer ("открыть " <> obstacle <> " " <> show dir))
+openDoor dir = (yield $ SendToServer ("смотреть " <> show dir)) >> waitObstacleEvent
+  where waitObstacleEvent = await >>= checkObstacleEvent
+        checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> show dir)
+        checkObstacleEvent (ServerEvent (UnknownServerEvent "")) = return ()
+        checkObstacleEvent (ServerEvent (GlanceEvent _ _ _)) = return ()
+        checkObstacleEvent _ = waitObstacleEvent
