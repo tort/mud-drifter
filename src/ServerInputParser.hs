@@ -36,6 +36,7 @@ serverInputParser = codepagePrompt
                     <|> darkness
                     <|> prompt
                     <|> obstacleEvent
+                    <|> cantGoDir
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -210,6 +211,10 @@ ansiColor = do cs
                C.digit
                C.char 'm'
                return ()
+
+cantGoDir :: A.Parser ServerEvent
+cantGoDir = do string $ encodeUtf8 "Вы не сможете туда пройти..."
+               return CantGoDir
 
 obstacleEvent :: A.Parser ServerEvent
 obstacleEvent = do cs >> "0;33m"

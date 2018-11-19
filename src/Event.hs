@@ -76,6 +76,7 @@ data ServerEvent = CodepagePrompt
                  | ShopListItemEvent ItemName Price
                  | PromptEvent
                  | ObstacleEvent RoomDir Text
+                 | CantGoDir
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
