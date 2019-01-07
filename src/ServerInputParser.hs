@@ -153,7 +153,7 @@ location = do
     mobs <- roomObjects "1;31m"
     clearColors
     let location = Location locationId (strip $ decodeUtf8 locationName)
-     in return $ LocationEvent location objects
+     in return $ LocationEvent location objects mobs
     where schoolEntrance = do cs
                               string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "
                               cs

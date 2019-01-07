@@ -18,7 +18,7 @@ import ServerInputParser
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph
 import qualified Data.Graph.Inductive.Graph as DG
-import System.IO hiding (putStrLn)
+import System.IO hiding (putStrLn, print)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as PP
@@ -68,24 +68,33 @@ foldToDirections initialDirections eventProducer = PP.fold accDirections initial
 foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
 foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs identity (eventProducer >-> PP.filter filterLocations
                                                                                          >-> PP.map unwrapJustRight
-                                                                                         >-> PP.map (\(LocationEvent loc _) -> loc))
+                                                                                         >-> PP.map (\(LocationEvent loc _ _) -> loc))
 
 foldToItems :: Monad m => Set Item -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Item)
 foldToItems prevItems eventProducer = PP.fold foldToSet prevItems identity (eventProducer >-> PP.filter filterItems
                                                                                    >-> PP.map unwrapJustRight
                                                                                    >-> PP.map (\(ItemStatsEvent item) -> item))
 
+foldToMobs :: Monad m => Set MobShort -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set MobShort)
+foldToMobs prevItems eventProducer = PP.fold foldMobsToSet prevItems identity (eventProducer >-> PP.filter filterMobs
+                                                                                   >-> PP.map unwrapJustRight
+                                                                                   >-> PP.map (\(LocationEvent _ _ mobs) -> mobs))
+
 unwrapJustRight :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
 unwrapJustRight (Just (Right evt)) = evt
 
 filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocationsAndMoves (Just (Right (LocationEvent _ _))) = True
+filterLocationsAndMoves (Just (Right (LocationEvent _ _ _))) = True
 filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
 filterLocationsAndMoves _ = False
 
 filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocations (Just (Right (LocationEvent _ _))) = True
+filterLocations (Just (Right (LocationEvent _ _ _))) = True
 filterLocations _ = False
+
+filterMobs :: Maybe (Either ParsingError ServerEvent) -> Bool
+filterMobs (Just (Right (LocationEvent _ _ mobs))) = True
+filterMobs _ = False
 
 filterItems :: Maybe (Either ParsingError ServerEvent) -> Bool
 filterItems (Just (Right (ItemStatsEvent item))) = True
@@ -103,8 +112,8 @@ accDirections directions pair =
         | otherwise = insertOpposite $ insertAhead directions
         where insertAhead = insert (Direction (locId locFrom) (locId locTo) dir)
               insertOpposite = insert (Direction (locId locTo) (locId locFrom) $ oppositeDir dir)
-   in case pair of ((LocationEvent locTo _):(MoveEvent dir):(LocationEvent locFrom _):[]) -> updateWorld locFrom locTo dir
-                   _ -> directions
+           in case pair of ((LocationEvent locTo _ _):(MoveEvent dir):(LocationEvent locFrom _ _):[]) -> updateWorld locFrom locTo dir
+                           _ -> directions
 
 oppositeDir :: Text -> Text
 oppositeDir "вверх" = "вниз"
@@ -113,6 +122,9 @@ oppositeDir "север" = "юг"
 oppositeDir "юг" = "север"
 oppositeDir "запад" = "восток"
 oppositeDir "восток" = "запад"
+
+foldMobsToSet :: Ord a => Set a -> [a] -> Set a
+foldMobsToSet acc items = F.foldl (\a item -> S.insert item a) acc items
 
 foldToSet :: Ord a => Set a -> a -> Set a
 foldToSet acc item = S.insert item acc
@@ -123,7 +135,7 @@ toPairs acc event
   | otherwise = event : take 2 acc
 
 mappableMove :: [ServerEvent] -> Bool
-mappableMove ((LocationEvent _ _) : (MoveEvent _) : (LocationEvent _ _) : []) = True
+mappableMove ((LocationEvent _ _ _) : (MoveEvent _) : (LocationEvent _ _ _) : []) = True
 mappableMove _ = False
 
 showLocs :: Set Location -> ByteString
@@ -163,6 +175,14 @@ loadItems accIO file = do
   hClose hLog
   return result
 
+loadMobs :: IO (Set MobShort) -> FilePath -> IO (Set MobShort)
+loadMobs accIO file = do
+  hLog <- openFile file ReadMode
+  mobs <- accIO
+  result <- foldToMobs mobs $ parseProducer (PBS.fromHandle hLog)
+  hClose hLog
+  return result
+
 loadQuestActions :: IO (Map (Int, Int) [Event]) -> FilePath -> IO (Map (Int, Int) [Event])
 loadQuestActions accIO file = withLog file $ obstacleActions . filterTravelActions
 
@@ -174,12 +194,15 @@ loadWorld archiveDir = do
   locations <- loadLocs serverLogFiles
   items <- loadItms serverLogFiles
   questActions <- loadQuestActs evtLogFiles
+  mobs <- loadMobFiles evtLogFiles
+  mapM_ putStrLn mobs
   let worldMap = buildMap directions
   return $ World worldMap locations directions items questActions
     where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
           loadLocs files = F.foldl (\acc item -> loadLocations acc (serverLogDir ++ item)) (return S.empty) files
           loadItms files = F.foldl (\acc item -> loadItems acc (serverLogDir ++ item)) (return S.empty) files
           loadQuestActs files = F.foldl (\acc item -> loadQuestActions acc (evtLogDir ++ item)) (return M.empty) files
+          loadMobFiles files = F.foldl (\acc item -> loadMobs acc (serverLogDir ++ item)) (return S.empty) files
           serverLogDir = archiveDir ++ "server-input-log/"
           evtLogDir = archiveDir ++ "evt-log/"
 

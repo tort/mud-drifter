@@ -14,6 +14,7 @@ module Event ( Event(..)
              , Item(..)
              , WeaponClass(..)
              , RoomDir(..)
+             , MobShort
              ) where
 
 import Pipes.Concurrent
@@ -66,7 +67,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent Location [RoomObject]
+                 | LocationEvent Location [RoomObject] [MobShort]
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString

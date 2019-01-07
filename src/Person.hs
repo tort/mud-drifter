@@ -50,7 +50,7 @@ travelTask world = waitTravelRequest Nothing
   where afterTravel locId (Failure err loc) = yield (ConsoleOutput $ "travel to " <> (show locId) <> " failed: " <> err) >> waitTravelRequest loc
         afterTravel locId (Success loc) = yield (ConsoleOutput $ "travel to " <> (show locId) <> " finished") >> waitTravelRequest (Just loc)
         waitTravelRequest currLoc = await >>= \evt -> case evt of (UserCommand (GoToLocId locId)) -> travelPath currLoc locId >>= afterTravel locId
-                                                                  (ServerEvent (LocationEvent (Location locId _) _)) -> yield evt >> waitTravelRequest (Just locId)
+                                                                  (ServerEvent (LocationEvent (Location locId _) _ _)) -> yield evt >> waitTravelRequest (Just locId)
                                                                   (ServerEvent DarknessEvent) -> yield evt >> waitTravelRequest Nothing
                                                                   _ -> yield evt >> waitTravelRequest currLoc
         travelPath (Just currLoc) locId = travel world $ GA.sp currLoc locId (worldMap world)
@@ -70,7 +70,7 @@ travel world path = makeStep
         makeStep = await >>= \evt -> case evt of PulseEvent -> go path >> waitMove
                                                  e -> yield e >> makeStep
         waitMove = await >>= handleLocationEvent
-        handleLocationEvent evt@(ServerEvent (LocationEvent (Location locId _) _)) = yield evt >> if L.elem locId path
+        handleLocationEvent evt@(ServerEvent (LocationEvent (Location locId _) _ _)) = yield evt >> if L.elem locId path
                                                                                                      then travel world (chopPath locId path)
                                                                                                      else return $ Failure "path lost" (Just locId)
         handleLocationEvent evt@(ServerEvent (MoveEvent dir)) = let from:to:xs = path
@@ -103,12 +103,20 @@ travelActions :: MonadSafe m => [((LocId, LocId), (Pipe Event Event m ()))]
 travelActions = [ ((5102, 5103), openDoor South)
                 , ((5103, 5102), openDoor North)
                 , ((5104, 5117), setupLadder)
+                , ((5052, 4064), payOldGipsy)
+                , ((4064, 5052), payYoungGipsy)
                 ]
+
+payOldGipsy :: MonadSafe m => Pipe Event Event m ()
+payOldGipsy = undefined
+
+payYoungGipsy :: MonadSafe m => Pipe Event Event m ()
+payYoungGipsy = undefined
 
 setupLadder :: MonadSafe m => Pipe Event Event m ()
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
   where waitLocEvt = await >>= checkRoomObjects
-        checkRoomObjects (ServerEvent (LocationEvent loc objs)) = if L.elem "На полу лежит лестница." objs
+        checkRoomObjects (ServerEvent (LocationEvent loc objs mobs)) = if L.elem "На полу лежит лестница." objs
                                                                     then yield $ SendToServer "приставить лестница"
                                                                     else return ()
         checkRoomObjects _ = waitLocEvt
