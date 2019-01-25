@@ -1,22 +1,46 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
 
 module Event ( Event(..)
              , UserCommand(..)
              , ServerEvent(..)
              , EventBus
              , Location(..)
-             , LocId
-             , LocTitle
+             , LocationId(..)
+             , LocationTitle(..)
              , Slot(..)
              , EquippedItem(..)
              , ItemState(..)
              , Item(..)
              , WeaponClass(..)
              , RoomDir(..)
-             , MobShort
+             , MobShort(..)
+             , RoomObject(..)
+             , isMoveEvent
+             , isConsoleInput
+             , isUserCommand
+             , isShopListItemEvent
+             , isLocationEvent
+             , location
+             , locationId
+             , locationTitle
+             , objects
+             , mobs
+             , serverEvent
+             , id
+             , text
              ) where
 
+import qualified Prelude as P
+import Protolude hiding (Location, Down, Up, Left, Right, Dual)
 import Pipes.Concurrent
 import Data.Text
 import Data.ByteString
@@ -24,27 +48,34 @@ import Data.ByteString
 import Data.Binary
 import GHC.Generics (Generic)
 
+import Data.DeriveTH
+import Control.Lens hiding ((&))
+
 instance Binary Event
 instance Binary UserCommand
 instance Binary ServerEvent
 instance Binary Location
+instance Binary LocationId
+instance Binary LocationTitle
 instance Binary Slot
 instance Binary EquippedItem
 instance Binary ItemState
 instance Binary Item
 instance Binary WeaponClass
 instance Binary RoomDir
+instance Binary RoomObject
+instance Binary MobShort
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
            | UserCommand UserCommand
            | SendToServer Text
            | ServerInput ByteString
-           | ServerEvent ServerEvent
+           | ServerEvent { _serverEvent :: ServerEvent }
            | ServerClosedChannel
            | ServerIOException
            | PulseEvent
-           | TravelRequest [LocId]
+           | TravelRequest [LocationId]
            | TravelFailure
            deriving (Eq, Show, Generic)
 
@@ -58,7 +89,7 @@ data UserCommand = ServerCommand Text
                | FindPathToLocId Int
                | FindPathTo Text
                | GoTo Text
-               | GoToLocId Int
+               | GoToLocId LocationId
                | Equip
                deriving (Eq, Show, Generic)
 
@@ -67,7 +98,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent Location [RoomObject] [MobShort]
+                 | LocationEvent { _location :: Location, _objects :: [RoomObject], _mobs :: [MobShort] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -79,7 +110,7 @@ data ServerEvent = CodepagePrompt
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
-                 | GlanceEvent RoomDir LocTitle [MobShort]
+                 | GlanceEvent RoomDir LocationTitle [MobShort]
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -92,11 +123,11 @@ type AC = Int
 type ArmorVal = Int
 type ItemName = Text
 type Price = Int
-type RoomObject = Text
-type MobShort = Text
+newtype RoomObject = RoomObject { _text :: Text } deriving (Eq, Show, Generic)
+newtype MobShort = MobShort { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
-instance Show RoomDir where
+instance P.Show RoomDir where
   show North = "север"
   show South = "юг"
   show West = "запад"
@@ -104,11 +135,36 @@ instance Show RoomDir where
   show Up = "вверх"
   show Down = "вниз"
 
-data Location = Location { locId :: LocId
-                         , locTitle :: LocTitle
+data Location = Location { _locationId :: LocationId
+                         , _locationTitle :: LocationTitle
                          } deriving (Show, Ord, Generic)
-type LocId = Int
-type LocTitle = Text
+
+newtype LocationId = LocationId { _id :: Int } deriving (Eq, Ord, Show, Generic)
+newtype LocationTitle = LocationTitle { _text :: Text } deriving (Eq, Ord, Show, Generic)
 
 instance Eq Location where
-  left == right = locId left == locId right
+  left == right = _locationId left == _locationId right
+
+derive makeIs ''UserCommand
+derive makeIs ''Location
+derive makeIs ''Slot
+derive makeIs ''EquippedItem
+derive makeIs ''ItemState
+derive makeIs ''Item
+derive makeIs ''WeaponClass
+derive makeIs ''RoomDir
+derive makeIs ''ServerEvent
+derive makeIs ''Event
+
+makeFieldsNoPrefix ''UserCommand
+makeFieldsNoPrefix ''Location
+makeFieldsNoPrefix ''LocationId
+makeFieldsNoPrefix ''LocationTitle
+makeFieldsNoPrefix ''Slot
+makeFieldsNoPrefix ''EquippedItem
+makeFieldsNoPrefix ''ItemState
+makeFieldsNoPrefix ''Item
+makeFieldsNoPrefix ''WeaponClass
+makeFieldsNoPrefix ''RoomDir
+makeFieldsNoPrefix ''ServerEvent
+makeFieldsNoPrefix ''Event

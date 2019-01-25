@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module World ( foldToDirections
              , foldToLocations
@@ -10,6 +11,7 @@ module World ( foldToDirections
              , parseProducer
              , World(..)
              , Direction(..)
+             , WorldMap
              ) where
 
 import Protolude hiding ((<>), Location, runStateT, Down)
@@ -43,20 +45,22 @@ import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import Logger
 import System.Directory
+import Control.Lens hiding ((&))
 
-data World = World { worldMap :: Gr () Int
+data World = World { worldMap :: WorldMap
                    , locations :: Set Location
                    , directions :: Set Direction
                    , items :: Set Item
-                   , questActions :: Map (LocId, LocId) [Event]
+                   , questActions :: Map (LocationId, LocationId) [Event]
                    }
 data Direction = Direction { locIdFrom :: LocIdFrom
-  , locIdTo :: LocIdTo
-  , trigger :: Trigger
+                           , locIdTo :: LocIdTo
+                           , trigger :: Trigger
                            } deriving (Eq, Show, Ord)
-type LocIdFrom = LocId
-type LocIdTo = LocId
+type LocIdFrom = LocationId
+type LocIdTo = LocationId
 type Trigger = Text
+type WorldMap = Gr () Int
 
 foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
 foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections identity (eventProducer >-> PP.filter filterLocationsAndMoves
@@ -110,10 +114,10 @@ accDirections directions pair =
   let updateWorld locFrom locTo dir
         | locFrom == locTo = directions
         | otherwise = insertOpposite $ insertAhead directions
-        where insertAhead = insert (Direction (locId locFrom) (locId locTo) dir)
-              insertOpposite = insert (Direction (locId locTo) (locId locFrom) $ oppositeDir dir)
-           in case pair of ((LocationEvent locTo _ _):(MoveEvent dir):(LocationEvent locFrom _ _):[]) -> updateWorld locFrom locTo dir
-                           _ -> directions
+        where insertAhead = insert (Direction (locFrom^.locationId) (locTo^.locationId) dir)
+              insertOpposite = insert (Direction (locTo^.locationId) (locFrom^.locationId) $ oppositeDir dir)
+   in case pair of ((LocationEvent locTo _ _):(MoveEvent dir):(LocationEvent locFrom _ _):[]) -> updateWorld locFrom locTo dir
+                   _ -> directions
 
 oppositeDir :: Text -> Text
 oppositeDir "вверх" = "вниз"
@@ -143,11 +147,11 @@ showLocs locs = encodeUtf8 $ renderMsg locs
   where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
         joinToOneMsg = T.intercalate "\n"
         renderLocs = S.map renderLoc
-        renderLoc node = (T.pack $ show $ locId node) <> " " <> locTitle node
+        renderLoc node = ((show $ node^.locationId^.id) <> " " <> (node^.locationTitle^.text)) :: Text
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> Set Location
-locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . locTitle) locs
+locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . (\l -> l^.locationTitle^.text)) locs
   where locs = locations world
 
 
@@ -183,7 +187,7 @@ loadMobs accIO file = do
   hClose hLog
   return result
 
-loadQuestActions :: IO (Map (Int, Int) [Event]) -> FilePath -> IO (Map (Int, Int) [Event])
+loadQuestActions :: IO (Map (LocationId, LocationId) [Event]) -> FilePath -> IO (Map (LocationId, LocationId) [Event])
 loadQuestActions accIO file = withLog file $ obstacleActions . filterTravelActions
 
 loadWorld :: FilePath -> IO World
@@ -195,7 +199,7 @@ loadWorld archiveDir = do
   items <- loadItms serverLogFiles
   questActions <- loadQuestActs evtLogFiles
   mobs <- loadMobFiles evtLogFiles
-  mapM_ putStrLn mobs
+  mapM_ print mobs
   let worldMap = buildMap directions
   return $ World worldMap locations directions items questActions
     where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
@@ -218,6 +222,6 @@ parseProducer src = do
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
   where edges = F.concat $ (\d -> aheadEdge d : reverseEdge d : []) <$> (S.toList directions)
-        nodes = fmap (\n -> (n, ())) $ F.foldl (\acc d -> locIdFrom d : locIdTo d : acc) [] directions
-        aheadEdge d = (locIdFrom d, locIdTo d, 1)
-        reverseEdge d = (locIdTo d, locIdFrom d, 1)
+        nodes = fmap (\n -> (n, ())) $ F.foldl (\acc d -> (locIdFrom d)^.id : (locIdTo d)^.id : acc) [] directions
+        aheadEdge d = ((locIdFrom d)^.id, (locIdTo d)^.id, 1)
+        reverseEdge d = ((locIdTo d)^.id, (locIdFrom d)^.id, 1)

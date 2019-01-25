@@ -27,23 +27,21 @@ spec = describe "Mapper" $ do
   it "map world data to graph" pending
   it "fold move events to directions" $ foldToDirectionsProperty moveEvents
     where moveEvents = [ MoveEvent "north"
-                       , LocationEvent (Location 2 "2") []
-                       , LocationEvent (Location 1 "1") []
+                       , LocationEvent (Location (LocationId 2) (LocationTitle "2")) [] []
+                       , LocationEvent (Location (LocationId 1) (LocationTitle "1")) [] []
                        , MoveEvent "north"
-                       , LocationEvent (Location 1 "1") []
+                       , LocationEvent (Location (LocationId 1) (LocationTitle "1")) [] []
                        , MoveEvent "north"
-                       , LocationEvent (Location 2 "2") []
+                       , LocationEvent (Location (LocationId 2) (LocationTitle "2")) [] []
                        , MoveEvent "north"
-                       , LocationEvent (Location 2 "2") []
+                       , LocationEvent (Location (LocationId 2) (LocationTitle "2")) [] []
                        , MoveEvent "north"
-                       , LocationEvent (Location 2 "2") []
+                       , LocationEvent (Location (LocationId 2) (LocationTitle "2")) [] []
                        , MoveEvent "north"
-                       , LocationEvent (Location 3 "3") []
+                       , LocationEvent (Location (LocationId 3) (LocationTitle "3")) [] []
                        ]
 
 foldToDirectionsProperty :: [ServerEvent] -> Expectation
 foldToDirectionsProperty moveEvents = do L.length directions `shouldBe` 4
                                            where toOpt = Just . Right
-                                                 isMove (MoveEvent _) = True
-                                                 isMove _ = False
                                                  directions = runIdentity $ foldToDirections S.empty $ each (toOpt <$> moveEvents)

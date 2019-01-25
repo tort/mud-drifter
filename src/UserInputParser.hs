@@ -102,7 +102,7 @@ goToParser = do
   let strippedTo = stripEnd $ pack to
   case readMaybe (unpack strippedTo) of
     Nothing -> return $ GoTo $ strippedTo
-    Just locId -> return $ GoToLocId locId
+    Just locId -> return $ GoToLocId $ LocationId locId
 
 equipCmdParser :: Parser UserCommand
 equipCmdParser = do string "/экип"

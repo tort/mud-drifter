@@ -35,6 +35,7 @@ import Data.Map.Strict hiding (foldl, foldl')
 import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.List as L
+import Control.Lens hiding ((&))
 
 runEvtLogger evtBusInput h = runLogger evtBusInput h serverInteractions
 runServerInputLogger evtBusInput h = runLogger evtBusInput h serverInput
@@ -109,17 +110,18 @@ filterTravelActions events = L.filter questEvents events
                                || e == (ConsoleInput "вн")
                                || e == (ConsoleInput "вв")
 
-obstacleActions :: [Event] -> Map (LocId, LocId) [Event]
+obstacleActions :: [Event] -> Map (LocationId, LocationId) [Event]
 obstacleActions questEvents = snd $ F.foldl' toActionMap ((Nothing, []), M.empty) questEvents
-  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) = ((Just $ locId loc, []), travelActions)
+  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) = ((Just $ loc^.locationId, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
-        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) = let newTravelActions = case actions of [] -> travelActions
-                                                                                                                                              _ -> insert (leftLocId, locId loc) (L.reverse actions) travelActions
-                                                                                                                                         in ((Just $ locId loc, []), newTravelActions)
+        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) =
+          let newTravelActions = case actions of [] -> travelActions
+                                                 _ -> insert (leftLocId, loc^.locationId) (L.reverse actions) travelActions
+           in ((Just $ loc^.locationId, []), newTravelActions)
         toActionMap ((leftLoc, actions), travelActions) evt = ((leftLoc, evt : actions), travelActions)
 
-type LocToLocActions = ([Int], [Event])
-type LocPair = [LocId]
+type LocToLocActions = ([LocationId], [Event])
+type LocPair = [LocationId]
 
 scanDoorEvents :: [Event] -> [LocToLocActions]
 scanDoorEvents evts = L.filter (\x -> (length $ fst x) >= 2) $ (\pair -> ((fst . snd) pair, (snd . fst) pair))  <$> (L.filter changeLocsOnly $ zipped)

@@ -27,7 +27,7 @@ serverInputParser = codepagePrompt
                     <|> passwordPrompt
                     <|> welcomePrompt
                     <|> postWelcome
-                    <|> location
+                    <|> locationParser
                     <|> move
                     <|> listEquipment
                     <|> listInventory
@@ -128,17 +128,19 @@ glanceDir = do cs >> "0;33m"
                C.space
                locTitle <- takeTill (C.isEndOfLine)
                C.endOfLine
-               mobs <- roomObjects "1;31m"
+               mobShortDescriptions <- (roomObjects "1;31m")
                clearColors
-               return $ GlanceEvent dir (decodeUtf8 locTitle) mobs
+               let locationTitle = LocationTitle $ decodeUtf8 locTitle
+                   mobs = MobShort <$> mobShortDescriptions
+                in return $ GlanceEvent dir locationTitle mobs
 
-location :: A.Parser ServerEvent
-location = do
+locationParser :: A.Parser ServerEvent
+locationParser = do
     cs
     string "1;36m"
     locationName <- takeTill (== _bracketleft)
     A.word8 _bracketleft
-    locationId <- C.decimal
+    locId <- C.decimal
     A.word8 _bracketright
     cs
     string "0;37m"
@@ -152,8 +154,8 @@ location = do
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"
     clearColors
-    let location = Location locationId (strip $ decodeUtf8 locationName)
-     in return $ LocationEvent location objects mobs
+    let location = Location { _locationId = LocationId locId, _locationTitle = LocationTitle $ strip $ decodeUtf8 locationName }
+     in return $ LocationEvent location (RoomObject <$> objects) (MobShort <$> mobs)
     where schoolEntrance = do cs
                               string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "
                               cs
