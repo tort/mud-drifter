@@ -131,7 +131,7 @@ glanceDir = do cs >> "0;33m"
                mobShortDescriptions <- (roomObjects "1;31m")
                clearColors
                let locationTitle = LocationTitle $ decodeUtf8 locTitle
-                   mobs = MobShort <$> mobShortDescriptions
+                   mobs = MobShortDesc <$> mobShortDescriptions
                 in return $ GlanceEvent dir locationTitle mobs
 
 locationParser :: A.Parser ServerEvent
@@ -155,7 +155,7 @@ locationParser = do
     mobs <- roomObjects "1;31m"
     clearColors
     let location = Location { _locationId = LocationId locId, _locationTitle = LocationTitle $ strip $ decodeUtf8 locationName }
-     in return $ LocationEvent location (RoomObject <$> objects) (MobShort <$> mobs)
+     in return $ LocationEvent location (RoomObject <$> objects) (MobShortDesc <$> mobs)
     where schoolEntrance = do cs
                               string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "
                               cs

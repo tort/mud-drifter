@@ -41,10 +41,10 @@ spec = describe "Parser" $ do
         it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
                                  log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5011) (LocationTitle "У колодца")
                                                                                       , _objects = [RoomObject "Колодец выкопан здесь."]
-                                                                                      , _mobs = [ MobShort "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."
-                                                                                                , MobShort "Местная жительница идет по своим делам."
-                                                                                                , MobShort "Местная жительница идет по своим делам."
-                                                                                                , MobShort "Местный житель идет здесь."
+                                                                                      , _mobs = [ MobShortDesc "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."
+                                                                                                , MobShortDesc "Местная жительница идет по своим делам."
+                                                                                                , MobShortDesc "Местная жительница идет по своим делам."
+                                                                                                , MobShortDesc "Местный житель идет здесь."
                                                                                                 ]
                                                                                       }
         it "parse move to location" $ do log <- readFile "test/logs/move.log"
@@ -83,10 +83,10 @@ spec = describe "Parser" $ do
                                                      serverEventList `shouldBe` [ MoveEvent "восток"
                                                                                 , LocationEvent { _location = (Location (LocationId 5112) (LocationTitle "На кухне"))
                                                                                                 , _objects = []
-                                                                                                , _mobs = [ MobShort "(летит) Комар жужжит здесь."
-                                                                                                         , MobShort "Блоха прячется в мусоре."
-                                                                                                         , MobShort "Таракан быстро пробежал здесь."
-                                                                                                         , MobShort "Таракан быстро пробежал здесь."
+                                                                                                , _mobs = [ MobShortDesc "(летит) Комар жужжит здесь."
+                                                                                                         , MobShortDesc "Блоха прячется в мусоре."
+                                                                                                         , MobShortDesc "Таракан быстро пробежал здесь."
+                                                                                                         , MobShortDesc "Таракан быстро пробежал здесь."
                                                                                                          ]
                                                                                                 }
                                                                                 ]
@@ -134,7 +134,7 @@ spec = describe "Parser" $ do
                                               log ~> serverInputParser `shouldParse` PromptEvent
         it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
                                                   objects = [RoomObject "Доска для различных заметок и объявлений прибита тут ..блестит!"]
-                                                  mobs = [MobShort "Хозяйка постоялого двора распоряжается здесь."]
+                                                  mobs = [MobShortDesc "Хозяйка постоялого двора распоряжается здесь."]
                                                in do log <- readFile "test/logs/schoolEntrance.log"
                                                      log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs)
         it "parse unknown obstacle when glancing to direction" $ do log <- readFile "test/logs/openDoor.1.log"
@@ -149,7 +149,7 @@ spec = describe "Parser" $ do
                                                               , RoomObject "У ваших ног лежит глиняная плошка."
                                                               ]
                                                     location = Location (LocationId 5007) (LocationTitle "Лавка")
-                                                    mobs = [MobShort "Лавочник стоит тут."]
+                                                    mobs = [MobShortDesc "Лавочник стоит тут."]
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation e = isMoveEvent e || isLocationEvent e

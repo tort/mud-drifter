@@ -79,7 +79,7 @@ foldToItems prevItems eventProducer = PP.fold foldToSet prevItems identity (even
                                                                                    >-> PP.map unwrapJustRight
                                                                                    >-> PP.map (\(ItemStatsEvent item) -> item))
 
-foldToMobs :: Monad m => Set MobShort -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set MobShort)
+foldToMobs :: Monad m => Set MobShortDesc -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set MobShortDesc)
 foldToMobs prevItems eventProducer = PP.fold foldMobsToSet prevItems identity (eventProducer >-> PP.filter filterMobs
                                                                                    >-> PP.map unwrapJustRight
                                                                                    >-> PP.map (\(LocationEvent _ _ mobs) -> mobs))
@@ -179,7 +179,7 @@ loadItems accIO file = do
   hClose hLog
   return result
 
-loadMobs :: IO (Set MobShort) -> FilePath -> IO (Set MobShort)
+loadMobs :: IO (Set MobShortDesc) -> FilePath -> IO (Set MobShortDesc)
 loadMobs accIO file = do
   hLog <- openFile file ReadMode
   mobs <- accIO

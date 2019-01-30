@@ -22,7 +22,7 @@ module Event ( Event(..)
              , Item(..)
              , WeaponClass(..)
              , RoomDir(..)
-             , MobShort(..)
+             , MobShortDesc(..)
              , RoomObject(..)
              , isMoveEvent
              , isConsoleInput
@@ -64,7 +64,7 @@ instance Binary Item
 instance Binary WeaponClass
 instance Binary RoomDir
 instance Binary RoomObject
-instance Binary MobShort
+instance Binary MobShortDesc
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -98,7 +98,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [RoomObject], _mobs :: [MobShort] }
+                 | LocationEvent { _location :: Location, _objects :: [RoomObject], _mobs :: [MobShortDesc] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -110,7 +110,7 @@ data ServerEvent = CodepagePrompt
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
-                 | GlanceEvent RoomDir LocationTitle [MobShort]
+                 | GlanceEvent RoomDir LocationTitle [MobShortDesc]
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -124,7 +124,7 @@ type ArmorVal = Int
 type ItemName = Text
 type Price = Int
 newtype RoomObject = RoomObject { _text :: Text } deriving (Eq, Show, Generic)
-newtype MobShort = MobShort { _text :: Text } deriving (Eq, Ord, Show, Generic)
+newtype MobShortDesc = MobShortDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
 instance P.Show RoomDir where
