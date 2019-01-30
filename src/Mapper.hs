@@ -23,14 +23,14 @@ import Control.Lens hiding (snoc)
 
 mapper :: MonadSafe m => World -> Pipe Event Event m ()
 mapper world = let mapperWithPosition currLoc = do evt <- await
-                                                   case evt of (ServerEvent (LocationEvent loc _ _)) -> yield evt >> mapperWithPosition (Just $ loc^.locationId^.id)
+                                                   case evt of (ServerEvent (LocationEvent loc _ _)) -> yield evt >> mapperWithPosition (Just $ loc^.locationId^.val)
                                                                _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
                                                                                            (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
                                                                                            (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
                                                                                            (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
                                                                                                                                 in ConsoleOutput $ case S.toList $ matchingLocs of
                                                                                                                                   [] -> "no matching locations found"
-                                                                                                                                  d:[] -> showPathBy world currLoc (d^.locationId^.id)
+                                                                                                                                  d:[] -> showPathBy world currLoc (d^.locationId^.val)
                                                                                                                                   _ -> showLocs matchingLocs
                                                                                            x -> x
                                                                        mapperWithPosition currLoc
@@ -49,7 +49,7 @@ showPath world path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nod
         toJust (Just left, Just right) = (left, right)
 
 nodePairToDirection :: World -> (Node, Node) -> Direction
-nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\d -> (locIdFrom d)^.id == from && (locIdTo d)^.id == to) (directions world)
+nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\d -> (locIdFrom d)^.val == from && (locIdTo d)^.val == to) (directions world)
 
 showPathBy :: World -> Maybe Int -> Int -> ByteString
 showPathBy world Nothing _ = "current location is unknown\n"

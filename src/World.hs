@@ -147,7 +147,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
   where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
         joinToOneMsg = T.intercalate "\n"
         renderLocs = S.map renderLoc
-        renderLoc node = ((show $ node^.locationId^.id) <> " " <> (node^.locationTitle^.text)) :: Text
+        renderLoc node = ((show $ node^.locationId^.val) <> " " <> (node^.locationTitle^.text)) :: Text
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> Set Location
@@ -222,6 +222,6 @@ parseProducer src = do
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
   where edges = F.concat $ (\d -> aheadEdge d : reverseEdge d : []) <$> (S.toList directions)
-        nodes = fmap (\n -> (n, ())) $ F.foldl (\acc d -> (locIdFrom d)^.id : (locIdTo d)^.id : acc) [] directions
-        aheadEdge d = ((locIdFrom d)^.id, (locIdTo d)^.id, 1)
-        reverseEdge d = ((locIdTo d)^.id, (locIdFrom d)^.id, 1)
+        nodes = fmap (\n -> (n, ())) $ F.foldl (\acc d -> (locIdFrom d)^.val : (locIdTo d)^.val : acc) [] directions
+        aheadEdge d = ((locIdFrom d)^.val, (locIdTo d)^.val, 1)
+        reverseEdge d = ((locIdTo d)^.val, (locIdFrom d)^.val, 1)

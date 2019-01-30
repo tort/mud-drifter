@@ -49,14 +49,17 @@ person world = travelTask world
 
 travelTask :: MonadSafe m => World -> Pipe Event Event m ()
 travelTask world = waitTravelRequest Nothing
-  where afterTravel locId (Failure err loc) = yield (ConsoleOutput $ "travel to " <> (show $ locId^.id) <> " failed: " <> err) >> waitTravelRequest loc
-        afterTravel locId (Success loc) = yield (ConsoleOutput $ "travel to " <> (show $ (locId^.id :: Int)) <> " finished") >> waitTravelRequest (Just loc)
+  where afterTravel locId (Failure err loc) = yield (ConsoleOutput $ "travel to " <> (show $ locId^.val) <> " failed: " <> err) >> waitTravelRequest loc
+        afterTravel locId (Success loc) = yield (ConsoleOutput $ "travel to " <> (show $ (locId^.val :: Int)) <> " finished") >> waitTravelRequest (Just loc)
         waitTravelRequest currLoc = await >>= \evt -> case evt of (UserCommand (GoToLocId locId)) -> travelPath currLoc locId >>= afterTravel locId
                                                                   (ServerEvent (LocationEvent (Location locId _) _ _)) -> yield evt >> waitTravelRequest (Just locId)
                                                                   (ServerEvent DarknessEvent) -> yield evt >> waitTravelRequest Nothing
                                                                   _ -> yield evt >> waitTravelRequest currLoc
-        travelPath (Just currLoc) locId = travel world $ LocationId <$> (GA.sp (currLoc^.id) (locId^.id) (worldMap world))
+        travelPath (Just currLoc) locId = travel world $ findTravelPath currLoc locId (worldMap world)
         travelPath Nothing _ = (return $ Failure "current location is unknown" Nothing)
+
+findTravelPath :: LocationId -> LocationId -> WorldMap -> [LocationId]
+findTravelPath from to worldMap = LocationId <$> (GA.sp (from^.val) (to^.val) worldMap)
 
 type Reason = ByteString
 data TravelResult = Success LocationId | Failure Reason (Maybe LocationId)

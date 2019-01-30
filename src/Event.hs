@@ -35,7 +35,7 @@ module Event ( Event(..)
              , objects
              , mobs
              , serverEvent
-             , id
+             , val
              , text
              ) where
 
@@ -127,6 +127,18 @@ newtype RoomObject = RoomObject { _text :: Text } deriving (Eq, Show, Generic)
 newtype MobShortDesc = MobShortDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
+data Mob = Mob { _shortDesc :: MobShortDesc
+               , _name :: Maybe MobName
+               , _tag :: Maybe Tag
+               , _locations :: [LocationId]
+               } deriving (Show)
+
+instance Eq Mob where
+  left == right = _shortDesc left == _shortDesc right
+
+newtype MobName = MobName Text deriving (Eq, Show)
+newtype Tag = Tag Text deriving (Eq, Show)
+
 instance P.Show RoomDir where
   show North = "север"
   show South = "юг"
@@ -139,7 +151,7 @@ data Location = Location { _locationId :: LocationId
                          , _locationTitle :: LocationTitle
                          } deriving (Show, Ord, Generic)
 
-newtype LocationId = LocationId { _id :: Int } deriving (Eq, Ord, Show, Generic)
+newtype LocationId = LocationId { _val :: Int } deriving (Eq, Ord, Show, Generic)
 newtype LocationTitle = LocationTitle { _text :: Text } deriving (Eq, Ord, Show, Generic)
 
 instance Eq Location where
