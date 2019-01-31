@@ -32,9 +32,9 @@ spec = describe "UserInputParser" $ do
   it "parse /conn command" $ (parse userInputParser "" "/conn") `shouldBe` (Right $ Connect)
   it "parse /zap command" $ (parse userInputParser "" "/zap") `shouldBe` (Right $ Zap)
   it "parse /path regex" $ (parse userInputParser "" "/путь В избе") `shouldBe` (Right $ FindPathTo "В избе")
-  it "parse /path toLocId" $ (parse userInputParser "" "/путь 34546") `shouldBe` (Right $ FindPathToLocId 34546)
-  it "parse /path fromLocId toLocId" $ (parse userInputParser "" "/путь 111 222") `shouldBe` (Right $ FindPathFromTo 111 222)
-  it "parse /path      fromLocId       toLocId    " $ (parse userInputParser "" "/путь     1     2    ") `shouldBe` (Right $ FindPathFromTo 1 2)
+  it "parse /path toLocId" $ (parse userInputParser "" "/путь 34546") `shouldBe` (Right $ FindPathToLocId (LocationId 34546))
+  it "parse /path fromLocId toLocId" $ (parse userInputParser "" "/путь 111 222") `shouldBe` (Right $ mkFindPathFromTo 111 222)
+  it "parse /path      fromLocId       toLocId    " $ (parse userInputParser "" "/путь     1     2    ") `shouldBe` (Right $ mkFindPathFromTo 1 2)
   it "parse /path str toId" $ (parse userInputParser "" "/путь a 2") `shouldBe` (Right $ FindPathTo "a 2")
   it "parse /path fromId src" $ (parse userInputParser "" "/путь 1 b   ") `shouldBe` (Right $ FindPathTo "1 b")
   it "parse /path" $ isLeft $ (parse userInputParser "" "/путь")
@@ -42,3 +42,6 @@ spec = describe "UserInputParser" $ do
   it "parse /go regex command" $ (parse userInputParser "" "/го В избе") `shouldBe` (Right $ GoTo "В избе")
   it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ ServerCommand "")
   it "return error in case of misspelled command" $ isLeft $ parse userInputParser "" "/unknowncommand blabla"
+
+mkFindPathFromTo :: Int -> Int -> UserCommand
+mkFindPathFromTo from to = FindPathFromTo (LocationId from) (LocationId to)

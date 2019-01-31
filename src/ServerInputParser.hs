@@ -154,7 +154,9 @@ locationParser = do
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"
     clearColors
-    let location = Location { _locationId = LocationId locId, _locationTitle = LocationTitle $ strip $ decodeUtf8 locationName }
+    let location = Location { _locationId = LocationId locId
+                            , _locationTitle = LocationTitle $ strip $ decodeUtf8 locationName
+                            }
      in return $ LocationEvent location (RoomObject <$> objects) (MobShortDesc <$> mobs)
     where schoolEntrance = do cs
                               string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "

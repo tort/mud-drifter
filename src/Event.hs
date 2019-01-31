@@ -35,8 +35,8 @@ module Event ( Event(..)
              , objects
              , mobs
              , serverEvent
-             , val
              , text
+             , showVal
              ) where
 
 import qualified Prelude as P
@@ -85,8 +85,8 @@ data UserCommand = ServerCommand Text
                | Connect
                | Zap
                | FindLoc Text
-               | FindPathFromTo Int Int
-               | FindPathToLocId Int
+               | FindPathFromTo LocationId LocationId
+               | FindPathToLocId LocationId
                | FindPathTo Text
                | GoTo Text
                | GoToLocId LocationId
@@ -151,11 +151,17 @@ data Location = Location { _locationId :: LocationId
                          , _locationTitle :: LocationTitle
                          } deriving (Show, Ord, Generic)
 
-newtype LocationId = LocationId { _val :: Int } deriving (Eq, Ord, Show, Generic)
+newtype LocationId = LocationId Int deriving (Eq, Ord, Show, Generic)
 newtype LocationTitle = LocationTitle { _text :: Text } deriving (Eq, Ord, Show, Generic)
 
 instance Eq Location where
   left == right = _locationId left == _locationId right
+
+class ShowVal a where
+  showVal :: a -> Text
+
+instance ShowVal LocationId where
+  showVal (LocationId id) = show id
 
 derive makeIs ''UserCommand
 derive makeIs ''Location
@@ -170,7 +176,6 @@ derive makeIs ''Event
 
 makeFieldsNoPrefix ''UserCommand
 makeFieldsNoPrefix ''Location
-makeFieldsNoPrefix ''LocationId
 makeFieldsNoPrefix ''LocationTitle
 makeFieldsNoPrefix ''Slot
 makeFieldsNoPrefix ''EquippedItem

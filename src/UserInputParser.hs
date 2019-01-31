@@ -70,9 +70,10 @@ findPathFromToParser = do
   many1 space
   to <- optionMaybe (many1 digit)
   many space
-  case FindPathFromTo <$> (readMaybe =<< from) <*> (readMaybe =<< to) of
-    Nothing -> unexpected " /го format\n"
-    Just cmd -> return cmd
+  let readLocId maybeTextId = LocationId <$> (readMaybe =<< maybeTextId)
+   in case FindPathFromTo <$> (readLocId from) <*> (readLocId to) of
+        Nothing -> unexpected " /го format\n"
+        Just cmd -> return cmd
 
 findPathToLocIdParser :: Parser UserCommand
 findPathToLocIdParser = do
@@ -81,7 +82,7 @@ findPathToLocIdParser = do
   to <- many1 digit
   many space
   eof
-  case FindPathToLocId <$> (readMaybe to) of
+  case (FindPathToLocId . LocationId) <$> (readMaybe to) of
     Nothing -> unexpected " /path format\n"
     Just cmd -> return cmd
 
