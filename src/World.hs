@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 
 module World ( foldToDirections
              , locsByRegex
@@ -168,8 +169,8 @@ extractLocs :: Monad m => Pipe ServerEvent [Location] m ()
 extractLocs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent loc _ _) -> [loc])
 
 extractItemStats :: Monad m => Pipe ServerEvent [Item] m ()
-extractItemStats = PP.map $ \evt -> case evt of (ItemStatsEvent item) -> [item]
-                                                _ -> []
+extractItemStats = PP.map $ \case (ItemStatsEvent item) -> [item]
+                                  _ -> []
 
 loadQuestActions :: IO (Map (LocationId, LocationId) [Event]) -> FilePath -> IO (Map (LocationId, LocationId) [Event])
 loadQuestActions accIO file = withLog file $ obstacleActions . filterTravelActions
