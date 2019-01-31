@@ -22,8 +22,8 @@ module Event ( Event(..)
              , Item(..)
              , WeaponClass(..)
              , RoomDir(..)
-             , MobShortDesc(..)
-             , RoomObject(..)
+             , MobRoomDesc(..)
+             , ObjectRoomDesc(..)
              , isMoveEvent
              , isConsoleInput
              , isUserCommand
@@ -35,7 +35,6 @@ module Event ( Event(..)
              , objects
              , mobs
              , serverEvent
-             , text
              , showVal
              ) where
 
@@ -63,8 +62,8 @@ instance Binary ItemState
 instance Binary Item
 instance Binary WeaponClass
 instance Binary RoomDir
-instance Binary RoomObject
-instance Binary MobShortDesc
+instance Binary ObjectRoomDesc
+instance Binary MobRoomDesc
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -98,7 +97,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [RoomObject], _mobs :: [MobShortDesc] }
+                 | LocationEvent { _location :: Location, _objects :: [ObjectRoomDesc], _mobs :: [MobRoomDesc] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -110,7 +109,7 @@ data ServerEvent = CodepagePrompt
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
-                 | GlanceEvent RoomDir LocationTitle [MobShortDesc]
+                 | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -123,11 +122,11 @@ type AC = Int
 type ArmorVal = Int
 type ItemName = Text
 type Price = Int
-newtype RoomObject = RoomObject { _text :: Text } deriving (Eq, Show, Generic)
-newtype MobShortDesc = MobShortDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
+newtype ObjectRoomDesc = ObjectRoomDesc Text deriving (Eq, Show, Generic)
+newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
-data Mob = Mob { _shortDesc :: MobShortDesc
+data Mob = Mob { _shortDesc :: MobRoomDesc
                , _name :: Maybe MobName
                , _tag :: Maybe Tag
                , _locations :: [LocationId]
@@ -152,7 +151,7 @@ data Location = Location { _locationId :: LocationId
                          } deriving (Show, Ord, Generic)
 
 newtype LocationId = LocationId Int deriving (Eq, Ord, Show, Generic)
-newtype LocationTitle = LocationTitle { _text :: Text } deriving (Eq, Ord, Show, Generic)
+newtype LocationTitle = LocationTitle Text deriving (Eq, Ord, Show, Generic)
 
 instance Eq Location where
   left == right = _locationId left == _locationId right
@@ -162,6 +161,12 @@ class ShowVal a where
 
 instance ShowVal LocationId where
   showVal (LocationId id) = show id
+
+instance ShowVal LocationTitle where
+  showVal (LocationTitle text) = text
+
+instance ShowVal ObjectRoomDesc where
+  showVal (ObjectRoomDesc text) = text
 
 derive makeIs ''UserCommand
 derive makeIs ''Location
@@ -176,7 +181,6 @@ derive makeIs ''Event
 
 makeFieldsNoPrefix ''UserCommand
 makeFieldsNoPrefix ''Location
-makeFieldsNoPrefix ''LocationTitle
 makeFieldsNoPrefix ''Slot
 makeFieldsNoPrefix ''EquippedItem
 makeFieldsNoPrefix ''ItemState

@@ -79,7 +79,7 @@ foldToItems prevItems eventProducer = PP.fold foldToSet prevItems identity (even
                                                                                    >-> PP.map unwrapJustRight
                                                                                    >-> PP.map (\(ItemStatsEvent item) -> item))
 
-foldToMobs :: Monad m => Set MobShortDesc -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set MobShortDesc)
+foldToMobs :: Monad m => Set MobRoomDesc -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set MobRoomDesc)
 foldToMobs prevItems eventProducer = PP.fold foldMobsToSet prevItems identity (eventProducer >-> PP.filter filterMobs
                                                                                    >-> PP.map unwrapJustRight
                                                                                    >-> PP.map (\(LocationEvent _ _ mobs) -> mobs))
@@ -147,11 +147,11 @@ showLocs locs = encodeUtf8 $ renderMsg locs
   where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
         joinToOneMsg = T.intercalate "\n"
         renderLocs = S.map renderLoc
-        renderLoc node = ((showVal $ node^.locationId) <> " " <> (node^.locationTitle^.text)) :: Text
+        renderLoc node = ((showVal $ node^.locationId) <> " " <> (showVal $ node^.locationTitle)) :: Text
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> Set Location
-locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . (\l -> l^.locationTitle^.text)) locs
+locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
   where locs = locations world
 
 
@@ -179,8 +179,8 @@ loadItems accIO file = do
   hClose hLog
   return result
 
-loadMobs :: IO (Set MobShortDesc) -> FilePath -> IO (Set MobShortDesc)
-loadMobs accIO file = do
+loadMobsFromFile :: IO (Set MobRoomDesc) -> FilePath -> IO (Set MobRoomDesc)
+loadMobsFromFile accIO file = do
   hLog <- openFile file ReadMode
   mobs <- accIO
   result <- foldToMobs mobs $ parseProducer (PBS.fromHandle hLog)
@@ -198,7 +198,7 @@ loadWorld archiveDir = do
   locations <- loadLocs serverLogFiles
   items <- loadItms serverLogFiles
   questActions <- loadQuestActs evtLogFiles
-  mobs <- loadMobFiles evtLogFiles
+  mobs <- loadMobsFromFiles evtLogFiles
   mapM_ print mobs
   let worldMap = buildMap directions
   return $ World worldMap locations directions items questActions
@@ -206,7 +206,7 @@ loadWorld archiveDir = do
           loadLocs files = F.foldl (\acc item -> loadLocations acc (serverLogDir ++ item)) (return S.empty) files
           loadItms files = F.foldl (\acc item -> loadItems acc (serverLogDir ++ item)) (return S.empty) files
           loadQuestActs files = F.foldl (\acc item -> loadQuestActions acc (evtLogDir ++ item)) (return M.empty) files
-          loadMobFiles files = F.foldl (\acc item -> loadMobs acc (serverLogDir ++ item)) (return S.empty) files
+          loadMobsFromFiles files = F.foldl (\acc item -> loadMobsFromFile acc (serverLogDir ++ item)) (return S.empty) files
           serverLogDir = archiveDir ++ "server-input-log/"
           evtLogDir = archiveDir ++ "evt-log/"
 
