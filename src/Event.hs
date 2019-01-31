@@ -168,6 +168,9 @@ instance ShowVal LocationTitle where
 instance ShowVal ObjectRoomDesc where
   showVal (ObjectRoomDesc text) = text
 
+instance ShowVal MobRoomDesc where
+  showVal (MobRoomDesc text) = text
+
 derive makeIs ''UserCommand
 derive makeIs ''Location
 derive makeIs ''Slot

@@ -3,12 +3,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module World ( foldToDirections
-             , foldToLocations
-             , foldToItems
              , locsByRegex
              , showLocs
              , loadWorld
              , parseProducer
+             , showWorldStats
              , World(..)
              , Direction(..)
              , WorldMap
@@ -20,7 +19,7 @@ import ServerInputParser
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph
 import qualified Data.Graph.Inductive.Graph as DG
-import System.IO hiding (putStrLn, print)
+import System.IO (hClose)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as PP
@@ -30,8 +29,8 @@ import qualified Pipes.ByteString as PBS
 import Data.Text()
 import qualified Data.Text as T
 import Data.Text.Encoding()
-import Data.Either()
-import Data.Maybe()
+import Data.Either
+import Data.Maybe
 import qualified Data.List as L
 import Control.Applicative()
 import Control.Arrow
@@ -39,18 +38,19 @@ import Data.Monoid
 import Debug.Trace
 import Data.Set
 import qualified Data.Set as S
-import Event
+import Event hiding (mobs)
 import Data.Map.Strict hiding (insert)
 import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import Logger
 import System.Directory
-import Control.Lens hiding ((&))
+import Control.Lens
 
 data World = World { worldMap :: WorldMap
                    , locations :: Set Location
                    , directions :: Set Direction
                    , items :: Set Item
+                   , mobs :: Set MobRoomDesc
                    , questActions :: Map (LocationId, LocationId) [Event]
                    }
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -69,36 +69,27 @@ foldToDirections initialDirections eventProducer = PP.fold accDirections initial
                                                                                                              >-> PP.filter mappableMove
                                                                                               )
 
-foldToLocations :: Monad m => Set Location -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Location)
-foldToLocations prevLocs eventProducer = PP.fold foldToSet prevLocs identity (eventProducer >-> PP.filter filterLocations
-                                                                                         >-> PP.map unwrapJustRight
-                                                                                         >-> PP.map (\(LocationEvent loc _ _) -> loc))
-
-foldToItems :: Monad m => Set Item -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Item)
-foldToItems prevItems eventProducer = PP.fold foldToSet prevItems identity (eventProducer >-> PP.filter filterItems
-                                                                                   >-> PP.map unwrapJustRight
-                                                                                   >-> PP.map (\(ItemStatsEvent item) -> item))
-
-foldToMobs :: Monad m => Set MobRoomDesc -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set MobRoomDesc)
-foldToMobs prevItems eventProducer = PP.fold foldMobsToSet prevItems identity (eventProducer >-> PP.filter filterMobs
-                                                                                   >-> PP.map unwrapJustRight
-                                                                                   >-> PP.map (\(LocationEvent _ _ mobs) -> mobs))
+foldEntities :: (Monad m, Ord a) => Pipe ServerEvent [a] m () -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set a)
+foldEntities extractEntities eventProducer = PP.fold foldListToSet S.empty identity (eventProducer >-> PP.filter isJust
+                                                                                   >-> PP.map fromJust
+                                                                                   >-> PP.filter isRight
+                                                                                   >-> PP.map unwrapRight
+                                                                                   >-> extractEntities )
 
 unwrapJustRight :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
 unwrapJustRight (Just (Right evt)) = evt
 
+unwrapRight :: Either ParsingError ServerEvent -> ServerEvent
+unwrapRight (Right val) = val
+
 filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocationsAndMoves (Just (Right (LocationEvent _ _ _))) = True
+filterLocationsAndMoves (Just (Right LocationEvent{})) = True
 filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
 filterLocationsAndMoves _ = False
 
 filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocations (Just (Right (LocationEvent _ _ _))) = True
+filterLocations (Just (Right LocationEvent{})) = True
 filterLocations _ = False
-
-filterMobs :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterMobs (Just (Right (LocationEvent _ _ mobs))) = True
-filterMobs _ = False
 
 filterItems :: Maybe (Either ParsingError ServerEvent) -> Bool
 filterItems (Just (Right (ItemStatsEvent item))) = True
@@ -116,7 +107,7 @@ accDirections directions pair =
         | otherwise = insertOpposite $ insertAhead directions
         where insertAhead = insert (Direction (locFrom^.locationId) (locTo^.locationId) dir)
               insertOpposite = insert (Direction (locTo^.locationId) (locFrom^.locationId) $ oppositeDir dir)
-   in case pair of ((LocationEvent locTo _ _):(MoveEvent dir):(LocationEvent locFrom _ _):[]) -> updateWorld locFrom locTo dir
+   in case pair of [LocationEvent locTo _ _, MoveEvent dir, LocationEvent locFrom _ _] -> updateWorld locFrom locTo dir
                    _ -> directions
 
 oppositeDir :: Text -> Text
@@ -127,8 +118,8 @@ oppositeDir "юг" = "север"
 oppositeDir "запад" = "восток"
 oppositeDir "восток" = "запад"
 
-foldMobsToSet :: Ord a => Set a -> [a] -> Set a
-foldMobsToSet acc items = F.foldl (\a item -> S.insert item a) acc items
+foldListToSet :: Ord a => Set a -> [a] -> Set a
+foldListToSet = F.foldl (flip S.insert)
 
 foldToSet :: Ord a => Set a -> a -> Set a
 foldToSet acc item = S.insert item acc
@@ -139,7 +130,7 @@ toPairs acc event
   | otherwise = event : take 2 acc
 
 mappableMove :: [ServerEvent] -> Bool
-mappableMove ((LocationEvent _ _ _) : (MoveEvent _) : (LocationEvent _ _ _) : []) = True
+mappableMove [LocationEvent{}, MoveEvent _, LocationEvent{}] = True
 mappableMove _ = False
 
 showLocs :: Set Location -> ByteString
@@ -147,7 +138,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
   where renderMsg = addRet . joinToOneMsg . S.toList . renderLocs
         joinToOneMsg = T.intercalate "\n"
         renderLocs = S.map renderLoc
-        renderLoc node = ((showVal $ node^.locationId) <> " " <> (showVal $ node^.locationTitle)) :: Text
+        renderLoc node = (showVal (node^.locationId) <> " " <> showVal (node^.locationTitle)) :: Text
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> Set Location
@@ -163,29 +154,22 @@ loadDirections ioDirs file = do
   hClose hLog
   return newDirs
 
-loadLocations :: IO (Set Location) -> FilePath -> IO (Set Location)
-loadLocations ioLocs file = do
+loadEntitiesFromFile :: Ord a => Pipe ServerEvent [a] IO () -> FilePath -> IO (Set a)
+loadEntitiesFromFile extractEntities file = do
   hLog <- openFile file ReadMode
-  locs <- ioLocs
-  newLocations <- foldToLocations locs $ parseProducer (PBS.fromHandle hLog)
-  hClose hLog
-  return newLocations
-
-loadItems :: IO (Set Item) -> FilePath -> IO (Set Item)
-loadItems accIO file = do
-  hLog <- openFile file ReadMode
-  items <- accIO
-  result <- foldToItems items $ parseProducer (PBS.fromHandle hLog)
+  result <- foldEntities extractEntities $ parseProducer (PBS.fromHandle hLog)
   hClose hLog
   return result
 
-loadMobsFromFile :: IO (Set MobRoomDesc) -> FilePath -> IO (Set MobRoomDesc)
-loadMobsFromFile accIO file = do
-  hLog <- openFile file ReadMode
-  mobs <- accIO
-  result <- foldToMobs mobs $ parseProducer (PBS.fromHandle hLog)
-  hClose hLog
-  return result
+extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
+extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs) -> mobs)
+
+extractLocs :: Monad m => Pipe ServerEvent [Location] m ()
+extractLocs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent loc _ _) -> [loc])
+
+extractItemStats :: Monad m => Pipe ServerEvent [Item] m ()
+extractItemStats = PP.map $ \evt -> case evt of (ItemStatsEvent item) -> [item]
+                                                _ -> []
 
 loadQuestActions :: IO (Map (LocationId, LocationId) [Event]) -> FilePath -> IO (Map (LocationId, LocationId) [Event])
 loadQuestActions accIO file = withLog file $ obstacleActions . filterTravelActions
@@ -195,20 +179,23 @@ loadWorld archiveDir = do
   serverLogFiles <- listDirectory serverLogDir
   evtLogFiles <- listDirectory evtLogDir
   directions <- loadDirs serverLogFiles
-  locations <- loadLocs serverLogFiles
-  items <- loadItms serverLogFiles
+  locations <- loadFromFiles extractLocs serverLogFiles
+  itemsStats <- loadFromFiles extractItemStats serverLogFiles
   questActions <- loadQuestActs evtLogFiles
-  mobs <- loadMobsFromFiles evtLogFiles
-  mapM_ print mobs
+  mobs <- loadFromFiles extractMobs serverLogFiles
   let worldMap = buildMap directions
-  return $ World worldMap locations directions items questActions
+  return $ World worldMap locations directions itemsStats mobs questActions
     where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
-          loadLocs files = F.foldl (\acc item -> loadLocations acc (serverLogDir ++ item)) (return S.empty) files
-          loadItms files = F.foldl (\acc item -> loadItems acc (serverLogDir ++ item)) (return S.empty) files
           loadQuestActs files = F.foldl (\acc item -> loadQuestActions acc (evtLogDir ++ item)) (return M.empty) files
-          loadMobsFromFiles files = F.foldl (\acc item -> loadMobsFromFile acc (serverLogDir ++ item)) (return S.empty) files
+          loadFromFiles extractEntities files = F.foldl (\acc file -> S.union <$> acc <*> loadEntitiesFromFile extractEntities (serverLogDir ++ file)) (return S.empty) files
           serverLogDir = archiveDir ++ "server-input-log/"
           evtLogDir = archiveDir ++ "evt-log/"
+
+showWorldStats :: World -> Producer Event IO ()
+showWorldStats world = yield $ ConsoleOutput worldStats
+  where worldStats = encodeUtf8 $ locationsStats <> mobsStats
+        locationsStats = (show . length . locations) world <> " locations loaded\n"
+        mobsStats = (show . length . mobs) world <> " mobs loaded\n"
 
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do
@@ -221,7 +208,7 @@ parseProducer src = do
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
-  where edges = F.concat $ (\d -> aheadEdge d : reverseEdge d : []) <$> (S.toList directions)
-        nodes = fmap (\n -> (n, ())) $ F.foldl (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
+  where edges = F.concat $ (\d -> [aheadEdge d, reverseEdge d]) <$> S.toList directions
+        nodes = (\n -> (n, ())) <$> F.foldl (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
         aheadEdge (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId, 1)
         reverseEdge (Direction (LocationId fromId) (LocationId toId) _) = (toId, fromId, 1)
