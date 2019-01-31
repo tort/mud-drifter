@@ -3,12 +3,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 
-module World ( foldToDirections
-             , locsByRegex
+module World ( locsByRegex
              , showLocs
              , loadWorld
              , parseProducer
-             , showWorldStats
+             , printWorldStats
              , World(..)
              , Direction(..)
              , WorldMap
@@ -63,43 +62,8 @@ type LocIdTo = LocationId
 type Trigger = Text
 type WorldMap = Gr () Int
 
-foldToDirections :: Monad m => Set Direction -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set Direction)
-foldToDirections initialDirections eventProducer = PP.fold accDirections initialDirections identity (eventProducer >-> PP.filter filterLocationsAndMoves
-                                                                                                             >-> PP.map unwrapJustRight
-                                                                                                             >-> PP.scan toPairs [] identity
-                                                                                                             >-> PP.filter mappableMove
-                                                                                              )
-
-foldEntities :: (Monad m, Ord a) => Pipe ServerEvent [a] m () -> Producer (Maybe (Either ParsingError ServerEvent)) m ()  -> m (Set a)
-foldEntities extractEntities eventProducer = PP.fold foldListToSet S.empty identity (eventProducer >-> PP.filter isJust
-                                                                                   >-> PP.map fromJust
-                                                                                   >-> PP.filter isRight
-                                                                                   >-> PP.map unwrapRight
-                                                                                   >-> extractEntities )
-
-unwrapJustRight :: Maybe (Either ParsingError ServerEvent) -> ServerEvent
-unwrapJustRight (Just (Right evt)) = evt
-
 unwrapRight :: Either ParsingError ServerEvent -> ServerEvent
 unwrapRight (Right val) = val
-
-filterLocationsAndMoves :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocationsAndMoves (Just (Right LocationEvent{})) = True
-filterLocationsAndMoves (Just (Right (MoveEvent _ ))) = True
-filterLocationsAndMoves _ = False
-
-filterLocations :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterLocations (Just (Right LocationEvent{})) = True
-filterLocations _ = False
-
-filterItems :: Maybe (Either ParsingError ServerEvent) -> Bool
-filterItems (Just (Right (ItemStatsEvent item))) = True
-filterItems _ = False
-
-type SEPair = (Maybe ServerEvent, Maybe ServerEvent)
-
-edgeWeight :: Int
-edgeWeight = 1
 
 accDirections :: Set Direction -> [ServerEvent] -> Set Direction
 accDirections directions pair =
@@ -122,9 +86,6 @@ oppositeDir "восток" = "запад"
 foldListToSet :: Ord a => Set a -> [a] -> Set a
 foldListToSet = F.foldl (flip S.insert)
 
-foldToSet :: Ord a => Set a -> a -> Set a
-foldToSet acc item = S.insert item acc
-
 toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
 toPairs acc event
   | length acc < 3 = event : acc
@@ -146,21 +107,28 @@ locsByRegex :: World -> Text -> Set Location
 locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
   where locs = locations world
 
+loadServerEventsFromFile :: FilePath -> Producer ServerEvent IO ()
+loadServerEventsFromFile file = openfile >>= \h -> produce h >> closefile h
+  where openfile = lift $ openFile file ReadMode
+        closefile h = lift $ hClose h
+        produce h = parseProducer (PBS.fromHandle h) >-> PP.filter isJust
+                                                     >-> PP.map fromJust
+                                                     >-> PP.filter isRight
+                                                     >-> PP.map unwrapRight
 
-loadDirections :: IO (Set Direction) -> FilePath -> IO (Set Direction)
-loadDirections ioDirs file = do
-  hLog <- openFile file ReadMode
-  dirs <- ioDirs
-  newDirs <- foldToDirections dirs $ parseProducer (PBS.fromHandle hLog)
-  hClose hLog
-  return newDirs
+loadEventsFromFile :: FilePath -> Producer Event IO ()
+loadEventsFromFile file = openfile >>= \h -> produce h >> closefile h
+  where openfile = lift $ openFile file ReadMode
+        closefile h = lift $ hClose h
+        produce h = do str <- lift $ PBS.toLazyM $ PBS.fromHandle h
+                       parseEventLogProducer str
 
-loadEntitiesFromFile :: Ord a => Pipe ServerEvent [a] IO () -> FilePath -> IO (Set a)
-loadEntitiesFromFile extractEntities file = do
-  hLog <- openFile file ReadMode
-  result <- foldEntities extractEntities $ parseProducer (PBS.fromHandle hLog)
-  hClose hLog
-  return result
+
+serverLogsPipe :: [FilePath] -> Producer ServerEvent IO ()
+serverLogsPipe files = F.foldl (\evtPipe file -> evtPipe >> loadServerEventsFromFile file) (return ()) files
+
+evtLogsPipe :: [FilePath] -> Producer Event IO ()
+evtLogsPipe files = F.foldl (\evtPipe file -> evtPipe >> loadEventsFromFile file) (return ()) files
 
 extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
 extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs) -> mobs)
@@ -172,30 +140,35 @@ extractItemStats :: Monad m => Pipe ServerEvent [Item] m ()
 extractItemStats = PP.map $ \case (ItemStatsEvent item) -> [item]
                                   _ -> []
 
-loadQuestActions :: IO (Map (LocationId, LocationId) [Event]) -> FilePath -> IO (Map (LocationId, LocationId) [Event])
-loadQuestActions accIO file = withLog file $ obstacleActions . filterTravelActions
+extractEntitiesSet :: (Monad m, Ord a) => Pipe ServerEvent [a] m () -> Producer ServerEvent m () -> m (Set a)
+extractEntitiesSet extractEntities producer = PP.fold foldListToSet S.empty identity (producer >-> extractEntities)
+
+extractDirections :: Monad m => Producer ServerEvent m () -> m (Set Direction)
+extractDirections producer = PP.fold accDirections S.empty identity (producer >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
+                                                                                    >-> PP.scan toPairs [] identity
+                                                                                    >-> PP.filter mappableMove)
+
 
 loadWorld :: FilePath -> IO World
 loadWorld archiveDir = do
-  serverLogFiles <- listDirectory serverLogDir
+  serverLogFiles <- withServerDir <$> listDirectory serverLogDir
   evtLogFiles <- listDirectory evtLogDir
-  directions <- loadDirs serverLogFiles
-  locations <- loadFromFiles extractLocs serverLogFiles
-  itemsStats <- loadFromFiles extractItemStats serverLogFiles
-  questActions <- loadQuestActs evtLogFiles
-  mobs <- loadFromFiles extractMobs serverLogFiles
+  directions <- extractDirections $ serverLogsPipe serverLogFiles
+  locations <- extractEntitiesSet extractLocs $ serverLogsPipe serverLogFiles
+  itemsStats <- extractEntitiesSet extractItemStats $ serverLogsPipe serverLogFiles
+  questActions <- obstacleActions (evtLogsPipe evtLogFiles >-> PP.filter filterTravelActions)
+  mobs <- extractEntitiesSet extractMobs $ serverLogsPipe serverLogFiles
   let worldMap = buildMap directions
   return $ World worldMap locations directions itemsStats mobs questActions
-    where loadDirs files = F.foldl (\acc item -> loadDirections acc (serverLogDir ++ item)) (return S.empty) files
-          loadQuestActs files = F.foldl (\acc item -> loadQuestActions acc (evtLogDir ++ item)) (return M.empty) files
-          loadFromFiles extractEntities files = F.foldl (\acc file -> S.union <$> acc <*> loadEntitiesFromFile extractEntities (serverLogDir ++ file)) (return S.empty) files
-          serverLogDir = archiveDir ++ "server-input-log/"
+    where serverLogDir = archiveDir ++ "server-input-log/"
           evtLogDir = archiveDir ++ "evt-log/"
+          withServerDir files = (serverLogDir ++) <$> files
 
-showWorldStats :: World -> Producer Event IO ()
-showWorldStats world = yield $ ConsoleOutput worldStats
-  where worldStats = encodeUtf8 $ locationsStats <> mobsStats
+printWorldStats :: World -> Producer Event IO ()
+printWorldStats world = yield $ ConsoleOutput worldStats
+  where worldStats = encodeUtf8 $ locationsStats <> directionsStats <> mobsStats
         locationsStats = (show . length . locations) world <> " locations loaded\n"
+        directionsStats = (show . length . directions) world <> " directions loaded\n"
         mobsStats = (show . length . mobs) world <> " mobs loaded\n"
 
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()

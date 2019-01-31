@@ -4,13 +4,14 @@
 module Logger ( runEvtLogger
               , runServerInputLogger
               , withLog
+              , parseEvtLog
               , printEvents
-              , printQuestEvents
               , printMove
-              , obstacleActions
-              , filterQuestEvents
+              , filterQuestEvent
               , filterTravelActions
+              , obstacleActions
               , scanDoorEvents
+              , parseEventLogProducer
               ) where
 
 import Protolude hiding ((<>), toStrict, Location)
@@ -54,11 +55,21 @@ serverInput = forever $ await >>= \evt -> case evt of (ServerInput input) -> yie
 
 withLog :: String -> ([Event] -> r) -> IO r
 withLog filePath action = withFile filePath ReadMode $ \handle ->
-  action <$> parse . LC8.fromStrict <$> C8.hGetContents handle
-    where parse "" = []
-          parse input = let (Right (rem, _, evt)) = decodeEvent input
-                         in evt : parse rem
-          decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
+  action <$> parseEvtLog . LC8.fromStrict <$> C8.hGetContents handle
+
+parseEvtLog :: LC8.ByteString -> [Event]
+parseEvtLog "" = []
+parseEvtLog input = let (Right (rem, _, evt)) = decodeEvent input
+                     in evt : parseEvtLog rem
+  where decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
+
+parseEventLogProducer :: Monad m => LC8.ByteString -> Producer Event m ()
+parseEventLogProducer input = parse input
+  where parse "" = return ()
+        parse bs = let (Right (rem, _, evt)) = decodeEvent bs
+                    in do yield evt
+                          parse rem
+        decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
 
 printEvents :: [Event] -> IO ()
 printEvents events = mapM_ printEvent events
@@ -73,28 +84,24 @@ printMove moves = mapM_ printM moves
   where printM m = do print (fst m)
                       printEvents (snd m)
 
-printQuestEvents :: [Event] -> IO ()
-printQuestEvents events = printEvents $ filterQuestEvents events
-
-filterQuestEvents :: [Event] -> [Event]
-filterQuestEvents events =  L.filter questEvents events
-  where questEvents e = (not $ isServerInput e)
+filterQuestEvent :: Event -> Bool
+filterQuestEvent e = (not $ isServerInput e)
                         && (not $ isMoveEvent e)
                         && (e /= (ServerEvent PromptEvent))
                         && (not $ emptyUnknownServerEvent e)
                         && (not $ isConsoleOutput e)
-        isServerInput (ServerInput _) = True
-        isServerInput _ = False
+  where emptyUnknownServerEvent (ServerEvent (UnknownServerEvent "")) = True
+        emptyUnknownServerEvent _ = False
         isMoveEvent (ServerEvent (MoveEvent _)) = True
         isMoveEvent _ = False
-        emptyUnknownServerEvent (ServerEvent (UnknownServerEvent "")) = True
-        emptyUnknownServerEvent _ = False
+        isServerInput (ServerInput _) = True
+        isServerInput _ = False
         isConsoleOutput (ConsoleOutput _) = True
         isConsoleOutput _ = False
 
-filterTravelActions :: [Event] -> [Event]
-filterTravelActions events = L.filter questEvents events
-  where questEvents e = (not $ botCommand e) && (not $ simpleMoveCommands e) && (isLocationEvent e || isConsoleOutput e || isUnknownServerEvent e)
+filterTravelActions :: Event -> Bool
+filterTravelActions evt = isQuestEvent evt
+  where isQuestEvent e = (not $ botCommand e) && (not $ simpleMoveCommands e) && (isLocationEvent e || isConsoleOutput e || isUnknownServerEvent e)
         isLocationEvent (ServerEvent (LocationEvent loc _ _)) = True
         isLocationEvent _ = False
         isConsoleOutput (ConsoleInput _) = True
@@ -110,8 +117,8 @@ filterTravelActions events = L.filter questEvents events
                                || e == (ConsoleInput "вн")
                                || e == (ConsoleInput "вв")
 
-obstacleActions :: [Event] -> Map (LocationId, LocationId) [Event]
-obstacleActions questEvents = snd $ F.foldl' toActionMap ((Nothing, []), M.empty) questEvents
+obstacleActions :: Monad m => Producer Event m () -> m (Map (LocationId, LocationId) [Event])
+obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, []), M.empty) identity questEventsProducer
   where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) = ((Just $ loc^.locationId, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
         toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) =
