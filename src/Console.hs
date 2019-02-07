@@ -12,7 +12,7 @@ import qualified Pipes.Prelude as PP
 import qualified Pipes.Prelude.Text as PPT
 import qualified Pipes.Text.IO as PTIO
 import Data.Text
-import qualified Pipes.ByteString as PB
+import qualified Pipes.ByteString as PBS
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.Text.IO as DTIO
 import Control.Concurrent.Async
@@ -27,13 +27,7 @@ consoleInput :: MonadSafe m => Producer Event m ()
 consoleInput = PPT.stdinLn >-> PP.takeWhile(/= "/quit") >-> PP.map ConsoleInput >> liftIO (DTIO.putStr "console input stream finished\n")
 
 consoleOutput :: Consumer Event IO ()
-consoleOutput = filterConsoleOutput >-> PB.stdout >> liftIO (DTIO.putStr "console receive stream finished\n")
-
-runConsole :: Output Event -> Input Event -> IO ()
-runConsole evtBusOutput evtBusInput = do
-  async $ do runEffect $ fromInput evtBusInput >-> filterConsoleOutput >-> PB.stdout >> liftIO (DTIO.putStr "console receive stream finished")
-             performGC
-  runEffect $ PPT.stdinLn >-> PP.takeWhile(/= ":quit") >-> PP.map Event.ConsoleInput >-> toOutput evtBusOutput >> liftIO (DTIO.putStr "console send stream finished")
+consoleOutput = filterConsoleOutput >-> PBS.stdout >> liftIO (DTIO.putStr "console receive stream finished\n")
 
 filterConsoleOutput :: Pipe Event ByteString IO ()
 filterConsoleOutput = forever $ do evt <- await

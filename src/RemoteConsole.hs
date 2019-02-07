@@ -22,8 +22,8 @@ import Debug.Trace
 import Event
 import Console
 
-runRemoteConsole :: Output Event -> Input Event -> IO ()
-runRemoteConsole evtBusOutput evtBusInput = do
+runRemoteConsole :: (Output Event, Input Event) -> IO ()
+runRemoteConsole (evtBusOutput, evtBusInput) = do
   async $ serve (Host "localhost") "4000" $ \(sock, addr) -> do
                                                 async $ runEffect $ fromInput evtBusInput >-> filterConsoleOutput >-> toSocket sock
                                                 runEffect $ parseRemoteInput sock (fromSocket sock (2^15))

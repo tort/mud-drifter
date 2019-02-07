@@ -31,10 +31,11 @@ runDrifter = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drif
                 serverInputLog <- openFile "server-input.log" WriteMode
                 evtLog <- openFile "evt.log" WriteMode
                 toConsoleBox <- spawn $ newest 100
+                toRemoteConsoleBox <- spawn $ newest 100
                 toServerInputLoggerBox <- spawn $ newest 100
                 toEvtLoggerBox <- spawn $ newest 100
                 toDrifterBox <- spawn $ newest 100
-                let commonOutput = (fst toConsoleBox) `mappend` (fst toServerInputLoggerBox) `mappend` (fst toEvtLoggerBox)
+                let commonOutput = (fst toConsoleBox) `mappend` (fst toRemoteConsoleBox) `mappend` (fst toServerInputLoggerBox) `mappend` (fst toEvtLoggerBox)
                     readConsoleInput = runEffect $ runSafeP $ consoleInput `catchP` onException >-> toOutput (fst toDrifterBox)
                     printConsoleOutput = runEffect $ (printWorldStats world >> fromInput (snd toConsoleBox)) >-> consoleOutput
                     runDrifter = runEffect $ runSafeP $ fromInput (snd toDrifterBox) >-> drifter world >-> commandExecutor (fst toDrifterBox) >-> (toOutput commonOutput)
@@ -48,5 +49,6 @@ runDrifter = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drif
                 async $ runEvtLogger (snd toEvtLoggerBox) evtLog
                 async $ printConsoleOutput
                 async $ runDrifter
+                async $ runRemoteConsole (fst toDrifterBox, snd toRemoteConsoleBox)
                 repeatedTimer emitPulseEvery (sDelay 1)
                 readConsoleInput
