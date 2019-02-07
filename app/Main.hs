@@ -36,7 +36,7 @@ runDrifter = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drif
                 toDrifterBox <- spawn $ newest 100
                 let commonOutput = (fst toConsoleBox) `mappend` (fst toServerInputLoggerBox) `mappend` (fst toEvtLoggerBox)
                     readConsoleInput = runEffect $ runSafeP $ consoleInput `catchP` onException >-> toOutput (fst toDrifterBox)
-                    printConsoleOutput = runEffect $ (showWorldStats world >> fromInput (snd toConsoleBox)) >-> consoleOutput
+                    printConsoleOutput = runEffect $ (printWorldStats world >> fromInput (snd toConsoleBox)) >-> consoleOutput
                     runDrifter = runEffect $ runSafeP $ fromInput (snd toDrifterBox) >-> drifter world >-> commandExecutor (fst toDrifterBox) >-> (toOutput commonOutput)
                     emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
                     onException (SomeException e) = liftIO $ do hFlush serverInputLog

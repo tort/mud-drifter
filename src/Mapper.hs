@@ -50,12 +50,12 @@ showPath world path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nod
         toJust (Just left, Just right) = (left, right)
 
 nodePairToDirection :: World -> (LocationId, LocationId) -> Direction
-nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (directions world)
+nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
 
 showPathBy :: World -> Maybe LocationId -> LocationId -> ByteString
 showPathBy world Nothing _ = "current location is unknown\n"
 showPathBy world (Just fromId) toId = if (fromId == toId) then "you are already there!"
-                                                          else showPath world $ findTravelPath fromId toId (worldMap world)
+                                                          else showPath world $ findTravelPath fromId toId (_worldMap world)
 
 findTravelPath :: LocationId -> LocationId -> WorldMap -> [LocationId]
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = LocationId <$> (GA.sp fromId toId worldMap)

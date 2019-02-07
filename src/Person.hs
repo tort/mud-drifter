@@ -56,7 +56,7 @@ travelTask world = waitTravelRequest Nothing
                                                                   (ServerEvent (LocationEvent (Location locId _) _ _)) -> yield evt >> waitTravelRequest (Just locId)
                                                                   (ServerEvent DarknessEvent) -> yield evt >> waitTravelRequest Nothing
                                                                   _ -> yield evt >> waitTravelRequest currLoc
-        travelPath (Just currLoc) locId = travel world $ findTravelPath currLoc locId (worldMap world)
+        travelPath (Just currLoc) locId = travel world $ findTravelPath currLoc locId (_worldMap world)
         travelPath Nothing _ = (return $ Failure "current location is unknown" Nothing)
 
 type Reason = ByteString
@@ -67,7 +67,7 @@ travel world [locId] = return $ Success locId
 travel world path = makeStep
   where chopPath locId path = L.dropWhile (/=locId) path :: [LocationId]
         go (from:to:xs) = do findMoveQuests from to
-                             mapM_ (yield . SendToServer) (trigger <$> (findDirection (directions world) from to))
+                             mapM_ (yield . SendToServer) (trigger <$> (findDirection (_directions world) from to))
         go [_] = return ()
         go [] = return ()
         makeStep = await >>= \evt -> case evt of PulseEvent -> go path >> waitMove
@@ -77,7 +77,7 @@ travel world path = makeStep
                                                                                                      then travel world (chopPath (loc ^. locationId) path)
                                                                                                      else return $ Failure "path lost" (Just (loc ^. locationId))
         handleLocationEvent evt@(ServerEvent (MoveEvent dir)) = let from:to:xs = path
-                                                                 in yield evt >> case ((== dir) <$> trigger <$> (findDirection (directions world) from to))
+                                                                 in yield evt >> case ((== dir) <$> trigger <$> (findDirection (_directions world) from to))
                                                                                       of Nothing -> waitMove
                                                                                          (Just False) -> return $ Failure "path lost" Nothing
                                                                                          (Just True) -> waitMove

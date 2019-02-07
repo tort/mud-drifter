@@ -46,12 +46,14 @@ import Logger
 import System.Directory
 import Control.Lens
 
-data World = World { worldMap :: WorldMap
-                   , locations :: Set Location
-                   , directions :: Set Direction
-                   , items :: Set Item
-                   , mobs :: Set MobRoomDesc
-                   , questActions :: Map (LocationId, LocationId) [Event]
+data World = World { _worldMap :: WorldMap
+                   , _locations :: Set Location
+                   , _directions :: Set Direction
+                   , _itemsDiscovered :: Set ObjectRoomDesc
+                   , _itemStats :: Set ItemStats
+                   , _mobsDiscovered :: Set MobRoomDesc
+                   , _mobStats :: Set Mob
+                   , _questActions :: Map (LocationId, LocationId) [Event]
                    }
 data Direction = Direction { locIdFrom :: LocIdFrom
                            , locIdTo :: LocIdTo
@@ -105,7 +107,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
 
 locsByRegex :: World -> Text -> Set Location
 locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
-  where locs = locations world
+  where locs = _locations world
 
 loadServerEventsFromFile :: FilePath -> Producer ServerEvent IO ()
 loadServerEventsFromFile file = openfile >>= \h -> produce h >> closefile h
@@ -136,7 +138,7 @@ extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs) ->
 extractLocs :: Monad m => Pipe ServerEvent [Location] m ()
 extractLocs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent loc _ _) -> [loc])
 
-extractItemStats :: Monad m => Pipe ServerEvent [Item] m ()
+extractItemStats :: Monad m => Pipe ServerEvent [ItemStats] m ()
 extractItemStats = PP.map $ \case (ItemStatsEvent item) -> [item]
                                   _ -> []
 
@@ -159,7 +161,15 @@ loadWorld archiveDir = do
   questActions <- obstacleActions (evtLogsPipe evtLogFiles >-> PP.filter filterTravelActions)
   mobs <- extractEntitiesSet extractMobs $ serverLogsPipe serverLogFiles
   let worldMap = buildMap directions
-  return $ World worldMap locations directions itemsStats mobs questActions
+   in return $ World { _worldMap = worldMap
+                     , _locations = locations
+                     , _directions = directions
+                     , _itemsDiscovered = S.empty
+                     , _itemStats = itemsStats
+                     , _mobsDiscovered = S.empty
+                     , _mobStats = S.empty
+                     , _questActions = questActions
+                     }
     where serverLogDir = archiveDir ++ "server-input-log/"
           evtLogDir = archiveDir ++ "evt-log/"
           withServerDir files = (serverLogDir ++) <$> files
@@ -167,9 +177,9 @@ loadWorld archiveDir = do
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
   where worldStats = encodeUtf8 $ locationsStats <> directionsStats <> mobsStats
-        locationsStats = (show . length . locations) world <> " locations loaded\n"
-        directionsStats = (show . length . directions) world <> " directions loaded\n"
-        mobsStats = (show . length . mobs) world <> " mobs loaded\n"
+        locationsStats = (show . length . _locations) world <> " locations loaded\n"
+        directionsStats = (show . length . _directions) world <> " directions loaded\n"
+        mobsStats = (show . length . _mobsDiscovered) world <> " mobs loaded\n"
 
 parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
 parseProducer src = do
