@@ -62,9 +62,10 @@ travelTask world = waitTravelRequest Nothing
 type Reason = ByteString
 data TravelResult = Success LocationId | Failure Reason (Maybe LocationId)
 
-travel :: MonadSafe m => World -> [LocationId] -> Pipe Event Event m TravelResult
-travel world [locId] = return $ Success locId
-travel world path = makeStep
+travel :: MonadSafe m => World -> Maybe [LocationId] -> Pipe Event Event m TravelResult
+travel world Nothing = return $ Failure "there is no path there" Nothing
+travel world (Just [locId]) = return $ Success locId
+travel world (Just path) = makeStep
   where chopPath locId path = L.dropWhile (/=locId) path :: [LocationId]
         go (from:to:xs) = do findMoveQuests from to
                              mapM_ (yield . SendToServer) (trigger <$> (findDirection (_directions world) from to))
@@ -74,15 +75,15 @@ travel world path = makeStep
                                                  e -> yield e >> makeStep
         waitMove = await >>= handleLocationEvent
         handleLocationEvent evt@(ServerEvent (LocationEvent loc _ _)) = yield evt >> if L.elem (loc ^. locationId) path
-                                                                                                     then travel world (chopPath (loc ^. locationId) path)
-                                                                                                     else return $ Failure "path lost" (Just (loc ^. locationId))
+                                                                                        then travel world (Just $ chopPath (loc ^. locationId) path)
+                                                                                        else return $ Failure "path lost" (Just (loc ^. locationId))
         handleLocationEvent evt@(ServerEvent (MoveEvent dir)) = let from:to:xs = path
                                                                  in yield evt >> case ((== dir) <$> trigger <$> (findDirection (_directions world) from to))
                                                                                       of Nothing -> waitMove
                                                                                          (Just False) -> return $ Failure "path lost" Nothing
                                                                                          (Just True) -> waitMove
         handleLocationEvent evt@(ServerEvent CantGoDir) = yield evt >> (return $ Failure "path lost" Nothing)
-        handleLocationEvent evt@(ServerEvent DarknessEvent) = yield evt >> travel world (L.tail path)
+        handleLocationEvent evt@(ServerEvent DarknessEvent) = yield evt >> travel world (Just (L.tail path))
         handleLocationEvent PulseEvent = waitMove
         handleLocationEvent e = yield e >> waitMove
 

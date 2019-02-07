@@ -109,6 +109,7 @@ data UserCommand = ServerCommand Text
                | GoTo Text
                | GoToLocId LocationId
                | Equip
+               | WhereMob Text
                deriving (Eq, Show, Generic)
 
 data ServerEvent = CodepagePrompt

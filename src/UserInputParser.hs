@@ -26,6 +26,7 @@ userInputParser = nonCommandInputParser
                   <|> try findPathToLocParser
                   <|> try goToParser
                   <|> try equipCmdParser
+                  <|> try whereMobCmdParser
                   <|> unknownCommandParser
 
 nonCommandInputParser :: Parser UserCommand
@@ -85,6 +86,14 @@ findPathToLocIdParser = do
   case (FindPathToLocId . LocationId) <$> (readMaybe to) of
     Nothing -> unexpected " /path format\n"
     Just cmd -> return cmd
+
+whereMobCmdParser :: Parser UserCommand
+whereMobCmdParser = do
+  string "/где моб"
+  many1 space
+  subName <- many1 anyChar
+  eof
+  return $ WhereMob $ stripEnd $ pack subName
 
 findPathToLocParser :: Parser UserCommand
 findPathToLocParser = do

@@ -51,7 +51,7 @@ data World = World { _worldMap :: WorldMap
                    , _directions :: Set Direction
                    , _itemsDiscovered :: Set ObjectRoomDesc
                    , _itemStats :: Set ItemStats
-                   , _mobsDiscovered :: Set MobRoomDesc
+                   , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
                    , _mobStats :: Set Mob
                    , _questActions :: Map (LocationId, LocationId) [Event]
                    }
@@ -91,7 +91,7 @@ foldListToSet = F.foldl (flip S.insert)
 toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
 toPairs acc event
   | length acc < 3 = event : acc
-  | otherwise = event : take 2 acc
+  | otherwise = event : L.take 2 acc
 
 mappableMove :: [ServerEvent] -> Bool
 mappableMove [LocationEvent{}, MoveEvent _, LocationEvent{}] = True
@@ -129,6 +129,15 @@ extractItems = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ objects _
 extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
 extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs) -> mobs)
 
+extractMobsDiscovered :: Monad m => Producer ServerEvent m () -> m (Map MobRoomDesc (Map LocationId Int))
+extractMobsDiscovered producer = PP.fold toMap M.empty identity (producer >-> PP.filter isLocationEvent)
+  where toMap acc (LocationEvent (Location locId _) _ mobs) = F.foldl (insertMob locId) acc mobs
+        insertMob locId acc mob = M.alter (updateCount locId) mob acc
+        updateCount locId Nothing = Just (M.insert locId 1 M.empty)
+        updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
+        plusOne Nothing = Just 1
+        plusOne (Just x) = Just (x + 1)
+
 extractLocs :: Monad m => Pipe ServerEvent [Location] m ()
 extractLocs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent loc _ _) -> [loc])
 
@@ -155,7 +164,7 @@ loadWorld archiveDir = do
   locations <- (extractEntitiesSet extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- (extractEntitiesSet extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   items <- (extractEntitiesSet extractItems . parseServerEvents . loadLogs) serverLogFiles
-  mobs <- (extractEntitiesSet extractMobs . parseServerEvents . loadLogs) serverLogFiles
+  mobs <- (extractMobsDiscovered . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   let worldMap = buildMap directions
    in return World { _worldMap = worldMap

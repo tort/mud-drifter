@@ -41,6 +41,7 @@ spec = describe "UserInputParser" $ do
   it "parse /go locId command" $ (parse userInputParser "" "/го 34546") `shouldBe` (Right $ GoToLocId $ LocationId 34546)
   it "parse /go regex command" $ (parse userInputParser "" "/го В избе") `shouldBe` (Right $ GoTo "В избе")
   it "parse empty user input" $ (parse userInputParser "" "") `shouldBe` (Right $ ServerCommand "")
+  it "parse /where mob command" $ (parse userInputParser "" "/где моб муха") `shouldBe` (Right $ WhereMob "муха")
   it "return error in case of misspelled command" $ isLeft $ parse userInputParser "" "/unknowncommand blabla"
 
 mkFindPathFromTo :: Int -> Int -> UserCommand

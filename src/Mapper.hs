@@ -5,7 +5,7 @@ module Mapper ( mapper
               , findTravelPath
               ) where
 
-import Protolude hiding ((<>), Location, runStateT, head, intercalate)
+import Protolude hiding (Location, runStateT, head, intercalate)
 import Data.ByteString.Char8()
 import ServerInputParser
 import Pipes
@@ -20,7 +20,9 @@ import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Graph.Inductive.Query.SP as GA
 import Pipes.Safe
-import Control.Lens hiding (snoc)
+import Control.Lens hiding (snoc, (<>))
+import Data.Foldable
+import qualified Data.Map.Strict as M
 
 mapper :: MonadSafe m => World -> Pipe Event Event m ()
 mapper world = let mapperWithPosition currLoc = do evt <- await
@@ -28,6 +30,7 @@ mapper world = let mapperWithPosition currLoc = do evt <- await
                                                                _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
                                                                                            (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
                                                                                            (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
+                                                                                           (UserCommand (WhereMob subRoomName)) -> ConsoleOutput $ showMobAreal subRoomName world
                                                                                            (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
                                                                                                                                 in ConsoleOutput $ case S.toList $ matchingLocs of
                                                                                                                                   [] -> "no matching locations found"
@@ -39,9 +42,10 @@ mapper world = let mapperWithPosition currLoc = do evt <- await
 
 type Path = [LocationId]
 
-showPath :: World -> Path -> ByteString
-showPath world [] = "path is empty\n"
-showPath world path = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nodePairToDirection world) <$> toJust <$> nodePairs)
+showPath :: World -> Maybe Path -> ByteString
+showPath world Nothing = "where is no path there\n"
+showPath world (Just []) = "path is empty\n"
+showPath world (Just path) = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nodePairToDirection world) <$> toJust <$> nodePairs)
   where joinToOneMsg = intercalate "\n"
         showDirection = trigger
         addRet txt = snoc txt '\n'
@@ -57,8 +61,19 @@ showPathBy world Nothing _ = "current location is unknown\n"
 showPathBy world (Just fromId) toId = if (fromId == toId) then "you are already there!"
                                                           else showPath world $ findTravelPath fromId toId (_worldMap world)
 
-findTravelPath :: LocationId -> LocationId -> WorldMap -> [LocationId]
-findTravelPath (LocationId fromId) (LocationId toId) worldMap = LocationId <$> (GA.sp fromId toId worldMap)
+findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe [LocationId]
+findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (GA.sp fromId toId worldMap)
+
+showMobAreal :: Text -> World -> ByteString
+showMobAreal subName world = renderr . limit . filterMobs $ mobs
+  where mobs = _mobsDiscovered world
+        renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
+        renderMob (MobRoomDesc desc) locToCountMap = desc <> "\n" <> (renderLocs locToCountMap)
+        renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap) :: Text
+        showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
+        limit = M.take 5
+        filterMobs = M.filterWithKey (\mobRoomDesc a -> filterMob mobRoomDesc)
+        filterMob (MobRoomDesc desc) = isInfixOf subName (toLower desc)
 
 {-showFindPathResponse :: World -> Maybe Int -> Event -> ByteString
 showFindPathResponse world currLoc userInput =
