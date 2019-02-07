@@ -24,6 +24,7 @@ module Event ( Event(..)
              , RoomDir(..)
              , MobRoomDesc(..)
              , ObjectRoomDesc(..)
+             , isServerEvent
              , isMoveEvent
              , isConsoleInput
              , isUserCommand
@@ -141,7 +142,7 @@ type ArmorVal = Int
 type ItemName = Text
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
-newtype ObjectRoomDesc = ObjectRoomDesc Text deriving (Eq, Show, Generic)
+newtype ObjectRoomDesc = ObjectRoomDesc Text deriving (Eq, Ord, Show, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 

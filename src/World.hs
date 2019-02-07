@@ -109,28 +109,22 @@ locsByRegex :: World -> Text -> Set Location
 locsByRegex world regex = S.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
   where locs = _locations world
 
-loadServerEventsFromFile :: FilePath -> Producer ServerEvent IO ()
-loadServerEventsFromFile file = openfile >>= \h -> produce h >> closefile h
+loadServerEventsFromFile :: FilePath -> Producer ByteString IO ()
+loadServerEventsFromFile file = openfile >>= \h -> PBS.fromHandle h >> closefile h
   where openfile = lift $ openFile file ReadMode
         closefile h = lift $ hClose h
-        produce h = parseProducer (PBS.fromHandle h) >-> PP.filter isJust
-                                                     >-> PP.map fromJust
-                                                     >-> PP.filter isRight
-                                                     >-> PP.map unwrapRight
 
-loadEventsFromFile :: FilePath -> Producer Event IO ()
-loadEventsFromFile file = openfile >>= \h -> produce h >> closefile h
-  where openfile = lift $ openFile file ReadMode
-        closefile h = lift $ hClose h
-        produce h = do str <- lift $ PBS.toLazyM $ PBS.fromHandle h
-                       parseEventLogProducer str
+parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
+parseServerEvents pbs = parseProducer pbs >-> PP.filter isServerEvent >-> PP.map _serverEvent
 
+binEvtLogParser :: Producer ByteString IO () -> Producer Event IO ()
+binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.filter filterTravelActions
 
-serverLogsPipe :: [FilePath] -> Producer ServerEvent IO ()
-serverLogsPipe files = F.foldl (\evtPipe file -> evtPipe >> loadServerEventsFromFile file) (return ()) files
+loadLogs :: [FilePath] -> Producer ByteString IO ()
+loadLogs files = F.foldl (\evtPipe file -> evtPipe >> loadServerEventsFromFile file) (return ()) files
 
-evtLogsPipe :: [FilePath] -> Producer Event IO ()
-evtLogsPipe files = F.foldl (\evtPipe file -> evtPipe >> loadEventsFromFile file) (return ()) files
+extractItems :: Monad m => Pipe ServerEvent [ObjectRoomDesc] m ()
+extractItems = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ objects _) -> objects)
 
 extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
 extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs) -> mobs)
@@ -150,45 +144,47 @@ extractDirections producer = PP.fold accDirections S.empty identity (producer >-
                                                                                     >-> PP.scan toPairs [] identity
                                                                                     >-> PP.filter mappableMove)
 
+listFilesIn :: FilePath -> IO [FilePath]
+listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir
 
 loadWorld :: FilePath -> IO World
 loadWorld archiveDir = do
-  serverLogFiles <- withServerDir <$> listDirectory serverLogDir
-  evtLogFiles <- listDirectory evtLogDir
-  directions <- extractDirections $ serverLogsPipe serverLogFiles
-  locations <- extractEntitiesSet extractLocs $ serverLogsPipe serverLogFiles
-  itemsStats <- extractEntitiesSet extractItemStats $ serverLogsPipe serverLogFiles
-  questActions <- obstacleActions (evtLogsPipe evtLogFiles >-> PP.filter filterTravelActions)
-  mobs <- extractEntitiesSet extractMobs $ serverLogsPipe serverLogFiles
+  serverLogFiles <- listFilesIn serverLogDir
+  evtLogFiles <- listFilesIn evtLogDir
+  directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
+  locations <- (extractEntitiesSet extractLocs . parseServerEvents . loadLogs) serverLogFiles
+  itemsStats <- (extractEntitiesSet extractItemStats . parseServerEvents . loadLogs) serverLogFiles
+  items <- (extractEntitiesSet extractItems . parseServerEvents . loadLogs) serverLogFiles
+  mobs <- (extractEntitiesSet extractMobs . parseServerEvents . loadLogs) serverLogFiles
+  questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   let worldMap = buildMap directions
-   in return $ World { _worldMap = worldMap
+   in return World { _worldMap = worldMap
                      , _locations = locations
                      , _directions = directions
-                     , _itemsDiscovered = S.empty
+                     , _itemsDiscovered = items
                      , _itemStats = itemsStats
-                     , _mobsDiscovered = S.empty
+                     , _mobsDiscovered = mobs
                      , _mobStats = S.empty
                      , _questActions = questActions
                      }
     where serverLogDir = archiveDir ++ "server-input-log/"
           evtLogDir = archiveDir ++ "evt-log/"
-          withServerDir files = (serverLogDir ++) <$> files
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
-  where worldStats = encodeUtf8 $ locationsStats <> directionsStats <> mobsStats
-        locationsStats = (show . length . _locations) world <> " locations loaded\n"
-        directionsStats = (show . length . _directions) world <> " directions loaded\n"
-        mobsStats = (show . length . _mobsDiscovered) world <> " mobs loaded\n"
+  where worldStats = encodeUtf8 $ locationsStats <> directionsStats <> items <> itemsStats <> mobs
+        locationsStats = (show . length . _locations) world <> " локаций найдено\n"
+        directionsStats = (show . length . _directions) world <> " переходов между локациями\n"
+        items = (show . length . _itemsDiscovered) world <> " предметов найдено\n"
+        itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
+        mobs = (show . length . _mobsDiscovered) world <> " мобов найдено\n"
 
-parseProducer :: Producer ByteString IO () -> Producer (Maybe (Either ParsingError ServerEvent)) IO ()
-parseProducer src = do
-    (result, partial) <- liftIO $ runStateT (PA.parse serverInputParser) src
-    continue result partial
-      where continue result@(Just (Right _)) partial = do yield result
-                                                          parseProducer partial
-            continue (Just (Left (ParsingError ctxts err))) _ = liftIO $ C8.putStr $ "error: " <> C8.pack err <> C8.pack (L.concat ctxts) <> "\n"
-            continue Nothing _ = liftIO $ C8.putStr "parsed entire stream\n"
+parseProducer :: Producer ByteString IO () -> Producer Event IO ()
+parseProducer src = do (result, partial) <- liftIO $ runStateT (PA.parse serverInputParser) src
+                       continue result partial
+                         where continue result@(Just (Right evt)) partial = yield (ServerEvent evt) >> parseProducer partial
+                               continue (Just (Left (ParsingError ctxts err))) _ = yield $ ConsoleOutput $ "error: " <> C8.pack err <> C8.pack (L.concat ctxts) <> "\n"
+                               continue Nothing _ = yield $ ConsoleOutput "parsed entire stream\n"
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges

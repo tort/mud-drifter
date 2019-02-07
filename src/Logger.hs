@@ -3,8 +3,6 @@
 
 module Logger ( runEvtLogger
               , runServerInputLogger
-              , withLog
-              , parseEvtLog
               , printEvents
               , printMove
               , filterQuestEvent
@@ -53,22 +51,11 @@ serverInput :: Pipe Event C8.ByteString IO ()
 serverInput = forever $ await >>= \evt -> case evt of (ServerInput input) -> yield input
                                                       _ -> return ()
 
-withLog :: String -> ([Event] -> r) -> IO r
-withLog filePath action = withFile filePath ReadMode $ \handle ->
-  action <$> parseEvtLog . LC8.fromStrict <$> C8.hGetContents handle
-
-parseEvtLog :: LC8.ByteString -> [Event]
-parseEvtLog "" = []
-parseEvtLog input = let (Right (rem, _, evt)) = decodeEvent input
-                     in evt : parseEvtLog rem
-  where decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
-
 parseEventLogProducer :: Monad m => LC8.ByteString -> Producer Event m ()
 parseEventLogProducer input = parse input
   where parse "" = return ()
-        parse bs = let (Right (rem, _, evt)) = decodeEvent bs
-                    in do yield evt
-                          parse rem
+        parse bs = case decodeEvent bs of (Right (rem, _, evt)) -> yield evt >> parse rem
+                                          (Left (_, _, err)) -> yield $ ConsoleOutput $ "error: " <> C8.pack err <> "\n"
         decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
 
 printEvents :: [Event] -> IO ()
