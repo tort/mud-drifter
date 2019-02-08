@@ -70,6 +70,7 @@ executables:
                   , timers
                   , pipes
                   , pipes-safe
+                  , directory
                   , pipes-concurrency ]
 
 tests:

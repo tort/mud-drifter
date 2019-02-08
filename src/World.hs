@@ -157,7 +157,7 @@ listFilesIn :: FilePath -> IO [FilePath]
 listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir
 
 loadWorld :: FilePath -> IO World
-loadWorld archiveDir = do
+loadWorld currentDir = do
   serverLogFiles <- listFilesIn serverLogDir
   evtLogFiles <- listFilesIn evtLogDir
   directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
@@ -176,8 +176,9 @@ loadWorld archiveDir = do
                      , _mobStats = S.empty
                      , _questActions = questActions
                      }
-    where serverLogDir = archiveDir ++ "server-input-log/"
-          evtLogDir = archiveDir ++ "evt-log/"
+    where serverLogDir = archiveDir ++ "/server-input-log/"
+          evtLogDir = archiveDir ++ "/evt-log/"
+          archiveDir = currentDir ++ "/archive"
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats

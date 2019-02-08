@@ -19,6 +19,7 @@ import Person
 import Pipes.Safe
 import qualified Pipes.Concurrent as PC
 import System.IO
+import System.Directory
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted
 import World
@@ -27,7 +28,8 @@ main :: IO ()
 main = runDrifter
 
 runDrifter :: IO ()
-runDrifter = do world <- liftIO $ loadWorld "/Users/anesterov/workspace/mud-drifter/archive/"
+runDrifter = do currentDir <- getCurrentDirectory
+                world <- liftIO $ loadWorld currentDir
                 serverInputLog <- openFile "server-input.log" WriteMode
                 evtLog <- openFile "evt.log" WriteMode
                 toConsoleBox <- spawn $ newest 100
