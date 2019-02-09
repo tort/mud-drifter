@@ -27,6 +27,7 @@ userInputParser = nonCommandInputParser
                   <|> try goToParser
                   <|> try equipCmdParser
                   <|> try whereMobCmdParser
+                  <|> try whereObjectCmdParser
                   <|> unknownCommandParser
 
 nonCommandInputParser :: Parser UserCommand
@@ -94,6 +95,14 @@ whereMobCmdParser = do
   subName <- many1 anyChar
   eof
   return $ WhereMob $ stripEnd $ pack subName
+
+whereObjectCmdParser :: Parser UserCommand
+whereObjectCmdParser = do
+  string "/где предмет"
+  many1 space
+  subName <- many1 anyChar
+  eof
+  return $ WhereObject $ stripEnd $ pack subName
 
 findPathToLocParser :: Parser UserCommand
 findPathToLocParser = do

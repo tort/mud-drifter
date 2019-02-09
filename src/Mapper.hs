@@ -30,7 +30,8 @@ mapper world = let mapperWithPosition currLoc = do evt <- await
                                                                _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
                                                                                            (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
                                                                                            (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
-                                                                                           (UserCommand (WhereMob subRoomName)) -> ConsoleOutput $ showMobAreal subRoomName world
+                                                                                           (UserCommand (WhereMob subName)) -> ConsoleOutput $ showAreal subName _mobsDiscovered world
+                                                                                           (UserCommand (WhereObject subName)) -> ConsoleOutput $ showAreal subName _itemsDiscovered world
                                                                                            (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
                                                                                                                                 in ConsoleOutput $ case S.toList $ matchingLocs of
                                                                                                                                   [] -> "no matching locations found"
@@ -64,16 +65,15 @@ showPathBy world (Just fromId) toId = if (fromId == toId) then "you are already 
 findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe [LocationId]
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (GA.sp fromId toId worldMap)
 
-showMobAreal :: Text -> World -> ByteString
-showMobAreal subName world = renderr . limit . filterMobs $ mobs
-  where mobs = _mobsDiscovered world
-        renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
-        renderMob (MobRoomDesc desc) locToCountMap = desc <> "\n" <> (renderLocs locToCountMap)
-        renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap) :: Text
+showAreal :: ShowVal a => Text -> (World -> Map a (Map LocationId Int)) -> World -> ByteString
+showAreal subName getter world = renderr . limit . filterMobs $ getter world
+  where renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
+        renderMob entity locToCountMap = showVal entity <> "\n" <> (renderLocs locToCountMap)
+        renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
         limit = M.take 5
         filterMobs = M.filterWithKey (\mobRoomDesc a -> filterMob mobRoomDesc)
-        filterMob (MobRoomDesc desc) = isInfixOf subName (toLower desc)
+        filterMob entity = isInfixOf subName (toLower $ showVal entity)
 
 {-showFindPathResponse :: World -> Maybe Int -> Event -> ByteString
 showFindPathResponse world currLoc userInput =

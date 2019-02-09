@@ -24,6 +24,7 @@ module Event ( Event(..)
              , RoomDir(..)
              , MobRoomDesc(..)
              , ObjectRoomDesc(..)
+             , ShowVal(..)
              , isServerEvent
              , isMoveEvent
              , isConsoleInput
@@ -36,7 +37,6 @@ module Event ( Event(..)
              , objects
              , mobs
              , serverEvent
-             , showVal
              ) where
 
 import qualified Prelude as P
@@ -110,6 +110,7 @@ data UserCommand = ServerCommand Text
                | GoToLocId LocationId
                | Equip
                | WhereMob Text
+               | WhereObject Text
                deriving (Eq, Show, Generic)
 
 data ServerEvent = CodepagePrompt
@@ -143,7 +144,7 @@ type ArmorVal = Int
 type ItemName = Text
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
-newtype ObjectRoomDesc = ObjectRoomDesc Text deriving (Eq, Ord, Show, Generic)
+newtype ObjectRoomDesc = ObjectRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 

@@ -49,7 +49,7 @@ import Control.Lens
 data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
                    , _directions :: Set Direction
-                   , _itemsDiscovered :: Set ObjectRoomDesc
+                   , _itemsDiscovered :: Map ObjectRoomDesc (Map LocationId Int)
                    , _itemStats :: Set ItemStats
                    , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
                    , _mobStats :: Set Mob
@@ -129,9 +129,9 @@ extractItems = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ objects _
 extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
 extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs) -> mobs)
 
-extractMobsDiscovered :: Monad m => Producer ServerEvent m () -> m (Map MobRoomDesc (Map LocationId Int))
-extractMobsDiscovered producer = PP.fold toMap M.empty identity (producer >-> PP.filter isLocationEvent)
-  where toMap acc (LocationEvent (Location locId _) _ mobs) = F.foldl (insertMob locId) acc mobs
+extractDiscovered :: (Monad m, Ord a) => (ServerEvent -> [a]) -> Producer ServerEvent m () -> m (Map a (Map LocationId Int))
+extractDiscovered entityExtractor producer = PP.fold toMap M.empty identity (producer >-> PP.filter isLocationEvent)
+  where toMap acc evt@(LocationEvent (Location locId _) _ mobs) = F.foldl (insertMob locId) acc (entityExtractor evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
         updateCount locId Nothing = Just (M.insert locId 1 M.empty)
         updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
@@ -163,8 +163,8 @@ loadWorld currentDir = do
   directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
   locations <- (extractEntitiesSet extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- (extractEntitiesSet extractItemStats . parseServerEvents . loadLogs) serverLogFiles
-  items <- (extractEntitiesSet extractItems . parseServerEvents . loadLogs) serverLogFiles
-  mobs <- (extractMobsDiscovered . parseServerEvents . loadLogs) serverLogFiles
+  items <- ((extractDiscovered _objects) . parseServerEvents . loadLogs) serverLogFiles
+  mobs <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   let worldMap = buildMap directions
    in return World { _worldMap = worldMap
