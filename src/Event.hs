@@ -131,6 +131,7 @@ data ServerEvent = CodepagePrompt
                  | CantGoDir
                  | DarkInDirection RoomDir
                  | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
+                 | ItemAccusative Text
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)

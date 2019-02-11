@@ -16,7 +16,7 @@ import Data.Attoparsec.ByteString
 import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
-import qualified Data.ByteString.Char8 as DBC8
+import qualified Data.ByteString.Char8 as C8
 import Event
 
 data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
@@ -39,6 +39,7 @@ serverInputParser = codepagePrompt
                     <|> cantGoDir
                     <|> darkInDirection
                     <|> glanceDir
+                    <|> pickUp
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -181,7 +182,7 @@ locationParser = do
                            string "0;37m"
                            C.endOfLine
 
-roomObjects :: DBC8.ByteString -> A.Parser [Text]
+roomObjects :: C8.ByteString -> A.Parser [Text]
 roomObjects colorCode = do cs
                            string colorCode
                            objectsStr <- takeTill (== telnetEscape)
@@ -232,6 +233,14 @@ ansiColor = do cs
 cantGoDir :: A.Parser ServerEvent
 cantGoDir = do string $ encodeUtf8 "Вы не сможете туда пройти..."
                return CantGoDir
+
+pickUp :: A.Parser ServerEvent
+pickUp = do string $ encodeUtf8 "Вы подняли"
+            C.space
+            itemAccusative <- manyTill C.anyChar (A.word8 _period)
+            A.word8 _period
+            C.endOfLine
+            return $ ItemAccusative $ T.pack itemAccusative
 
 darkInDirection :: A.Parser ServerEvent
 darkInDirection = do cs >> "0;33m"
@@ -474,7 +483,7 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
 
 itemNameParser :: A.Parser Text
 itemNameParser = do itemName <- manyTill C.anyChar (string $ encodeUtf8 "  ")
-                    return (decodeUtf8 $ DBC8.pack itemName)
+                    return (decodeUtf8 $ C8.pack itemName)
 
 itemStateParser :: A.Parser ItemState
 itemStateParser = stateParser "<великолепно>" Excellent
