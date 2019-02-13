@@ -17,7 +17,6 @@ import World
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph hiding (Path)
 import qualified Data.List as L
-import qualified Data.Set as S
 import qualified Data.Graph.Inductive.Query.SP as GA
 import Pipes.Safe
 import Control.Lens hiding (snoc, (<>))
@@ -33,7 +32,7 @@ mapper world = let mapperWithPosition currLoc = do evt <- await
                                                                                            (UserCommand (WhereMob subName)) -> ConsoleOutput $ showAreal subName _mobsDiscovered world
                                                                                            (UserCommand (WhereObject subName)) -> ConsoleOutput $ showAreal subName _itemsDiscovered world
                                                                                            (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
-                                                                                                                                in ConsoleOutput $ case S.toList $ matchingLocs of
+                                                                                                                                in ConsoleOutput $ case matchingLocs of
                                                                                                                                   [] -> "no matching locations found"
                                                                                                                                   d:[] -> showPathBy world currLoc (d^.locationId)
                                                                                                                                   _ -> showLocs matchingLocs
@@ -55,7 +54,7 @@ showPath world (Just path) = (encodeUtf8 . addRet . joinToOneMsg) (showDirection
         toJust (Just left, Just right) = (left, right)
 
 nodePairToDirection :: World -> (LocationId, LocationId) -> Direction
-nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
+nodePairToDirection world (from, to) = L.head $ L.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
 
 showPathBy :: World -> Maybe LocationId -> LocationId -> ByteString
 showPathBy world Nothing _ = "current location is unknown\n"

@@ -35,7 +35,6 @@ import System.Directory
 import UserInputParser
 import qualified Data.Graph.Inductive.Query.SP as GA
 import Data.String
-import qualified Data.Set as S
 import Event
 import Control.Concurrent.Timer
 import qualified Data.Map.Strict as M
@@ -92,7 +91,7 @@ findMoveQuests from to = action $ L.lookup (from, to) travelActions
   where action (Just quest) = quest
         action _ = return ()
 
-findDirection :: Set Direction -> LocationId -> LocationId -> Maybe Direction
+findDirection :: [Direction] -> LocationId -> LocationId -> Maybe Direction
 findDirection directions from to = L.find (\d -> locIdFrom d == from && locIdTo d == to) directions
 
 loadConfigProperty :: Text -> IO (Maybe Text)

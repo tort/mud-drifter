@@ -31,6 +31,7 @@ module Event ( Event(..)
              , isUserCommand
              , isShopListItemEvent
              , isLocationEvent
+             , isItemStatsEvent
              , location
              , locationId
              , locationTitle
@@ -152,8 +153,8 @@ data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 newtype MobName = MobName Text deriving (Eq, Show)
 newtype MobRefAlias = MobRefAlias Text deriving (Eq, Show)
 data Mob = Mob { _roomDesc :: MobRoomDesc
-               , _name :: Maybe MobName
-               , _handleAlias :: Maybe MobRefAlias
+               , _name :: MobName
+               , _handleAlias :: MobRefAlias
                , _stats :: Maybe MobStats
                } deriving (Show)
 
