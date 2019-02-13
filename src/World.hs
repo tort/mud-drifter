@@ -13,30 +13,24 @@ module World ( locsByRegex
              , WorldMap
              ) where
 
-import Protolude hiding ((<>), Location, runStateT, Down)
+import Protolude hiding (Location, runStateT, Down)
 import qualified Data.ByteString.Char8 as C8
 import ServerInputParser
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph
-import qualified Data.Graph.Inductive.Graph as DG
 import System.IO (hClose)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as PP
 import Pipes.Attoparsec
-import qualified Pipes.Attoparsec as PA
 import qualified Pipes.ByteString as PBS
-import Data.Text()
 import qualified Data.Text as T
 import Data.Text.Encoding()
 import Data.Either
 import Data.Maybe
-import Control.Applicative()
-import Control.Arrow
-import Data.Monoid
 import Debug.Trace
 import Event hiding (mobs)
-import Data.Map.Strict hiding (insert)
+import Data.Map.Strict()
 import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import Logger
@@ -52,10 +46,12 @@ data World = World { _worldMap :: WorldMap
                    , _mobStats :: [Mob]
                    , _questActions :: Map (LocationId, LocationId) [Event]
                    }
+
 data Direction = Direction { locIdFrom :: LocIdFrom
                            , locIdTo :: LocIdTo
                            , trigger :: Trigger
                            } deriving (Eq, Show, Ord)
+
 type LocIdFrom = LocationId
 type LocIdTo = LocationId
 type Trigger = Text
@@ -85,7 +81,7 @@ oppositeDir "восток" = "запад"
 toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
 toPairs acc event
   | length acc < 3 = event : acc
-  | otherwise = event : L.take 2 acc
+  | otherwise = event : take 2 acc
 
 mappableMove :: [ServerEvent] -> Bool
 mappableMove [LocationEvent{}, MoveEvent _, LocationEvent{}] = True
@@ -100,7 +96,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
         addRet txt = T.snoc txt '\n'
 
 locsByRegex :: World -> Text -> [Location]
-locsByRegex world regex = L.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
+locsByRegex world regex = filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
   where locs = _locations world
 
 loadServerEventsFromFile :: FilePath -> Producer ByteString IO ()
@@ -180,15 +176,15 @@ printWorldStats world = yield $ ConsoleOutput worldStats
         mobs = (show . length . _mobsDiscovered) world <> " мобов найдено\n"
 
 parseProducer :: Producer ByteString IO () -> Producer Event IO ()
-parseProducer src = do (result, partial) <- liftIO $ runStateT (PA.parse serverInputParser) src
+parseProducer src = do (result, partial) <- liftIO $ runStateT (parse serverInputParser) src
                        continue result partial
                          where continue result@(Just (Right evt)) partial = yield (ServerEvent evt) >> parseProducer partial
-                               continue (Just (Left (ParsingError ctxts err))) _ = yield $ ConsoleOutput $ "error: " <> C8.pack err <> C8.pack (L.concat ctxts) <> "\n"
+                               continue (Just (Left (ParsingError ctxts err))) _ = yield $ ConsoleOutput $ "error: " <> C8.pack err <> C8.pack (concat ctxts) <> "\n"
                                continue Nothing _ = yield $ ConsoleOutput "parsed entire stream\n"
 
 buildMap :: [Direction] -> Gr () Int
 buildMap directions = mkGraph nodes edges
-  where edges = F.concat $ (\d -> [aheadEdge d, reverseEdge d]) <$> directions
+  where edges = concat $ (\d -> [aheadEdge d, reverseEdge d]) <$> directions
         nodes = (\n -> (n, ())) <$> F.foldl (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
         aheadEdge (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId, 1)
         reverseEdge (Direction (LocationId fromId) (LocationId toId) _) = (toId, fromId, 1)

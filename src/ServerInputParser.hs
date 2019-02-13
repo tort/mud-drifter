@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module ServerInputParser ( serverInputParser
@@ -5,12 +6,12 @@ module ServerInputParser ( serverInputParser
                          , RemoteConsoleEvent(..)
                          ) where
 
+import Protolude hiding (Location, Down, Up, Dual, option)
 import Control.Applicative
 import Control.Monad
 import Pipes.Attoparsec
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Char8 as C
-import Data.Text
 import qualified Data.Text as T
 import Data.Attoparsec.ByteString
 import Data.Text.Encoding
@@ -156,7 +157,7 @@ locationParser = do
     mobs <- roomObjects "1;31m"
     clearColors
     let location = Location { _locationId = LocationId locId
-                            , _locationTitle = LocationTitle $ strip $ decodeUtf8 locationName
+                            , _locationTitle = LocationTitle $ T.strip $ decodeUtf8 locationName
                             }
      in return $ LocationEvent location (ObjectRoomDesc <$> objects) (MobRoomDesc <$> mobs)
     where schoolEntrance = do cs

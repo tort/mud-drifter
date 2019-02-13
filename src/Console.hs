@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Console ( consoleInput
@@ -5,6 +6,7 @@ module Console ( consoleInput
                , filterConsoleOutput
                ) where
 
+import Protolude
 import Event
 import Pipes
 import Pipes.Concurrent
@@ -18,7 +20,7 @@ import qualified Data.Text.IO as DTIO
 import Control.Concurrent.Async
 import Text.Parsec
 import qualified Text.Parsec as Parsec
-import Data.ByteString.Char8 as DBC8 hiding (isInfixOf, isPrefixOf, snoc, putStrLn)
+import qualified Data.ByteString.Char8 as DBC8
 import UserInputParser
 import Control.Monad (forever)
 import Pipes.Safe

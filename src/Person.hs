@@ -6,43 +6,19 @@ module Person ( person
               , loadWorld
               ) where
 
-import Protolude hiding ((<>), Location, runStateT)
-import qualified Pipes.Prelude as PP
-import Data.Monoid
-import Data.Char
-import Data.List
-import qualified Data.List as L
+import Protolude hiding (Location)
 import Pipes
-import Pipes.Concurrent
-import qualified Pipes.Concurrent as PC
-import System.IO (hClose, openFile, Handle, withFile, IOMode(..))
-import Data.ByteString.Char8 as DBC8 hiding (snoc)
-import ServerInputParser
-import Data.Attoparsec.ByteString as A
-import Pipes.Attoparsec
-import qualified Pipes.Attoparsec as PA
-import Pipes.Parse
 import Pipes.Safe
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
 import Mapper
-import Data.Graph.Inductive.Tree
-import Data.Graph.Inductive.Graph
-import qualified Data.Graph.Inductive.Graph as G
-import qualified Pipes.ByteString as PBS
-import qualified Data.Foldable as F
-import System.Directory
-import UserInputParser
-import qualified Data.Graph.Inductive.Query.SP as GA
-import Data.String
 import Event
-import Control.Concurrent.Timer
-import qualified Data.Map.Strict as M
-import Logger
 import World
 import Data.Maybe
 import Control.Lens
 import Data.Text.Encoding
+import qualified Data.Text as T
+import qualified Data.List as L
 
 person :: MonadSafe m => World -> Pipe Event Event m ()
 person world = travelTask world
@@ -65,7 +41,7 @@ travel :: MonadSafe m => World -> Maybe [LocationId] -> Pipe Event Event m Trave
 travel world Nothing = return $ Failure "there is no path there" Nothing
 travel world (Just [locId]) = return $ Success locId
 travel world (Just path) = makeStep
-  where chopPath locId path = L.dropWhile (/=locId) path :: [LocationId]
+  where chopPath locId path = dropWhile (/=locId) path :: [LocationId]
         go (from:to:xs) = do findMoveQuests from to
                              mapM_ (yield . SendToServer) (trigger <$> (findDirection (_directions world) from to))
         go [_] = return ()
@@ -73,7 +49,7 @@ travel world (Just path) = makeStep
         makeStep = await >>= \evt -> case evt of PulseEvent -> go path >> waitMove
                                                  e -> yield e >> makeStep
         waitMove = await >>= handleLocationEvent
-        handleLocationEvent evt@(ServerEvent (LocationEvent loc _ _)) = yield evt >> if L.elem (loc ^. locationId) path
+        handleLocationEvent evt@(ServerEvent (LocationEvent loc _ _)) = yield evt >> if elem (loc ^. locationId) path
                                                                                         then travel world (Just $ chopPath (loc ^. locationId) path)
                                                                                         else return $ Failure "path lost" (Just (loc ^. locationId))
         handleLocationEvent evt@(ServerEvent (MoveEvent dir)) = let from:to:xs = path
@@ -92,14 +68,14 @@ findMoveQuests from to = action $ L.lookup (from, to) travelActions
         action _ = return ()
 
 findDirection :: [Direction] -> LocationId -> LocationId -> Maybe Direction
-findDirection directions from to = L.find (\d -> locIdFrom d == from && locIdTo d == to) directions
+findDirection directions from to = find (\d -> locIdFrom d == from && locIdTo d == to) directions
 
 loadConfigProperty :: Text -> IO (Maybe Text)
-loadConfigProperty propertyName = do conf <- DC.load [Required personCfgFileName]
+loadConfigProperty propertyName = do conf <- DC.load [Required $ T.unpack personCfgFileName]
                                      propertyValue <- DC.lookup conf propertyName
                                      return propertyValue
 
-personCfgFileName :: String
+personCfgFileName :: Text
 personCfgFileName = "person.cfg"
 
 travelActions :: MonadSafe m => [((LocationId, LocationId), (Pipe Event Event m ()))]
@@ -119,7 +95,7 @@ payYoungGipsy = undefined
 setupLadder :: MonadSafe m => Pipe Event Event m ()
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
   where waitLocEvt = await >>= checkObjectRoomDescs
-        checkObjectRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if L.elem (ObjectRoomDesc "На полу лежит лестница.") objs
+        checkObjectRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ObjectRoomDesc "На полу лежит лестница.") objs
                                                                     then yield $ SendToServer "приставить лестница"
                                                                     else return ()
         checkObjectRoomDescs _ = waitLocEvt

@@ -1,15 +1,16 @@
-
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module UserInputParser (userInputParser
                        , parseUserInput
                        ) where
 
+import Protolude hiding (many, optional, try, (<|>))
 import Text.Parsec
 import Text.Parsec.Text
 import Text.Parsec.Error
-import Data.Text
 import Text.Read
+import Data.Text
 import Event
 
 parseUserInput :: Text -> Either ParseError UserCommand

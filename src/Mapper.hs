@@ -11,17 +11,17 @@ import ServerInputParser
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as PP
-import Data.Text
+import qualified Data.Text as T
 import Event
 import World
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph hiding (Path)
-import qualified Data.List as L
 import qualified Data.Graph.Inductive.Query.SP as GA
 import Pipes.Safe
 import Control.Lens hiding (snoc, (<>))
 import Data.Foldable
 import qualified Data.Map.Strict as M
+import qualified Data.List as L
 
 mapper :: MonadSafe m => World -> Pipe Event Event m ()
 mapper world = let mapperWithPosition currLoc = do evt <- await
@@ -46,15 +46,15 @@ showPath :: World -> Maybe Path -> ByteString
 showPath world Nothing = "where is no path there\n"
 showPath world (Just []) = "path is empty\n"
 showPath world (Just path) = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nodePairToDirection world) <$> toJust <$> nodePairs)
-  where joinToOneMsg = intercalate "\n"
+  where joinToOneMsg = T.intercalate "\n"
         showDirection = trigger
-        addRet txt = snoc txt '\n'
-        nodePairs = filterDirs $ L.scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
-        filterDirs = L.filter (\pair -> isJust (fst pair) && isJust (snd pair))
+        addRet txt = T.snoc txt '\n'
+        nodePairs = filterDirs $ scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
+        filterDirs = filter (\pair -> isJust (fst pair) && isJust (snd pair))
         toJust (Just left, Just right) = (left, right)
 
 nodePairToDirection :: World -> (LocationId, LocationId) -> Direction
-nodePairToDirection world (from, to) = L.head $ L.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
+nodePairToDirection world (from, to) = L.head $ filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
 
 showPathBy :: World -> Maybe LocationId -> LocationId -> ByteString
 showPathBy world Nothing _ = "current location is unknown\n"
@@ -72,7 +72,7 @@ showAreal subName getter world = renderr . limit . filterMobs $ getter world
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
         limit = M.take 5
         filterMobs = M.filterWithKey (\mobRoomDesc a -> filterMob mobRoomDesc)
-        filterMob entity = isInfixOf subName (toLower $ showVal entity)
+        filterMob entity = T.isInfixOf subName (T.toLower $ showVal entity)
 
 {-showFindPathResponse :: World -> Maybe Int -> Event -> ByteString
 showFindPathResponse world currLoc userInput =
