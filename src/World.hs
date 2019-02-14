@@ -8,6 +8,9 @@ module World ( locsByRegex
              , loadWorld
              , parseProducer
              , printWorldStats
+             , listFilesIn
+             , loadLogs
+             , parseServerEvents
              , World(..)
              , Direction(..)
              , WorldMap
@@ -40,7 +43,7 @@ import Control.Lens
 data World = World { _worldMap :: WorldMap
                    , _locations :: [Location]
                    , _directions :: [Direction]
-                   , _itemsDiscovered :: Map ObjectRoomDesc (Map LocationId Int)
+                   , _itemsDiscovered :: Map ItemRoomDesc (Map LocationId Int)
                    , _itemStats :: [ItemStats]
                    , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
                    , _mobStats :: [Mob]
@@ -78,11 +81,6 @@ oppositeDir "юг" = "север"
 oppositeDir "запад" = "восток"
 oppositeDir "восток" = "запад"
 
-toPairs :: [ServerEvent] -> ServerEvent -> [ServerEvent]
-toPairs acc event
-  | length acc < 3 = event : acc
-  | otherwise = event : take 2 acc
-
 mappableMove :: [ServerEvent] -> Bool
 mappableMove [LocationEvent{}, MoveEvent _, LocationEvent{}] = True
 mappableMove _ = False
@@ -113,7 +111,7 @@ binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.fi
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl (\evtPipe file -> evtPipe >> loadServerEventsFromFile file) (return ()) files
 
-extractItems :: Monad m => Pipe ServerEvent [ObjectRoomDesc] m ()
+extractItems :: Monad m => Pipe ServerEvent [ItemRoomDesc] m ()
 extractItems = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ objects _) -> objects)
 
 extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
@@ -136,8 +134,11 @@ extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter isItemStats
 
 extractDirections :: Monad m => Producer ServerEvent m () -> m [Direction]
 extractDirections producer = PP.fold accDirections [] identity (producer >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
-                                                                                    >-> PP.scan toPairs [] identity
+                                                                                    >-> PP.scan toTriples [] identity
                                                                                     >-> PP.filter mappableMove)
+                                                                                      where toTriples acc event
+                                                                                              | length acc < 3 = event : acc
+                                                                                              | otherwise = event : take 2 acc
 
 listFilesIn :: FilePath -> IO [FilePath]
 listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir

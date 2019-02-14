@@ -23,7 +23,9 @@ module Event ( Event(..)
              , WeaponClass(..)
              , RoomDir(..)
              , MobRoomDesc(..)
-             , ObjectRoomDesc(..)
+             , ItemRoomDesc(..)
+             , ItemAccusative(..)
+             , ItemNominative(..)
              , ShowVal(..)
              , isServerEvent
              , isMoveEvent
@@ -32,6 +34,7 @@ module Event ( Event(..)
              , isShopListItemEvent
              , isLocationEvent
              , isItemStatsEvent
+             , isPromptEvent
              , location
              , locationId
              , locationTitle
@@ -82,8 +85,10 @@ instance Binary ItemState
 instance Binary ItemStats
 instance Binary WeaponClass
 instance Binary RoomDir
-instance Binary ObjectRoomDesc
+instance Binary ItemRoomDesc
 instance Binary MobRoomDesc
+instance Binary ItemAccusative
+instance Binary ItemNominative
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -119,42 +124,43 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [ObjectRoomDesc], _mobs :: [MobRoomDesc] }
+                 | LocationEvent { _location :: Location, _objects :: [ItemRoomDesc], _mobs :: [MobRoomDesc] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
                  | ListEquipmentEvent [(EquippedItem, ItemState)]
-                 | ListInventoryEvent [(Text, ItemState)]
+                 | ListInventoryEvent [(ItemNominative, ItemState)]
                  | ItemStatsEvent ItemStats
-                 | ShopListItemEvent ItemName Price
+                 | ShopListItemEvent ItemNominative Price
                  | PromptEvent
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
                  | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
-                 | ItemAccusative Text
+                 | PickItemEvent ItemAccusative
                  deriving (Eq, Show, Generic)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
-data EquippedItem = EquippedItem Slot Text deriving (Eq, Show, Generic)
+data EquippedItem = EquippedItem Slot ItemNominative deriving (Eq, Show, Generic)
 data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic)
-data ItemStats = Weapon Text WeaponClass [Slot] AvgDamage | Armor Text [Slot] AC ArmorVal deriving (Eq, Show, Generic, Ord)
+data ItemStats = Weapon ItemNominative WeaponClass [Slot] AvgDamage | Armor ItemNominative [Slot] AC ArmorVal deriving (Eq, Show, Generic, Ord)
 type AvgDamage = Double
 data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other deriving (Eq, Show, Generic, Ord)
 type AC = Int
 type ArmorVal = Int
-type ItemName = Text
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
-newtype ObjectRoomDesc = ObjectRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
+newtype ItemRoomDesc = ItemRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
+newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic)
+newtype ItemNominative = ItemNominative Text deriving (Eq, Show, Generic, Ord)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
-newtype MobName = MobName Text deriving (Eq, Show)
-newtype MobRefAlias = MobRefAlias Text deriving (Eq, Show)
+newtype MobNominative = MobNominative Text deriving (Eq, Show)
+newtype MobAlias = MobAlias Text deriving (Eq, Show)
 data Mob = Mob { _roomDesc :: MobRoomDesc
-               , _name :: MobName
-               , _handleAlias :: MobRefAlias
+               , _name :: MobNominative
+               , _handleAlias :: MobAlias
                , _stats :: Maybe MobStats
                } deriving (Show)
 
@@ -170,8 +176,8 @@ instance ShowVal LocationId where
 instance ShowVal LocationTitle where
   showVal (LocationTitle text) = text
 
-instance ShowVal ObjectRoomDesc where
-  showVal (ObjectRoomDesc text) = text
+instance ShowVal ItemRoomDesc where
+  showVal (ItemRoomDesc text) = text
 
 instance ShowVal MobRoomDesc where
   showVal (MobRoomDesc text) = text

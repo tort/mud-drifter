@@ -94,11 +94,11 @@ payYoungGipsy = undefined
 
 setupLadder :: MonadSafe m => Pipe Event Event m ()
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
-  where waitLocEvt = await >>= checkObjectRoomDescs
-        checkObjectRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ObjectRoomDesc "На полу лежит лестница.") objs
+  where waitLocEvt = await >>= checkItemRoomDescs
+        checkItemRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ItemRoomDesc "На полу лежит лестница.") objs
                                                                     then yield $ SendToServer "приставить лестница"
                                                                     else return ()
-        checkObjectRoomDescs _ = waitLocEvt
+        checkItemRoomDescs _ = waitLocEvt
 
 openDoor :: MonadSafe m => RoomDir -> Pipe Event Event m ()
 openDoor dir = (yield $ SendToServer ("смотреть " <> show dir)) >> waitObstacleEvent

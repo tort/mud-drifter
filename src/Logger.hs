@@ -4,7 +4,7 @@
 module Logger ( runEvtLogger
               , runServerInputLogger
               , printEvents
-              , printMove
+              --, printMove
               , filterQuestEvent
               , filterTravelActions
               , obstacleActions
@@ -58,18 +58,18 @@ parseEventLogProducer input = parse input
                                           (Left (_, _, err)) -> yield $ ConsoleOutput $ "error: " <> C8.pack err <> "\n"
         decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
 
-printEvents :: [Event] -> IO ()
-printEvents events = mapM_ printEvent events
+printEvents :: Consumer Event IO ()
+printEvents = forever $ await >>= lift . printEvent
   where printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerEvent: " <> txt <> "\ESC[0m")
         printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
         printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
         printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
         printEvent event = print event
 
-printMove :: [LocToLocActions] -> IO ()
+{-printMove :: [LocToLocActions] -> IO ()
 printMove moves = mapM_ printM moves
   where printM m = do print (fst m)
-                      printEvents (snd m)
+                      printEvents (snd m)-}
 
 filterQuestEvent :: Event -> Bool
 filterQuestEvent e = (not $ isServerInput e)
