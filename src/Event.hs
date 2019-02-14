@@ -150,10 +150,7 @@ type AC = Int
 type ArmorVal = Int
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
-newtype ItemRoomDesc = ItemRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
-newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic)
-newtype ItemNominative = ItemNominative Text deriving (Eq, Show, Generic, Ord)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
 
 newtype MobNominative = MobNominative Text deriving (Eq, Show)
@@ -164,8 +161,21 @@ data Mob = Mob { _roomDesc :: MobRoomDesc
                , _stats :: Maybe MobStats
                } deriving (Show)
 
+newtype ItemRoomDesc = ItemRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
+newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic)
+newtype ItemNominative = ItemNominative Text deriving (Eq, Show, Generic, Ord)
+newtype ItemAlias = ItemAlias Text deriving (Eq, Show)
+data Item = Item { _roomDesc :: ItemRoomDesc
+                 , _nominative :: ItemNominative
+                 , _accusative :: ItemAccusative
+                 , _alias :: ItemAlias
+                 , _stats :: ItemStats
+                 } deriving (Show)
+
+makeFieldsNoPrefix ''Item
+
 instance Eq Mob where
-  left == right = _roomDesc left == _roomDesc right
+  left == right = left^.roomDesc == right^.roomDesc
 
 class ShowVal a where
   showVal :: a -> Text
@@ -203,3 +213,4 @@ makeFieldsNoPrefix ''WeaponClass
 makeFieldsNoPrefix ''RoomDir
 makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
+makeFieldsNoPrefix ''Mob
