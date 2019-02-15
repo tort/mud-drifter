@@ -130,6 +130,7 @@ discoverItems :: (Monad m) => Producer ServerEvent m () -> m (Map ServerEvent (M
 discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEvtWithLoc Nothing)
   where filterMapDiscoveries = forever $ await >>= \case
               evt@(LocationEvent (Location locId _) items _) -> yield evt >> mapM_ (yield . ItemInTheRoom) items
+              evt@(LootCorpse item mob) -> yield evt
               _ ->  return ()
         scanEvtWithLoc maybeLocId = await >>= \case (LocationEvent (Location locId _) _ _) -> scanEvtWithLoc (Just locId)
                                                     evt -> case maybeLocId of Nothing -> scanEvtWithLoc Nothing

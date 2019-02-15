@@ -26,6 +26,8 @@ module Event ( Event(..)
              , ItemRoomDesc(..)
              , ItemAccusative(..)
              , ItemNominative(..)
+             , MobGenitive(..)
+             , ItemGenitive(..)
              , ShowVal(..)
              , isServerEvent
              , isMoveEvent
@@ -89,6 +91,8 @@ instance Binary ItemRoomDesc
 instance Binary MobRoomDesc
 instance Binary ItemAccusative
 instance Binary ItemNominative
+instance Binary MobGenitive
+instance Binary ItemGenitive
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -139,6 +143,11 @@ data ServerEvent = CodepagePrompt
                  | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
                  | PickItemEvent ItemAccusative
                  | ItemInTheRoom ItemRoomDesc
+                 | LootCorpse ItemAccusative MobGenitive
+                 | TakeFromContainer ItemAccusative ItemGenitive
+                 | TakeInRightHand ItemAccusative
+                 | TakeInLeftHand ItemAccusative
+                 | TakeInBothHands ItemAccusative
                  deriving (Eq, Show, Generic, Ord)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -156,6 +165,7 @@ data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Or
 
 newtype MobNominative = MobNominative Text deriving (Eq, Show)
 newtype MobAlias = MobAlias Text deriving (Eq, Show)
+newtype MobGenitive = MobGenitive Text deriving (Eq, Show, Ord, Generic)
 data Mob = Mob { _roomDesc :: MobRoomDesc
                , _name :: MobNominative
                , _handleAlias :: MobAlias
@@ -165,6 +175,7 @@ data Mob = Mob { _roomDesc :: MobRoomDesc
 newtype ItemRoomDesc = ItemRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic, Ord)
 newtype ItemNominative = ItemNominative Text deriving (Eq, Show, Generic, Ord)
+newtype ItemGenitive = ItemGenitive Text deriving (Eq, Show, Generic, Ord)
 newtype ItemAlias = ItemAlias Text deriving (Eq, Show)
 data Item = Item { _roomDesc :: ItemRoomDesc
                  , _nominative :: ItemNominative
@@ -192,6 +203,12 @@ instance ShowVal ItemRoomDesc where
 
 instance ShowVal MobRoomDesc where
   showVal (MobRoomDesc text) = text
+
+instance ShowVal MobGenitive where
+  showVal (MobGenitive text) = text
+
+instance ShowVal ItemAccusative where
+  showVal (ItemAccusative text) = text
 
 derive makeIs ''UserCommand
 derive makeIs ''Location

@@ -41,6 +41,7 @@ serverInputParser = codepagePrompt
                     <|> darkInDirection
                     <|> glanceDir
                     <|> pickUp
+                    <|> lootCorpse
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -242,6 +243,35 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
             A.word8 _period
             C.endOfLine
             return $ PickItemEvent $ ItemAccusative $ decodeUtf8 itemAccusative
+
+lootCorpse :: A.Parser ServerEvent
+lootCorpse = do string $ encodeUtf8 "Вы взяли"
+                C.space
+                itemAndSource <- takeTill (== _period)
+                A.word8 _period
+                C.endOfLine
+                parseRestOfLine $ decodeUtf8 itemAndSource
+                  where parseRestOfLine txt
+                          | T.isInfixOf fromCorpse txt = parseLoot txt
+                          | T.isInfixOf from txt = parseTakeFromContainer txt
+                          | T.isSuffixOf toLeftHand txt = parseHoldLeft txt
+                          | T.isSuffixOf toRightHand txt = parseHoldRight txt
+                          | T.isSuffixOf toBothHands txt = parseHoldDual txt
+                        parseLoot txt = let [item, mob] = T.splitOn fromCorpse txt
+                                         in return $ LootCorpse (ItemAccusative item) (MobGenitive mob)
+                        parseTakeFromContainer txt = let [item, container] = T.splitOn from txt
+                                                  in return $ TakeFromContainer (ItemAccusative item) (ItemGenitive container)
+                        parseHoldLeft txt = let (Just item) = T.stripSuffix toLeftHand txt
+                                             in return $ TakeInLeftHand (ItemAccusative item)
+                        parseHoldRight txt = let (Just item) = T.stripSuffix toRightHand txt
+                                              in return $ TakeInRightHand (ItemAccusative item)
+                        parseHoldDual txt = let (Just item) = T.stripSuffix toBothHands txt
+                                             in return $ TakeInBothHands (ItemAccusative item)
+                        fromCorpse = " из трупа "
+                        from = " из "
+                        toLeftHand = "в левую руку"
+                        toRightHand = "в правую руку"
+                        toBothHands = "в обе руки"
 
 darkInDirection :: A.Parser ServerEvent
 darkInDirection = do cs >> "0;33m"
