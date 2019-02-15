@@ -74,8 +74,8 @@ showItemAreal subName items = (renderr . limit . filterMobs) items
         filterMobs = M.filterWithKey (\mobRoomDesc a -> filterMob mobRoomDesc)
         filterMob (ItemInTheRoom itemDesc) = T.isInfixOf subName (T.toLower $ showVal itemDesc)
         filterMob (LootCorpse itemDesc mob) = T.isInfixOf subName (T.toLower $ showVal itemDesc)
-        renderEvent (ItemInTheRoom itemDesc) = "На земле: " <> showVal itemDesc
-        renderEvent (LootCorpse itemDesc mob) = "В трупе " <> showVal mob <> ": " <> showVal itemDesc
+        renderEvent (ItemInTheRoom itemDesc) = "Подобрано с земли: " <> showVal itemDesc
+        renderEvent (LootCorpse itemDesc mob) = "Снято с трупа " <> showVal mob <> ": " <> showVal itemDesc
 
 showAreal :: ShowVal a => Text -> (World -> Map a (Map LocationId Int)) -> World -> ByteString
 showAreal subName getter world = renderr . limit . filterMobs $ getter world
