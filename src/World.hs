@@ -43,7 +43,7 @@ import Control.Lens
 data World = World { _worldMap :: WorldMap
                    , _locations :: [Location]
                    , _directions :: [Direction]
-                   , _itemsDiscovered :: Map ItemRoomDesc (Map LocationId Int)
+                   , _itemsDiscovered :: Map ServerEvent (Map LocationId Int)
                    , _itemStats :: [ItemStats]
                    , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
                    , _mobStats :: [Mob]
@@ -126,6 +126,23 @@ extractDiscovered entityExtractor producer = PP.fold toMap M.empty identity (pro
         plusOne Nothing = Just 1
         plusOne (Just x) = Just (x + 1)
 
+discoverItems :: (Monad m) => Producer ServerEvent m () -> m (Map ServerEvent (Map LocationId Int))
+discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEvtWithLoc Nothing)
+  where filterMapDiscoveries = forever $ await >>= \case
+              evt@(LocationEvent (Location locId _) items _) -> yield evt >> mapM_ (yield . ItemInTheRoom) items
+              _ ->  return ()
+        scanEvtWithLoc maybeLocId = await >>= \case (LocationEvent (Location locId _) _ _) -> scanEvtWithLoc (Just locId)
+                                                    evt -> case maybeLocId of Nothing -> scanEvtWithLoc Nothing
+                                                                              (Just locId) -> yield (evt, locId) >> scanEvtWithLoc maybeLocId
+        foldToMap = PP.fold toMap M.empty identity
+        toMap acc (evt, locId) = insertMob locId acc evt
+        insertMob locId acc mob = M.alter (updateCount locId) mob acc
+        updateCount locId Nothing = Just (M.insert locId 1 M.empty)
+        updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
+        plusOne Nothing = Just 1
+        plusOne (Just x) = Just (x + 1)
+
+
 extractLocs :: Monad m => Producer ServerEvent m () -> Producer Location m ()
 extractLocs serverEvtProducer = serverEvtProducer >-> PP.filter isLocationEvent >-> PP.map (\(LocationEvent loc _ _) -> loc)
 
@@ -150,14 +167,14 @@ loadWorld currentDir = do
   directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
   locations <- PP.toListM $ (extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
-  items <- ((extractDiscovered _objects) . parseServerEvents . loadLogs) serverLogFiles
+  itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
   mobs <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   let worldMap = buildMap directions
    in return World { _worldMap = worldMap
                      , _locations = locations
                      , _directions = directions
-                     , _itemsDiscovered = items
+                     , _itemsDiscovered = itemsOnMap
                      , _itemStats = itemsStats
                      , _mobsDiscovered = mobs
                      , _mobStats = []

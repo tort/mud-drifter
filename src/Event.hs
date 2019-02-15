@@ -138,11 +138,12 @@ data ServerEvent = CodepagePrompt
                  | DarkInDirection RoomDir
                  | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
                  | PickItemEvent ItemAccusative
-                 deriving (Eq, Show, Generic)
+                 | ItemInTheRoom ItemRoomDesc
+                 deriving (Eq, Show, Generic, Ord)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
-data EquippedItem = EquippedItem Slot ItemNominative deriving (Eq, Show, Generic)
-data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic)
+data EquippedItem = EquippedItem Slot ItemNominative deriving (Eq, Show, Generic, Ord)
+data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic, Ord)
 data ItemStats = Weapon ItemNominative WeaponClass [Slot] AvgDamage | Armor ItemNominative [Slot] AC ArmorVal deriving (Eq, Show, Generic, Ord)
 type AvgDamage = Double
 data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other deriving (Eq, Show, Generic, Ord)
@@ -151,7 +152,7 @@ type ArmorVal = Int
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
-data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic)
+data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord)
 
 newtype MobNominative = MobNominative Text deriving (Eq, Show)
 newtype MobAlias = MobAlias Text deriving (Eq, Show)
@@ -162,7 +163,7 @@ data Mob = Mob { _roomDesc :: MobRoomDesc
                } deriving (Show)
 
 newtype ItemRoomDesc = ItemRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
-newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic)
+newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic, Ord)
 newtype ItemNominative = ItemNominative Text deriving (Eq, Show, Generic, Ord)
 newtype ItemAlias = ItemAlias Text deriving (Eq, Show)
 data Item = Item { _roomDesc :: ItemRoomDesc
