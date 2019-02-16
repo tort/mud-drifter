@@ -1,8 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module ServerInputParser ( serverInputParser
                          , remoteInputParser
+                         , lootCorpse
+                         , readWord
+                         , readWordsTill
                          , RemoteConsoleEvent(..)
                          ) where
 
@@ -42,6 +46,11 @@ serverInputParser = codepagePrompt
                     <|> glanceDir
                     <|> pickUp
                     <|> lootCorpse
+                    <|> takeItemFromContainer
+                    <|> takeInLeftHand
+                    <|> takeInRightHand
+                    <|> takeInBothHands
+                    <|> mobGaveYouItem
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -55,7 +64,7 @@ codepagePrompt = do
     C.endOfLine
     C.endOfLine
     string "Using keytable"
-    _ <- manyTill (skip (const True)) (string "Select one : ")
+    _ <- manyTill' (skip (const True)) (string "Select one : ")
     return CodepagePrompt
 
 iacWill :: A.Parser Word8
@@ -99,7 +108,7 @@ loginPrompt = do
     string "    "
     C.endOfLine
     string " --------"
-    _ <- manyTill (skip (const True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
+    _ <- manyTill' (skip (const True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
     return LoginPrompt
 
 passwordPrompt :: A.Parser ServerEvent
@@ -120,7 +129,7 @@ postWelcome :: A.Parser ServerEvent
 postWelcome = do
     C.endOfLine
     string $ encodeUtf8 "  Добро пожаловать на землю Киевскую, богатую историей"
-    _ <- manyTill (skip (const True)) dblCrnl
+    _ <- manyTill' (skip (const True)) dblCrnl
     return PostWelcome
 
 glanceDir :: A.Parser ServerEvent
@@ -244,34 +253,68 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
             C.endOfLine
             return $ PickItemEvent $ ItemAccusative $ decodeUtf8 itemAccusative
 
+readWord :: A.Parser ByteString
+readWord = do wrd <- takeTill (\x -> x == _period || x == _space || x == _cr || x == 10)
+              w8 <- A.anyWord8
+              if w8 == _space then return wrd
+                              else fail "space expected"
+
+readWordsTill :: Text -> A.Parser ByteString
+readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
+                       return $ C8.unwords wrds
+
+mobGaveYouItem :: A.Parser ServerEvent
+mobGaveYouItem = do mob <- readWordsTill "дал"
+                    many' $ C.char 'а' <|> C.char 'о' <|> C.char 'и'
+                    C.space
+                    string $ encodeUtf8 "вам"
+                    C.space
+                    item <- takeTill (== _period)
+                    A.word8 _period
+                    C.endOfLine
+                    return $ MobGaveYouItem (MobNominative $ decodeUtf8 mob) (ItemAccusative $ decodeUtf8 item)
+
 lootCorpse :: A.Parser ServerEvent
 lootCorpse = do string $ encodeUtf8 "Вы взяли"
                 C.space
-                itemAndSource <- takeTill (== _period)
+                item <- readWordsTill "из трупа "
+                source <- takeTill (== _period)
                 A.word8 _period
                 C.endOfLine
-                parseRestOfLine $ decodeUtf8 itemAndSource
-                  where parseRestOfLine txt
-                          | T.isInfixOf fromCorpse txt = parseLoot txt
-                          | T.isInfixOf from txt = parseTakeFromContainer txt
-                          | T.isSuffixOf toLeftHand txt = parseHoldLeft txt
-                          | T.isSuffixOf toRightHand txt = parseHoldRight txt
-                          | T.isSuffixOf toBothHands txt = parseHoldDual txt
-                        parseLoot txt = let [item, mob] = T.splitOn fromCorpse txt
-                                         in return $ LootCorpse (ItemAccusative item) (MobGenitive mob)
-                        parseTakeFromContainer txt = let [item, container] = T.splitOn from txt
-                                                  in return $ TakeFromContainer (ItemAccusative item) (ItemGenitive container)
-                        parseHoldLeft txt = let (Just item) = T.stripSuffix toLeftHand txt
-                                             in return $ TakeInLeftHand (ItemAccusative item)
-                        parseHoldRight txt = let (Just item) = T.stripSuffix toRightHand txt
-                                              in return $ TakeInRightHand (ItemAccusative item)
-                        parseHoldDual txt = let (Just item) = T.stripSuffix toBothHands txt
-                                             in return $ TakeInBothHands (ItemAccusative item)
-                        fromCorpse = " из трупа "
-                        from = " из "
-                        toLeftHand = "в левую руку"
-                        toRightHand = "в правую руку"
-                        toBothHands = "в обе руки"
+                return $ LootCorpse (ItemAccusative $ decodeUtf8 item) (MobGenitive $ decodeUtf8 source)
+
+takeItemFromContainer :: A.Parser ServerEvent
+takeItemFromContainer = do string $ encodeUtf8 "Вы взяли"
+                           C.space
+                           item <- readWordsTill "из "
+                           container <- takeTill (== _period)
+                           A.word8 _period
+                           C.endOfLine
+                           return $ TakeFromContainer (ItemAccusative $ decodeUtf8 item) (ItemGenitive $ decodeUtf8 container)
+
+takeInLeftHand :: A.Parser ServerEvent
+takeInLeftHand = do string $ encodeUtf8 "Вы взяли"
+                    C.space
+                    item <- readWordsTill "в левую руку"
+                    A.word8 _period
+                    C.endOfLine
+                    return  $ TakeInLeftHand (ItemAccusative $ decodeUtf8 item)
+
+takeInRightHand :: A.Parser ServerEvent
+takeInRightHand = do string $ encodeUtf8 "Вы взяли"
+                     C.space
+                     item <- readWordsTill "в правую руку"
+                     A.word8 _period
+                     C.endOfLine
+                     return  $ TakeInRightHand (ItemAccusative $ decodeUtf8 item)
+
+takeInBothHands :: A.Parser ServerEvent
+takeInBothHands = do string $ encodeUtf8 "Вы взяли"
+                     C.space
+                     item <- readWordsTill "в обе руки"
+                     A.word8 _period
+                     C.endOfLine
+                     return  $ TakeInBothHands (ItemAccusative $ decodeUtf8 item)
 
 darkInDirection :: A.Parser ServerEvent
 darkInDirection = do cs >> "0;33m"
@@ -513,7 +556,7 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                               return (EquippedItem bp (ItemNominative itemName), state)
 
 itemNameParser :: A.Parser Text
-itemNameParser = do itemName <- manyTill C.anyChar (string $ encodeUtf8 "  ")
+itemNameParser = do itemName <- manyTill' C.anyChar (string $ encodeUtf8 "  ")
                     return (decodeUtf8 $ C8.pack itemName)
 
 itemStateParser :: A.Parser ItemState

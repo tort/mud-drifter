@@ -28,6 +28,7 @@ module Event ( Event(..)
              , ItemNominative(..)
              , MobGenitive(..)
              , ItemGenitive(..)
+             , MobNominative(..)
              , ShowVal(..)
              , isServerEvent
              , isMoveEvent
@@ -93,6 +94,7 @@ instance Binary ItemAccusative
 instance Binary ItemNominative
 instance Binary MobGenitive
 instance Binary ItemGenitive
+instance Binary MobNominative
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -148,6 +150,7 @@ data ServerEvent = CodepagePrompt
                  | TakeInRightHand ItemAccusative
                  | TakeInLeftHand ItemAccusative
                  | TakeInBothHands ItemAccusative
+                 | MobGaveYouItem MobNominative ItemAccusative
                  deriving (Eq, Show, Generic, Ord)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
@@ -163,7 +166,7 @@ data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord)
 
-newtype MobNominative = MobNominative Text deriving (Eq, Show)
+newtype MobNominative = MobNominative Text deriving (Eq, Show, Ord, Generic)
 newtype MobAlias = MobAlias Text deriving (Eq, Show)
 newtype MobGenitive = MobGenitive Text deriving (Eq, Show, Ord, Generic)
 data Mob = Mob { _roomDesc :: MobRoomDesc
@@ -207,8 +210,14 @@ instance ShowVal MobRoomDesc where
 instance ShowVal MobGenitive where
   showVal (MobGenitive text) = text
 
+instance ShowVal MobNominative where
+  showVal (MobNominative text) = text
+
 instance ShowVal ItemAccusative where
   showVal (ItemAccusative text) = text
+
+instance ShowVal ItemGenitive where
+  showVal (ItemGenitive text) = text
 
 derive makeIs ''UserCommand
 derive makeIs ''Location

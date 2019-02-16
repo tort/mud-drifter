@@ -43,7 +43,7 @@ import Control.Lens
 data World = World { _worldMap :: WorldMap
                    , _locations :: [Location]
                    , _directions :: [Direction]
-                   , _itemsDiscovered :: Map ServerEvent (Map LocationId Int)
+                   , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
                    , _itemStats :: [ItemStats]
                    , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
                    , _mobStats :: [Mob]
@@ -130,7 +130,9 @@ discoverItems :: (Monad m) => Producer ServerEvent m () -> m (Map ServerEvent (M
 discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEvtWithLoc Nothing)
   where filterMapDiscoveries = forever $ await >>= \case
               evt@(LocationEvent (Location locId _) items _) -> yield evt >> mapM_ (yield . ItemInTheRoom) items
-              evt@(LootCorpse item mob) -> yield evt
+              evt@LootCorpse{} -> yield evt
+              evt@TakeFromContainer{} -> yield evt
+              evt@MobGaveYouItem{} -> yield evt
               _ ->  return ()
         scanEvtWithLoc maybeLocId = await >>= \case (LocationEvent (Location locId _) _ _) -> scanEvtWithLoc (Just locId)
                                                     evt -> case maybeLocId of Nothing -> scanEvtWithLoc Nothing
@@ -175,7 +177,7 @@ loadWorld currentDir = do
    in return World { _worldMap = worldMap
                      , _locations = locations
                      , _directions = directions
-                     , _itemsDiscovered = itemsOnMap
+                     , _itemsOnMap = itemsOnMap
                      , _itemStats = itemsStats
                      , _mobsDiscovered = mobs
                      , _mobStats = []
@@ -190,7 +192,7 @@ printWorldStats world = yield $ ConsoleOutput worldStats
   where worldStats = encodeUtf8 $ locationsStats <> directionsStats <> items <> itemsStats <> mobs
         locationsStats = (show . length . _locations) world <> " локаций найдено\n"
         directionsStats = (show . length . _directions) world <> " переходов между локациями\n"
-        items = (show . length . _itemsDiscovered) world <> " предметов найдено\n"
+        items = (show . length . _itemsOnMap) world <> " предметов найдено\n"
         itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
         mobs = (show . length . _mobsDiscovered) world <> " мобов найдено\n"
 
