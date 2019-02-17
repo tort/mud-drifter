@@ -67,7 +67,7 @@ findMoveQuests from to = action $ L.lookup (from, to) travelActions
   where action (Just quest) = quest
         action _ = return ()
 
-findDirection :: [Direction] -> LocationId -> LocationId -> Maybe Direction
+findDirection :: Set Direction -> LocationId -> LocationId -> Maybe Direction
 findDirection directions from to = find (\d -> locIdFrom d == from && locIdTo d == to) directions
 
 loadConfigProperty :: Text -> IO (Maybe Text)

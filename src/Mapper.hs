@@ -20,6 +20,7 @@ import qualified Data.Graph.Inductive.Query.SP as GA
 import Pipes.Safe
 import Control.Lens hiding (snoc, (<>))
 import Data.Foldable
+import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List as L
 
@@ -54,7 +55,7 @@ showPath world (Just path) = (encodeUtf8 . addRet . joinToOneMsg) (showDirection
         toJust (Just left, Just right) = (left, right)
 
 nodePairToDirection :: World -> (LocationId, LocationId) -> Direction
-nodePairToDirection world (from, to) = L.head $ filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
+nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
 
 showPathBy :: World -> Maybe LocationId -> LocationId -> ByteString
 showPathBy world Nothing _ = "current location is unknown\n"
