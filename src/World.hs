@@ -6,11 +6,11 @@
 module World ( locsByRegex
              , showLocs
              , loadWorld
-             , parseProducer
              , printWorldStats
              , listFilesIn
              , loadLogs
              , parseServerEvents
+             , loadServerEvents
              , World(..)
              , Direction(..)
              , WorldMap
@@ -100,19 +100,16 @@ locsByRegex :: World -> Text -> [Location]
 locsByRegex world regex = S.toList $ S.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
   where locs = _locations world
 
-loadServerEventsFromFile :: FilePath -> Producer ByteString IO ()
-loadServerEventsFromFile file = openfile >>= \h -> PBS.fromHandle h >> closefile h
+loadServerEvents :: FilePath -> Producer ByteString IO ()
+loadServerEvents file = openfile >>= \h -> PBS.fromHandle h >> closefile h
   where openfile = lift $ openFile file ReadMode
         closefile h = lift $ hClose h
-
-parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
-parseServerEvents pbs = parseProducer pbs >-> PP.filter isServerEvent >-> PP.map _serverEvent
 
 binEvtLogParser :: Producer ByteString IO () -> Producer Event IO ()
 binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.filter filterTravelActions
 
 loadLogs :: [FilePath] -> Producer ByteString IO ()
-loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEventsFromFile file) (return ()) files
+loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
 
 extractItems :: Monad m => Pipe ServerEvent [ItemRoomDesc] m ()
 extractItems = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ objects _) -> objects)
@@ -200,10 +197,10 @@ printWorldStats world = yield $ ConsoleOutput worldStats
         itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
         mobs = (show . length . _mobsDiscovered) world <> " мобов найдено\n"
 
-parseProducer :: Producer ByteString IO () -> Producer Event IO ()
-parseProducer src = PA.parsed serverInputParser src >-> PP.map ServerEvent >>= onEndOrError
+parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
+parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
   where onEndOrError Right{} = return ()
-        onEndOrError (Left (err, producer)) = yield $ ConsoleOutput $ errDesc err
+        onEndOrError (Left (err, producer)) = yield $ ParseError $ errDesc err
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
 buildMap :: Set Direction -> Gr () Int

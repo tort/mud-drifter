@@ -34,7 +34,8 @@ parseUserInputPipe = PP.map parse
 parseServerInputPipe :: MonadSafe m => Pipe Event Event m ()
 parseServerInputPipe = catchP (parseWithState Nothing) onerr
   where parseWithState state = do evt <- await
-                                  yield evt
+                                  case evt of (ServerEvent (ParseError msg)) -> yield $ ConsoleOutput msg
+                                              _ -> yield evt
                                   case evt of input@(ServerInput _) -> f $ scanServerInput input state
                                               x -> parseWithState state
         f (serverEvents, state) = do F.mapM_ yield serverEvents

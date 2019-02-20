@@ -1,21 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module ServerInputParserSpec (spec) where
 
+import Protolude hiding (Location)
 import Test.Hspec
 import Test.QuickCheck
 import Control.Exception (evaluate)
-import Data.ByteString.Char8 hiding (filter, length)
+import qualified Data.ByteString.Char8 as C8
 import Test.Hspec.Attoparsec
-import Pipes.ByteString hiding (filter, length, lines)
-import Prelude hiding (readFile, putStrLn, lines)
+import qualified Pipes.ByteString as PBS
 import qualified Prelude as P
-import System.IO hiding (readFile, putStrLn, hGetContents)
 import Pipes hiding ((~>))
 import Pipes.Prelude hiding (fromHandle, filter, length, mapM_, print)
 import qualified Pipes.Prelude as PP
-import Data.Text hiding (isInfixOf, isPrefixOf, length, filter, lines)
+import qualified Data.Text as T
 import Data.Text.Encoding
+import Data.String
 import Control.Monad
 
 import Person
@@ -26,35 +27,34 @@ import World
 
 spec :: Spec
 spec = describe "Parser" $ do
-        it "does not fail on input" $ do log <- readFile "test/logs/common.log"
+        it "does not fail on input" $ do log <- C8.readFile "test/logs/common.log"
                                          shouldSucceedOn serverInputParser log
-        it "parse codepage prompt" $ do log <- readFile "test/logs/codepagePrompt.log"
+        it "parse codepage prompt" $ do log <- C8.readFile "test/logs/codepagePrompt.log"
                                         log ~> serverInputParser `shouldParse` CodepagePrompt
-        it "parse login prompt" $ do log <- readFile "test/logs/loginPrompt.log"
+        it "parse login prompt" $ do log <- C8.readFile "test/logs/loginPrompt.log"
                                      log ~> serverInputParser `shouldParse` LoginPrompt
-        it "parse password prompt" $ do log <- readFile "test/logs/passwordPrompt.log"
+        it "parse password prompt" $ do log <- C8.readFile "test/logs/passwordPrompt.log"
                                         log ~> serverInputParser `shouldParse` PasswordPrompt
-        it "parse welcome prompt" $ do log <- readFile "test/logs/welcomePrompt.log"
+        it "parse welcome prompt" $ do log <- C8.readFile "test/logs/welcomePrompt.log"
                                        log ~> serverInputParser `shouldParse` WelcomePrompt
-        it "parse post welcome message" $ do log <- readFile "test/logs/postWelcome.log"
+        it "parse post welcome message" $ do log <- C8.readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
-        it "parse location" $ do log <- readFile "test/logs/locationMessage.log"
+        it "parse location" $ do log <- C8.readFile "test/logs/locationMessage.log"
                                  log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5011) (LocationTitle "У колодца")
-                                                                                      , _objects = [ObjectRoomDesc "Колодец выкопан здесь."]
+                                                                                      , _objects = [ItemRoomDesc "Колодец выкопан здесь."]
                                                                                       , _mobs = [ MobRoomDesc "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."
                                                                                                 , MobRoomDesc "Местная жительница идет по своим делам."
                                                                                                 , MobRoomDesc "Местная жительница идет по своим делам."
                                                                                                 , MobRoomDesc "Местный житель идет здесь."
                                                                                                 ]
                                                                                       }
-        it "parse move to location" $ do log <- readFile "test/logs/move.log"
+        it "parse move to location" $ do log <- C8.readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
-        it "parse move in darkness with nightvision" $ do log <- readFile "test/logs/inDarknessWithInfra.log"
+        it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
-        it "parse in darkness server event" $ do hLog <- openFile "test/logs/enterDarkRoom.log" ReadMode
-                                                 serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
+        it "parse in darkness server event" $ do let log = "test/logs/enterDarkRoom.log"
+                                                 serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter nonEmptyUnknown
                                                  P.take 2 serverEventList `shouldBe` [MoveEvent "вниз", DarknessEvent]
-                                                 hClose hLog
         it "parse log, starting from partial move message" $ do let simpleWalkFile = "test/logs/startingInTheMiddleOfMove.log"
                                                                 (locationEventsCount, moveEventsCount) <- locationsAndCounts simpleWalkFile
                                                                 (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
@@ -70,16 +70,14 @@ spec = describe "Parser" $ do
                                        (expectedLocationsCount, expectedMoveCount) <- expectedLocsAndMovesCounts simpleWalkFile
                                        moveEventsCount `shouldBe` expectedMoveCount
                                        locationEventsCount `shouldBe` expectedLocationsCount
-        it "parse multiple messages in one GA frame" $ do hLog <- openFile "test/logs/multipleEventsInGA.log" ReadMode
-                                                          serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
+        it "parse multiple messages in one GA frame" $ do let log = "test/logs/multipleEventsInGA.log"
+                                                          serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter nonEmptyUnknown
                                                           length serverEventList `shouldBe` 5
-                                                          hClose hLog
-        it "parse sample trigger text" $ do hLog <- openFile "test/logs/triggerText.log" ReadMode
-                                            serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter nonEmptyUnknown
+        it "parse sample trigger text" $ do let log = "test/logs/triggerText.log"
+                                            serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter nonEmptyUnknown
                                             length serverEventList `shouldBe` 6
-                                            hClose hLog
-        it "parse move and location on agromob" $ do hLog <- openFile "test/logs/enterRoomWithFight.log" ReadMode
-                                                     serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter moveOrLocation
+        it "parse move and location on agromob" $ do let log = "test/logs/enterRoomWithFight.log"
+                                                     serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter moveOrLocation
                                                      serverEventList `shouldBe` [ MoveEvent "восток"
                                                                                 , LocationEvent { _location = (Location (LocationId 5112) (LocationTitle "На кухне"))
                                                                                                 , _objects = []
@@ -90,63 +88,59 @@ spec = describe "Parser" $ do
                                                                                                          ]
                                                                                                 }
                                                                                 ]
-                                                     hClose hLog
-        it "parse equipment list" $ do log <- readFile "test/logs/listEquipment2.log"
-                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body "легкий латный доспех", Excellent)
-                                                                                                  , (EquippedItem Head "легкий латный шлем", Excellent)
-                                                                                                  , (EquippedItem Legs "легкие латные поножи", Excellent)
-                                                                                                  , (EquippedItem Waist "холщовый мешок", Excellent)
-                                                                                                  , (EquippedItem Wield "длинный бронзовый меч", VeryGood)
-                                                                                                  , (EquippedItem Hold "бронзовый топорик", VeryGood)
+        it "parse equipment list" $ do log <- C8.readFile "test/logs/listEquipment2.log"
+                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body (ItemNominative "легкий латный доспех"), Excellent)
+                                                                                                  , (EquippedItem Head (ItemNominative "легкий латный шлем"), Excellent)
+                                                                                                  , (EquippedItem Legs (ItemNominative "легкие латные поножи"), Excellent)
+                                                                                                  , (EquippedItem Waist (ItemNominative "холщовый мешок"), Excellent)
+                                                                                                  , (EquippedItem Wield (ItemNominative "длинный бронзовый меч"), VeryGood)
+                                                                                                  , (EquippedItem Hold (ItemNominative "бронзовый топорик"), VeryGood)
                                                                                                   ])
-        it "parse empty equipment list" $ do log <- readFile "test/logs/listEquipmentEmpty.log"
+        it "parse empty equipment list" $ do log <- C8.readFile "test/logs/listEquipmentEmpty.log"
                                              log ~> serverInputParser `shouldParse` (ListEquipmentEvent [])
-        it "parse inventory" $ do log <- readFile "test/logs/inventory.log"
-                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ ("холщовый мешок", Excellent)
-                                                                                             , ("бронзовый топорик", VeryGood)
-                                                                                             , ("длинный бронзовый меч", VeryGood)
+        it "parse inventory" $ do log <- C8.readFile "test/logs/inventory.log"
+                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ (ItemNominative "холщовый мешок", Excellent)
+                                                                                             , (ItemNominative "бронзовый топорик", VeryGood)
+                                                                                             , (ItemNominative "длинный бронзовый меч", VeryGood)
                                                                                              ])
-        it "parse cr after unknown server event" $ do hLog <- openFile "test/logs/mobPortal.log" ReadMode
-                                                      serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight
+        it "parse cr after unknown server event" $ do let log = "test/logs/mobPortal.log"
+                                                      serverEventList <- toListM $ parseServerEvents (loadServerEvents log)
                                                       (length $ filter isLocationEvent serverEventList) `shouldBe` 3
                                                       (length $ filter isMoveEvent serverEventList) `shouldBe` 1
-                                                      hClose hLog
-        it "parse empty inventory" $ do log <- readFile "test/logs/inventoryEmpty.log"
+        it "parse empty inventory" $ do log <- C8.readFile "test/logs/inventoryEmpty.log"
                                         log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
-        it "parse weapon stats in shop" $ do log <- readFile "test/logs/statsWeapon.log"
-                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon "длинный бронзовый меч" LongBlade [Wield, Hold, DualWield] 3.5)
-        it "parse armor stats in shop" $ do log <- readFile "test/logs/statsArmor.log"
-                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor "легкий латный доспех" [Body] 3 4)
-        it "parse weapon stats" $ do log <- readFile "test/logs/statsWeaponScroll.log"
-                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon "бронзовый топорик" Axe [Wield, Hold] 3.5)
-        it "parse shop items" $ do hLog <- openFile "test/logs/shopList.log" ReadMode
-                                   serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight >-> PP.filter isShopListItemEvent
+        it "parse weapon stats in shop" $ do log <- C8.readFile "test/logs/statsWeapon.log"
+                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ItemNominative "длинный бронзовый меч") LongBlade [Wield, Hold, DualWield] 3.5)
+        it "parse armor stats in shop" $ do log <- C8.readFile "test/logs/statsArmor.log"
+                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor (ItemNominative "легкий латный доспех") [Body] 3 4)
+        it "parse weapon stats" $ do log <- C8.readFile "test/logs/statsWeaponScroll.log"
+                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ItemNominative "бронзовый топорик") Axe [Wield, Hold] 3.5)
+        it "parse shop items" $ do let log = "test/logs/shopList.log"
+                                   serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter isShopListItemEvent
                                    length serverEventList `shouldBe` 43
-                                   hClose hLog
-        it "parse shop list with prompt" $ do hLog <- openFile "test/logs/shopListWithPrompt.log" ReadMode
-                                              serverEventList <- toListM $ parseProducer (fromHandle hLog) >-> toJustRight
+        it "parse shop list with prompt" $ do let log = "test/logs/shopListWithPrompt.log"
+                                              serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
                                               (length $ filter isShopListItemEvent serverEventList) `shouldBe` 27
                                               (length $ filter (== PromptEvent) serverEventList) `shouldBe` 1
-                                              hClose hLog
-        it "parse single line prompt event" $ do log <- readFile "test/logs/prompt.1.log"
+        it "parse single line prompt event" $ do log <- C8.readFile "test/logs/prompt.1.log"
                                                  log ~> serverInputParser `shouldParse` PromptEvent
-        it "parse two-line prompt event" $ do log <- readFile "test/logs/prompt.2.log"
+        it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent
         it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
-                                                  objects = [ObjectRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"]
+                                                  objects = [ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                   mobs = [MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."]
-                                               in do log <- readFile "test/logs/schoolEntrance.log"
+                                               in do log <- C8.readFile "test/logs/schoolEntrance.log"
                                                      log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs)
-        it "parse unknown obstacle when glancing to direction" $ do log <- readFile "test/logs/openDoor.1.log"
+        it "parse unknown obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.1.log"
                                                                     log ~> serverInputParser `shouldParse` (ObstacleEvent South "дверь")
-        it "parse known obstacle when glancing to direction" $ do log <- readFile "test/logs/openDoor.2.log"
+        it "parse known obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.2.log"
                                                                   log ~> serverInputParser `shouldParse` (ObstacleEvent North "ворота")
-        it "parse failure to go in direction" $ do log <- readFile "test/logs/noWayThisDir.log"
+        it "parse failure to go in direction" $ do log <- C8.readFile "test/logs/noWayThisDir.log"
                                                    log ~> serverInputParser `shouldParse` CantGoDir
-        it "parse objects in the room" $ do log <- readFile "test/logs/roomWithObjects.log"
+        it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs)
-                                              where objects = [ ObjectRoomDesc "Лужица дождевой воды разлита у ваших ног."
-                                                              , ObjectRoomDesc "У ваших ног лежит глиняная плошка."
+                                              where objects = [ ItemRoomDesc "Лужица дождевой воды разлита у ваших ног."
+                                                              , ItemRoomDesc "У ваших ног лежит глиняная плошка."
                                                               ]
                                                     location = Location (LocationId 5007) (LocationTitle "Лавка")
                                                     mobs = [MobRoomDesc "Лавочник стоит тут."]
@@ -158,28 +152,20 @@ nonEmptyUnknown :: ServerEvent -> Bool
 nonEmptyUnknown (UnknownServerEvent "") = False
 nonEmptyUnknown _ = True
 
-toJustRight :: Pipe (Maybe (Either a ServerEvent)) ServerEvent IO ()
-toJustRight = forever $ do e <- await
-                           act e
-                             where act (Just (Right evt)) = yield evt
-                                   act _ = return ()
-
-locationsAndCounts :: String -> IO (Int, Int)
+locationsAndCounts :: FilePath -> IO (Int, Int)
 locationsAndCounts file = do
-  hLog <- openFile file ReadMode
-  serverEventList <- toListM $ parseProducer (fromHandle hLog)
-  let locationEventsCount = length (filter isLocation serverEventList)
-  let moveEventsCount = length (filter isMove serverEventList)
+  serverEventList <- PP.toListM $ parseServerEvents $ loadServerEvents file
+  let locationEventsCount = length (filter isLocationEvent serverEventList)
+  let moveEventsCount = length (filter isMoveEvent serverEventList)
   return (locationEventsCount, moveEventsCount)
-    where isLocation (Just (Right LocationEvent{})) = True
-          isLocation _ = False
-          isMove (Just (Right (MoveEvent _))) = True
-          isMove _ = False
 
 expectedLocsAndMovesCounts :: String -> IO (Int, Int)
 expectedLocsAndMovesCounts file = do
-  expectedLocationsCount <- countStringsWith (\s -> isInfixOf "1;36m" s && isInfixOf "[" s && isInfixOf "]" s) file
-  expectedMoveCount <- countStringsWith (isInfixOf $ encodeUtf8 "Вы поплелись") file
+  lines <- C8.lines <$> C8.readFile file
+  let expectedLocationsCount = countStringsWith (\s -> C8.isInfixOf "1;36m" s && C8.isInfixOf "[" s && C8.isInfixOf "]" s)
+      expectedMoveCount = countStringsWith (C8.isInfixOf $ encodeUtf8 "Вы поплелись")
+      countStringsWith predicate = length . (filter predicate) $ lines
   return (expectedLocationsCount, expectedMoveCount)
-  where countStringsWith predicate file = do contents <- readFile file
-                                             return $ length $ filter predicate $ lines contents
+
+loadAndParseServerEvents :: FilePath -> Producer ServerEvent IO ()
+loadAndParseServerEvents = parseServerEvents . loadServerEvents

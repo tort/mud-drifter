@@ -151,6 +151,7 @@ data ServerEvent = CodepagePrompt
                  | TakeInLeftHand ItemAccusative
                  | TakeInBothHands ItemAccusative
                  | MobGaveYouItem MobNominative ItemAccusative
+                 | ParseError ByteString
                  deriving (Eq, Show, Generic, Ord)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
