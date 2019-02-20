@@ -26,6 +26,7 @@ import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as PP
 import Pipes.Attoparsec
+import qualified Pipes.Attoparsec as PA
 import qualified Pipes.ByteString as PBS
 import qualified Data.Text as T
 import Data.Text.Encoding()
@@ -200,11 +201,10 @@ printWorldStats world = yield $ ConsoleOutput worldStats
         mobs = (show . length . _mobsDiscovered) world <> " мобов найдено\n"
 
 parseProducer :: Producer ByteString IO () -> Producer Event IO ()
-parseProducer src = do (result, partial) <- liftIO $ runStateT (parse serverInputParser) src
-                       continue result partial
-                         where continue result@(Just (Right evt)) partial = yield (ServerEvent evt) >> parseProducer partial
-                               continue (Just (Left (ParsingError ctxts err))) _ = yield $ ConsoleOutput $ "error: " <> C8.pack err <> C8.pack (concat ctxts) <> "\n"
-                               continue Nothing _ = yield $ ConsoleOutput "parsed entire stream\n"
+parseProducer src = PA.parsed serverInputParser src >-> PP.map ServerEvent >>= onEndOrError
+  where onEndOrError Right{} = return ()
+        onEndOrError (Left (err, producer)) = yield $ ConsoleOutput $ errDesc err
+        errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
