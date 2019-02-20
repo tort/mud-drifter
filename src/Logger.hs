@@ -4,7 +4,6 @@
 module Logger ( runEvtLogger
               , runServerInputLogger
               , printEvents
-              --, printMove
               , filterQuestEvent
               , filterTravelActions
               , obstacleActions
