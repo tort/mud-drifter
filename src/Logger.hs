@@ -1,8 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Logger ( runEvtLogger
               , runServerInputLogger
+              , serverLogDir
+              , evtLogDir
               , printEvents
               , filterQuestEvent
               , filterTravelActions
@@ -34,19 +37,48 @@ import qualified Data.Map.Strict as M
 import qualified Data.Text as T
 import qualified Data.List as L
 import Control.Lens hiding ((&))
+import Data.Time
+import Data.Time.Format
+
+serverLogDir = archiveDir ++ "/server-input-log/"
+evtLogDir = archiveDir ++ "/evt-log/"
+archiveDir = "archive"
 
 runEvtLogger evtBusInput h = runLogger evtBusInput h serverInteractions
-runServerInputLogger evtBusInput h = runLogger evtBusInput h serverInput
 
-runLogger :: Input Event -> Handle -> Pipe Event C8.ByteString IO () -> IO ()
+runServerInputLogger :: Input Event -> IO ()
+runServerInputLogger input = do startTimestamp <- timestamp
+                                h <- openFile serverInputLogFilename WriteMode
+                                writeLog h
+                                IO.hClose h
+                                stopTimestamp <- timestamp
+                                archive $ archivedLogFilename startTimestamp stopTimestamp
+                                runServerInputLogger input
+  where writeLog h = runEffect $ fromInput input >-> filter >-> PBS.toHandle h
+        archivedLogFilename startTs stopTs = serverLogDir ++ "genod-" ++ startTs ++ "__" ++ stopTs ++ ".log"
+        timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" <$> getCurrentTime
+        serverInputLogFilename = "server-input.log"
+        archive toFilename =
+          openFile serverInputLogFilename ReadMode >>= \from ->
+            openFile toFilename WriteMode >>= \to ->
+              do runEffect $ PBS.fromHandle from >-> PBS.toHandle to
+                 IO.hClose from
+                 IO.hClose to
+        filter = await >>= \case (ServerInput input) -> yield input >> filter
+                                 ServerClosedChannel -> return ()
+                                 ServerIOException -> return ()
+                                 UserInputIOException -> return ()
+                                 _ -> filter
+
+runLogger :: Input Event -> Handle -> Pipe Event ByteString IO () -> IO ()
 runLogger evtBusInput h msgFilter = runEffect $ fromInput evtBusInput >-> msgFilter >-> PBS.toHandle h >> liftIO (C8.putStr "logger input stream ceased\n")
 
-serverInteractions :: Pipe Event C8.ByteString IO ()
+serverInteractions :: Pipe Event ByteString IO ()
 serverInteractions = forever $ await >>= \evt -> case evt of (SendToServer x) -> yield $ LC8.toStrict $ encode evt
                                                              (ServerEvent x) -> yield $ LC8.toStrict $ encode evt
                                                              _ -> return ()
 
-serverInput :: Pipe Event C8.ByteString IO ()
+serverInput :: Pipe Event ByteString IO ()
 serverInput = forever $ await >>= \evt -> case evt of (ServerInput input) -> yield input
                                                       _ -> return ()
 

@@ -4,9 +4,6 @@
 
 module ServerInputParser ( serverInputParser
                          , remoteInputParser
-                         , lootCorpse
-                         , readWord
-                         , readWordsTill
                          , RemoteConsoleEvent(..)
                          ) where
 
@@ -45,11 +42,7 @@ serverInputParser = codepagePrompt
                     <|> darkInDirection
                     <|> glanceDir
                     <|> pickUp
-                    <|> lootCorpse
-                    <|> takeItemFromContainer
-                    <|> takeInLeftHand
-                    <|> takeInRightHand
-                    <|> takeInBothHands
+                    <|> youTook
                     <|> mobGaveYouItem
                     <|> unknownMessage
 
@@ -274,36 +267,34 @@ mobGaveYouItem = do mob <- readWordsTill "дал"
                     C.endOfLine
                     return $ MobGaveYouItem (MobNominative $ decodeUtf8 mob) (ItemAccusative $ decodeUtf8 item)
 
+youTook :: A.Parser ServerEvent
+youTook = do
+  string $ encodeUtf8 "Вы взяли"
+  C.space
+  lootCorpse <|> takeItemFromContainer <|> takeInRightHand <|> takeInLeftHand <|> takeInBothHands
+
 lootCorpse :: A.Parser ServerEvent
-lootCorpse = do string $ encodeUtf8 "Вы взяли"
-                C.space
-                item <- readWordsTill "из трупа "
+lootCorpse = do item <- readWordsTill "из трупа "
                 source <- takeTill (== _period)
                 A.word8 _period
                 C.endOfLine
                 return $ LootCorpse (ItemAccusative $ decodeUtf8 item) (MobGenitive $ decodeUtf8 source)
 
 takeItemFromContainer :: A.Parser ServerEvent
-takeItemFromContainer = do string $ encodeUtf8 "Вы взяли"
-                           C.space
-                           item <- readWordsTill "из "
+takeItemFromContainer = do item <- readWordsTill "из "
                            container <- takeTill (== _period)
                            A.word8 _period
                            C.endOfLine
                            return $ TakeFromContainer (ItemAccusative $ decodeUtf8 item) (ItemGenitive $ decodeUtf8 container)
 
 takeInLeftHand :: A.Parser ServerEvent
-takeInLeftHand = do string $ encodeUtf8 "Вы взяли"
-                    C.space
-                    item <- readWordsTill "в левую руку"
+takeInLeftHand = do item <- readWordsTill "в левую руку"
                     A.word8 _period
                     C.endOfLine
                     return  $ TakeInLeftHand (ItemAccusative $ decodeUtf8 item)
 
 takeInRightHand :: A.Parser ServerEvent
-takeInRightHand = do string $ encodeUtf8 "Вы взяли"
-                     C.space
-                     item <- readWordsTill "в правую руку"
+takeInRightHand = do item <- readWordsTill "в правую руку"
                      A.word8 _period
                      C.endOfLine
                      return  $ TakeInRightHand (ItemAccusative $ decodeUtf8 item)

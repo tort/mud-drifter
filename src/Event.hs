@@ -104,6 +104,7 @@ data Event = ConsoleInput Text
            | ServerEvent { _serverEvent :: ServerEvent }
            | ServerClosedChannel
            | ServerIOException
+           | UserInputIOException
            | PulseEvent
            | TravelRequest [LocationId]
            | TravelFailure

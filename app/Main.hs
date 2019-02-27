@@ -30,7 +30,6 @@ main = runDrifter
 runDrifter :: IO ()
 runDrifter = do currentDir <- getCurrentDirectory
                 world <- liftIO $ loadWorld currentDir
-                serverInputLog <- openFile "server-input.log" WriteMode
                 evtLog <- openFile "evt.log" WriteMode
                 toConsoleBox <- spawn $ newest 100
                 toRemoteConsoleBox <- spawn $ newest 100
@@ -38,16 +37,17 @@ runDrifter = do currentDir <- getCurrentDirectory
                 toEvtLoggerBox <- spawn $ newest 100
                 toDrifterBox <- spawn $ newest 100
                 let commonOutput = (fst toConsoleBox) `mappend` (fst toRemoteConsoleBox) `mappend` (fst toServerInputLoggerBox) `mappend` (fst toEvtLoggerBox)
-                    readConsoleInput = runEffect $ runSafeP $ consoleInput `catchP` onException >-> toOutput (fst toDrifterBox)
+                    readConsoleInput = runEffect $ runSafeP $ consoleInput `catchP` onUserInputException >-> toOutput (fst toDrifterBox)
                     printConsoleOutput = runEffect $ (printWorldStats world >> fromInput (snd toConsoleBox)) >-> consoleOutput
                     runDrifter = runEffect $ runSafeP $ fromInput (snd toDrifterBox) >-> drifter world >-> commandExecutor (fst toDrifterBox) >-> (toOutput commonOutput)
                     emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
-                    onException (SomeException e) = liftIO $ do hFlush serverInputLog
+                    onUserInputException (SomeException e) = yield UserInputIOException
+                    {-onUserInputException (SomeException e) = liftIO $ do hFlush serverInputLog
                                                                 hClose serverInputLog
                                                                 hFlush evtLog
-                                                                hClose evtLog
+                                                                hClose evtLog-}
 
-                async $ runServerInputLogger (snd toServerInputLoggerBox) serverInputLog
+                async $ runServerInputLogger (snd toServerInputLoggerBox)
                 async $ runEvtLogger (snd toEvtLoggerBox) evtLog
                 async $ printConsoleOutput
                 async $ runDrifter
