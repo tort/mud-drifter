@@ -16,7 +16,7 @@
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
 #resolver: lts-9.21
-resolver: lts-12.26
+resolver: lts-13.13
 build:
   library-profiling: true
   executable-profiling: true
@@ -47,9 +47,9 @@ extra-deps:
   - derive-2.6.5
   - timers-0.2.0.3
   - suspend-0.2.0.0
-  - pipes-text-0.0.2.5
   - streaming-commons-0.1.19
-  #- pipes-safe-2.2.9
+    #- pipes-text-0.0.2.5
+    #- pipes-safe-2.2.9
 
 # Override default flag values for local packages and extra-deps
 flags: {}

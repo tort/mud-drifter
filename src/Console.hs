@@ -11,8 +11,6 @@ import Event
 import Pipes
 import Pipes.Concurrent
 import qualified Pipes.Prelude as PP
-import qualified Pipes.Prelude.Text as PPT
-import qualified Pipes.Text.IO as PTIO
 import Data.Text
 import qualified Pipes.ByteString as PBS
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
@@ -26,7 +24,8 @@ import Control.Monad (forever)
 import Pipes.Safe
 
 consoleInput :: MonadSafe m => Producer Event m ()
-consoleInput = PPT.stdinLn >-> PP.takeWhile(/= "/quit") >-> PP.map ConsoleInput >> liftIO (DTIO.putStr "console input stream finished\n")
+consoleInput = return ()
+--consoleInput = PPT.stdinLn >-> PP.takeWhile(/= "/quit") >-> PP.map ConsoleInput >> liftIO (DTIO.putStr "console input stream finished\n")
 
 consoleOutput :: Consumer Event IO ()
 consoleOutput = filterConsoleOutput >-> PBS.stdout >> liftIO (DTIO.putStr "console receive stream finished\n")

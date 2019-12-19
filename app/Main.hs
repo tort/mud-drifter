@@ -25,8 +25,33 @@ import Control.Concurrent.Suspend.Lifted
 import World
 
 main :: IO ()
-main = runDrifter
+main = return ()
 
+type Name = Text
+type Password = Text
+type RoomId = Int
+
+data MudServer = MudServer { host :: Text
+                           , port :: Int
+                           } deriving (Eq, Show)
+
+data Person = Person { personName :: Name
+                     , personPassword :: Password
+                     , residence :: MudServer
+                     } deriving (Eq, Show)
+
+genod = Person { personName = "генод"
+               , personPassword = "каркасный"
+               , residence = MudServer "bylins.su" 4000
+               }
+
+runGenod :: Pipe Event Event m ()
+runGenod = undefined
+
+go :: RoomId -> Person -> IO ()
+go roomId person = undefined
+
+{-
 runDrifter :: IO ()
 runDrifter = do currentDir <- getCurrentDirectory
                 world <- liftIO $ loadWorld currentDir
@@ -54,3 +79,4 @@ runDrifter = do currentDir <- getCurrentDirectory
                 async $ runRemoteConsole (fst toDrifterBox, snd toRemoteConsoleBox)
                 repeatedTimer emitPulseEvery (sDelay 1)
                 readConsoleInput
+-}

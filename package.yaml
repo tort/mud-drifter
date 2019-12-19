@@ -46,8 +46,6 @@ library:
                 , pipes
                 , pipes-binary
                 , pipes-network
-                , pipes-text
-                , pipes-safe
                 , pipes-parse
                 , pipes-attoparsec
                 , pipes-bytestring
