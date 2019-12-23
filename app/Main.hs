@@ -57,8 +57,10 @@ runPerson person task =
     print "connected"
     toRemoteConsoleBox <- spawn $ newest 100
     toServerBox <- spawn $ newest 100
-    async $ runEffect $ fromSocket sock (2^15) >-> PBS.stdout
-    runEffect $ PBS.stdin >-> toSocket sock
+    async $ runRemoteConsole (fst toServerBox, snd toRemoteConsoleBox)
+    async $ runEffect $ fromInput (snd toServerBox) >-> toSocket sock
+    runEffect $ fromSocket sock (2^15) >-> toOutput (fst toRemoteConsoleBox) >> (liftIO $ print "remote connection closed")
+    print "disconnected"
 
 {-
 runDrifter :: IO ()
