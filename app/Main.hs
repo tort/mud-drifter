@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
@@ -18,8 +19,10 @@ import Mapper
 import Person
 import Pipes.Safe
 import qualified Pipes.Concurrent as PC
-import System.IO
-import System.Directory
+import qualified Pipes.Prelude as PP
+import Pipes.Network.TCP
+import qualified Pipes.ByteString as PBS
+import qualified Data.ByteString.Char8 as C8
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted
 import World
@@ -45,11 +48,17 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
-runGenod :: Pipe Event Event m ()
-runGenod = undefined
+runGenod :: Pipe Event Event IO () -> IO ()
+runGenod task = runPerson genod task
 
-go :: RoomId -> Person -> IO ()
-go roomId person = undefined
+runPerson :: Person -> Pipe Event Event IO () -> IO ()
+runPerson person task =
+  connect "bylins.su" "4000" $ \(sock, _) -> do
+    print "connected"
+    toRemoteConsoleBox <- spawn $ newest 100
+    toServerBox <- spawn $ newest 100
+    async $ runEffect $ fromSocket sock (2^15) >-> PBS.stdout
+    runEffect $ PBS.stdin >-> toSocket sock
 
 {-
 runDrifter :: IO ()
