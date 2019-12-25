@@ -57,9 +57,12 @@ runPerson person task =
     print "connected"
     toRemoteConsoleBox <- spawn $ newest 100
     toServerBox <- spawn $ newest 100
+    toDrifterBox <- spawn $ newest 100
+    let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toDrifterBox)
     async $ runRemoteConsole (fst toServerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (snd toServerBox) >-> toSocket sock
-    runEffect $ fromSocket sock (2^15) >-> toOutput (fst toRemoteConsoleBox) >> (liftIO $ print "remote connection closed")
+    async $ runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
+    --runEffect $ fromInput (snd toDrifterBox) >-> PP.map ServerInput >-> parseServerInputPipe >-> task >-> commandExecutor >-> toOutput (fst toServerBox)
     print "disconnected"
 
 {-

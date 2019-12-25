@@ -2,6 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module Drifter ( drifter
+               , parseServerInputPipe
                ) where
 
 import Protolude
@@ -31,8 +32,8 @@ parseUserInputPipe = PP.map parse
         handleCmd (Right cmd) = UserCommand cmd
         handleCmd (Left err) = ConsoleOutput $ pack $ show err
 
-parseServerInputPipe :: MonadSafe m => Pipe Event Event m ()
-parseServerInputPipe = catchP (parseWithState Nothing) onerr
+parseServerInputPipe :: Monad m => Pipe Event Event m ()
+parseServerInputPipe = parseWithState Nothing
   where parseWithState state = do evt <- await
                                   case evt of (ServerEvent (ParseError msg)) -> yield $ ConsoleOutput msg
                                               _ -> yield evt
