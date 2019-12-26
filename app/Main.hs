@@ -48,10 +48,10 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
-runGenod :: Pipe Event Event IO () -> IO ()
+runGenod :: Pipe Event ByteString IO () -> IO ()
 runGenod task = runPerson genod task
 
-runPerson :: Person -> Pipe Event Event IO () -> IO ()
+runPerson :: Person -> Pipe Event ByteString IO () -> IO ()
 runPerson person task =
   connect "bylins.su" "4000" $ \(sock, _) -> do
     print "connected"
@@ -62,7 +62,7 @@ runPerson person task =
     async $ runRemoteConsole (fst toServerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (snd toServerBox) >-> toSocket sock
     async $ runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
-    --runEffect $ fromInput (snd toDrifterBox) >-> PP.map ServerInput >-> parseServerInputPipe >-> task >-> commandExecutor >-> toOutput (fst toServerBox)
+    runEffect $ fromInput (snd toDrifterBox) >-> PP.map ServerInput >-> parseServerInputPipe >-> task >-> toOutput (fst toServerBox)
     print "disconnected"
 
 {-
