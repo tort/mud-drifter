@@ -16,9 +16,8 @@ import Data.Text
 import Event
 
 commandExecutor :: Monad m => Pipe Event ByteString m ()
-commandExecutor = forever $ await >>= \case (SendToServer text) -> yield $ encodeUtf8 text
+commandExecutor = forever $ await >>= \case (SendToServer text) -> yield $ encodeUtf8 $ snoc text '\n'
                                             _ -> return ()
-
 
 sendCommand :: Socket -> Text -> IO ()
 sendCommand sock txt = do send sock $ encodeUtf8 $ snoc txt '\n'

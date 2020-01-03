@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Drifter ( drifter
                , parseServerInputPipe
+               , login
                ) where
 
 import Protolude
@@ -24,6 +26,13 @@ import World
 drifter :: MonadSafe m => World -> Pipe Event Event m ()
 drifter world = parseUserInputPipe >-> parseServerInputPipe >-> mapper world >-> person world
 
+login :: Pipe Event Event IO ()
+login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5") >> login
+                        (ServerEvent LoginPrompt) -> yield (SendToServer "генод") >> login
+                        (ServerEvent PasswordPrompt) -> yield (SendToServer "каркасный") >> login
+                        (ServerEvent WelcomePrompt) -> yield (SendToServer "")
+                        _ -> login
+
 parseUserInputPipe :: MonadSafe m => Pipe Event Event m ()
 parseUserInputPipe = PP.map parse
   where parse (ConsoleInput text) = handleCmd $ parseUserInput text
@@ -35,10 +44,8 @@ parseUserInputPipe = PP.map parse
 parseServerInputPipe :: Monad m => Pipe Event Event m ()
 parseServerInputPipe = parseWithState Nothing
   where parseWithState state = do evt <- await
-                                  case evt of (ServerEvent (ParseError msg)) -> yield $ ConsoleOutput msg
-                                              _ -> yield evt
                                   case evt of input@(ServerInput _) -> f $ scanServerInput input state
-                                              x -> parseWithState state
+                                              x -> yield x >> parseWithState state
         f (serverEvents, state) = do F.mapM_ yield serverEvents
                                      parseWithState state
 

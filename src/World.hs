@@ -11,6 +11,8 @@ module World ( locsByRegex
              , loadLogs
              , parseServerEvents
              , loadServerEvents
+             , extractMobs
+             , extractDiscovered
              , World(..)
              , Direction(..)
              , WorldMap

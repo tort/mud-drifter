@@ -4,6 +4,8 @@
 
 module Person ( person
               , loadWorld
+              , findDirection
+              , travel
               ) where
 
 import Protolude hiding (Location)
@@ -20,10 +22,10 @@ import Data.Text.Encoding
 import qualified Data.Text as T
 import qualified Data.List as L
 
-person :: MonadSafe m => World -> Pipe Event Event m ()
+person :: Monad m => World -> Pipe Event Event m ()
 person world = travelTask world
 
-travelTask :: MonadSafe m => World -> Pipe Event Event m ()
+travelTask :: Monad m => World -> Pipe Event Event m ()
 travelTask world = waitTravelRequest Nothing
   where afterTravel locId (Failure err loc) = yield (ConsoleOutput $ "travel to " <> (encodeUtf8 $ showVal locId) <> " failed: " <> err) >> waitTravelRequest loc
         afterTravel locId (Success loc) = yield (ConsoleOutput $ "travel to " <> (encodeUtf8 $ showVal locId) <> " finished") >> waitTravelRequest (Just loc)
@@ -35,9 +37,9 @@ travelTask world = waitTravelRequest Nothing
         travelPath Nothing _ = (return $ Failure "current location is unknown" Nothing)
 
 type Reason = ByteString
-data TravelResult = Success LocationId | Failure Reason (Maybe LocationId)
+data TravelResult = Success LocationId | Failure Reason (Maybe LocationId) deriving (Eq, Show)
 
-travel :: MonadSafe m => World -> Maybe [LocationId] -> Pipe Event Event m TravelResult
+travel :: Monad m => World -> Maybe [LocationId] -> Pipe Event Event m TravelResult
 travel world Nothing = return $ Failure "there is no path there" Nothing
 travel world (Just [locId]) = return $ Success locId
 travel world (Just path) = makeStep
@@ -62,7 +64,7 @@ travel world (Just path) = makeStep
         handleLocationEvent PulseEvent = waitMove
         handleLocationEvent e = yield e >> waitMove
 
-findMoveQuests :: MonadSafe m => LocationId -> LocationId -> Pipe Event Event m ()
+findMoveQuests :: Monad m => LocationId -> LocationId -> Pipe Event Event m ()
 findMoveQuests from to = action $ L.lookup (from, to) travelActions
   where action (Just quest) = quest
         action _ = return ()
@@ -78,7 +80,7 @@ loadConfigProperty propertyName = do conf <- DC.load [Required $ T.unpack person
 personCfgFileName :: Text
 personCfgFileName = "person.cfg"
 
-travelActions :: MonadSafe m => [((LocationId, LocationId), (Pipe Event Event m ()))]
+travelActions :: Monad m => [((LocationId, LocationId), (Pipe Event Event m ()))]
 travelActions = [ ((LocationId 5102, LocationId 5103), openDoor South)
                 , ((LocationId 5103, LocationId 5102), openDoor North)
                 , ((LocationId 5104, LocationId 5117), setupLadder)
@@ -86,13 +88,13 @@ travelActions = [ ((LocationId 5102, LocationId 5103), openDoor South)
                 , ((LocationId 4064, LocationId 5052), payYoungGipsy)
                 ]
 
-payOldGipsy :: MonadSafe m => Pipe Event Event m ()
+payOldGipsy :: Monad m => Pipe Event Event m ()
 payOldGipsy = undefined
 
-payYoungGipsy :: MonadSafe m => Pipe Event Event m ()
+payYoungGipsy :: Monad m => Pipe Event Event m ()
 payYoungGipsy = undefined
 
-setupLadder :: MonadSafe m => Pipe Event Event m ()
+setupLadder :: Monad m => Pipe Event Event m ()
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
   where waitLocEvt = await >>= checkItemRoomDescs
         checkItemRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ItemRoomDesc "На полу лежит лестница.") objs
@@ -100,7 +102,7 @@ setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
                                                                     else return ()
         checkItemRoomDescs _ = waitLocEvt
 
-openDoor :: MonadSafe m => RoomDir -> Pipe Event Event m ()
+openDoor :: Monad m => RoomDir -> Pipe Event Event m ()
 openDoor dir = (yield $ SendToServer ("смотреть " <> show dir)) >> waitObstacleEvent
   where waitObstacleEvent = await >>= checkObstacleEvent
         checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> show dir)

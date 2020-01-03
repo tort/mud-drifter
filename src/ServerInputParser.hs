@@ -31,19 +31,9 @@ serverInputParser = codepagePrompt
                     <|> postWelcome
                     <|> locationParser
                     <|> move
-                    <|> listEquipment
-                    <|> listInventory
-                    <|> itemStats
-                    <|> shopList
-                    <|> darkness
                     <|> prompt
                     <|> obstacleEvent
                     <|> cantGoDir
-                    <|> darkInDirection
-                    <|> glanceDir
-                    <|> pickUp
-                    <|> youTook
-                    <|> mobGaveYouItem
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent

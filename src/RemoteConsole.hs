@@ -19,12 +19,12 @@ import Debug.Trace
 import Event
 import Console
 
-runRemoteConsole :: (Output ByteString, Input ByteString) -> IO ()
+runRemoteConsole :: (Output ByteString, Input Event) -> IO ()
 runRemoteConsole (evtBusOutput, evtBusInput) = do
   serve (Host "0.0.0.0") "4000" $ \(sock, addr) -> do
-                                                async $ runEffect $ fromInput evtBusInput >-> toSocket sock
-                                                runEffect $ (fromSocket sock (2^15)) >-> toOutput evtBusOutput
-                                                return ()
+    async $ runEffect $ fromInput evtBusInput >-> filterConsoleOutput >-> toSocket sock
+    runEffect $ (fromSocket sock (2^15)) >-> toOutput evtBusOutput
+    return ()
   return ()
 
 extractText :: Pipe RemoteConsoleEvent ByteString IO ()

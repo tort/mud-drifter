@@ -52,6 +52,7 @@ library:
                 , pipes-concurrency 
                 , derive
                 , time
+                , mtl
                 ]
 
 executables:
