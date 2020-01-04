@@ -39,6 +39,12 @@ spec = describe "Parser" $ do
                                        log ~> serverInputParser `shouldParse` WelcomePrompt
         it "parse post welcome message" $ do log <- C8.readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
+        it "parse location2" $ do log <- C8.readFile "test/logs/locationMessage2.log"
+                                  log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5032) (LocationTitle "В светлой комнате")
+                                                                                       , _objects = [ ItemRoomDesc "Ваш походный сундучок стоит здесь." ]
+                                                                                       , _mobs = [ MobRoomDesc "Дочка старейшины стоит здесь."
+                                                                                                 , MobRoomDesc "Дородная женщина стоит здесь." ]
+                                                                                       }
         it "parse location" $ do log <- C8.readFile "test/logs/locationMessage.log"
                                  log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5011) (LocationTitle "У колодца")
                                                                                       , _objects = [ItemRoomDesc "Колодец выкопан здесь."]

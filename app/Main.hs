@@ -17,11 +17,9 @@ import Event
 import CommandExecutor
 import Mapper
 import Person
-import Pipes.Safe
 import qualified Pipes.Concurrent as PC
 import qualified Pipes.Prelude as PP
 import Pipes.Network.TCP
-import qualified Pipes.ByteString as PBS
 import qualified Data.ByteString.Char8 as C8
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted

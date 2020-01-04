@@ -8,7 +8,6 @@ import Protolude
 import Pipes
 import qualified Pipes.Prelude as PP
 import qualified Pipes.Concurrent as PC
-import Pipes.Safe
 import Pipes.Concurrent hiding (send)
 import Pipes.Network.TCP
 import Network.Simple.TCP

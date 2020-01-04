@@ -52,7 +52,6 @@ library:
                 , pipes-concurrency 
                 , derive
                 , time
-                , mtl
                 ]
 
 executables:
@@ -69,7 +68,7 @@ executables:
                   , suspend
                   , timers
                   , pipes
-                  , pipes-safe
+                  , pipes-network
                   , directory
                   , pipes-concurrency ]
 

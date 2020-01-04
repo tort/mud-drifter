@@ -19,11 +19,10 @@ import qualified Data.Attoparsec.ByteString as A
 import Person
 import Mapper
 import ServerInputParser
-import Pipes.Safe
 import qualified Data.Foldable as F
 import World
 
-drifter :: MonadSafe m => World -> Pipe Event Event m ()
+drifter :: Monad m => World -> Pipe Event Event m ()
 drifter world = parseUserInputPipe >-> parseServerInputPipe >-> mapper world >-> person world
 
 login :: Pipe Event Event IO ()
@@ -33,7 +32,7 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
                         (ServerEvent WelcomePrompt) -> yield (SendToServer "")
                         _ -> login
 
-parseUserInputPipe :: MonadSafe m => Pipe Event Event m ()
+parseUserInputPipe :: Monad m => Pipe Event Event m ()
 parseUserInputPipe = PP.map parse
   where parse (ConsoleInput text) = handleCmd $ parseUserInput text
         parse x = x
@@ -49,7 +48,7 @@ parseServerInputPipe = parseWithState Nothing
         f (serverEvents, state) = do F.mapM_ yield serverEvents
                                      parseWithState state
 
-onerr :: MonadSafe m => SomeException -> Pipe Event Event m ()
+onerr :: Monad m => SomeException -> Pipe Event Event m ()
 onerr ex = yield (ConsoleOutput "error!!")
 
 

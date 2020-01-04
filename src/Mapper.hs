@@ -17,14 +17,13 @@ import World
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph hiding (Path)
 import qualified Data.Graph.Inductive.Query.SP as GA
-import Pipes.Safe
 import Control.Lens hiding (snoc, (<>))
 import Data.Foldable
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List as L
 
-mapper :: MonadSafe m => World -> Pipe Event Event m ()
+mapper :: Monad m => World -> Pipe Event Event m ()
 mapper world = let mapperWithPosition currLoc = do evt <- await
                                                    case evt of (ServerEvent (LocationEvent loc _ _)) -> yield evt >> mapperWithPosition (Just $ loc^.locationId)
                                                                _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text

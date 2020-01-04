@@ -21,9 +21,8 @@ import qualified Text.Parsec as Parsec
 import qualified Data.ByteString.Char8 as DBC8
 import UserInputParser
 import Control.Monad (forever)
-import Pipes.Safe
 
-consoleInput :: MonadSafe m => Producer Event m ()
+consoleInput :: Monad m => Producer Event m ()
 consoleInput = return ()
 --consoleInput = PPT.stdinLn >-> PP.takeWhile(/= "/quit") >-> PP.map ConsoleInput >> liftIO (DTIO.putStr "console input stream finished\n")
 

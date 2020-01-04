@@ -10,7 +10,6 @@ module Person ( person
 
 import Protolude hiding (Location)
 import Pipes
-import Pipes.Safe
 import qualified Data.Configurator as DC
 import Data.Configurator.Types
 import Mapper
