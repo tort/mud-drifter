@@ -198,8 +198,8 @@ printWorldStats world = yield $ ConsoleOutput worldStats
 
 parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
 parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
-  where onEndOrError Right{} = return ()
-        onEndOrError (Left (err, producer)) = yield $ ParseError $ errDesc err
+  where onEndOrError Right{} = liftIO $ print "Server stream finished"
+        onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing") >> (yield $ ParseError $ errDesc err)
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
 buildMap :: Set Direction -> Gr () Int

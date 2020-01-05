@@ -31,9 +31,19 @@ serverInputParser = codepagePrompt
                     <|> postWelcome
                     <|> locationParser
                     <|> move
+                    <|> listEquipment
+                    <|> listInventory
+                    <|> itemStats
+                    <|> shopList
+                    <|> darkness
                     <|> prompt
                     <|> obstacleEvent
                     <|> cantGoDir
+                    <|> darkInDirection
+                    <|> glanceDir
+                    <|> pickUp
+                    <|> youTook
+                    <|> mobGaveYouItem
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -74,17 +84,14 @@ iacAny :: A.Parser Word8
 iacAny = do iac
             A.anyWord8
 
-remoteInputParser :: A.Parser RemoteConsoleEvent
-remoteInputParser = telnetControlSeq <|> eol <|> utf8String
-    where eol = do C.endOfLine
-                   return $ RemoteUserInput ""
-          utf8String = do text <- A.takeWhile (\x -> x /= 255 && not (C.isEndOfLine x))
-                          eolOrIac <- A.anyWord8
-                          return $ RemoteUserInput text
+remoteInputParser :: A.Parser ByteString
+remoteInputParser = telnetControlSeq <|> utf8String
+  where utf8String = do text <- A.takeWhile (not . C.isEndOfLine)
+                        A.anyWord8
+                        return $ text <> "\n"
 
-telnetControlSeq :: A.Parser RemoteConsoleEvent
-telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny
-                      return TelnetControlSeq
+telnetControlSeq :: A.Parser ByteString
+telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny >> return ""
 
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do

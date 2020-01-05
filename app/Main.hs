@@ -46,29 +46,32 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
-runGenod :: Pipe Event Event IO () -> IO ()
+{-runGenod :: Pipe Event Event IO () -> IO ()
 runGenod task = runPerson genod task
 
 runPerson :: Person -> Pipe Event Event IO () -> IO ()
 runPerson person task = initPerson person >>= \(o, i) ->
   runEffect $ fromInput i >-> parseServerInputPipe >-> task >-> commandExecutor >-> toOutput o
+  -}
 
 withPerson :: (Output ByteString, Input Event) -> Pipe Event Event IO () -> IO ()
-withPerson channels task = runEffect $ fromInput (snd channels) >-> parseServerInputPipe >-> task >-> commandExecutor >-> toOutput (fst channels)
+withPerson channels task = runEffect $ fromInput (snd channels) >-> task >-> commandExecutor >-> toOutput (fst channels)
 
 initPerson :: Person -> IO (Output ByteString, Input Event)
 initPerson person = do
   toServerBox <- spawn $ newest 100
   toDrifterBox <- spawn $ newest 100
   async $ connect "bylins.su" "4000" $ \(sock, _) -> do
+    toServerInputParserBox <- spawn $ newest 100
     print "connected"
     toRemoteConsoleBox <- spawn $ newest 100
-    let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toDrifterBox)
+    let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toServerInputParserBox)
         emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
     async $ runRemoteConsole (fst toServerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (snd toServerBox) >-> toSocket sock
+    async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox) >>= liftIO . print
     repeatedTimer emitPulseEvery (sDelay 1)
-    runEffect $ fromSocket sock (2^15) >-> PP.map ServerInput >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
+    runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
     print "disconnected"
   return (fst toServerBox, snd toDrifterBox)
 

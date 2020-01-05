@@ -14,8 +14,9 @@ import Network.Simple.TCP
 import Data.Text
 import Event
 
-commandExecutor :: Monad m => Pipe Event ByteString m ()
-commandExecutor = forever $ await >>= \case (SendToServer text) -> yield $ encodeUtf8 $ snoc text '\n'
+commandExecutor :: MonadIO m => Pipe Event ByteString m ()
+commandExecutor = forever $ await >>= \case (SendToServer text) -> (liftIO $ print text) >> (yield $ encodeUtf8 $ snoc text '\n')
+                                            (ServerEvent (ParseError err)) -> liftIO $ print err
                                             _ -> return ()
 
 sendCommand :: Socket -> Text -> IO ()

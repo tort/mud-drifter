@@ -6,6 +6,7 @@ module RemoteConsole ( runRemoteConsole ) where
 import Prelude
 import Pipes.Concurrent hiding (send)
 import qualified Pipes.Prelude as PP
+import qualified Pipes.Attoparsec as PA
 import Pipes
 import qualified Pipes.Parse as PP
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
@@ -18,12 +19,13 @@ import ServerInputParser
 import Debug.Trace
 import Event
 import Console
+import Control.Monad
 
-runRemoteConsole :: (Output ByteString, Input Event) -> IO ()
+runRemoteConsole :: (Output ByteString, Input ByteString) -> IO ()
 runRemoteConsole (evtBusOutput, evtBusInput) = do
   serve (Host "0.0.0.0") "4000" $ \(sock, addr) -> do
-    async $ runEffect $ fromInput evtBusInput >-> filterConsoleOutput >-> toSocket sock
-    runEffect $ (fromSocket sock (2^15)) >-> toOutput evtBusOutput
+    async $ runEffect $ fromInput evtBusInput >-> toSocket sock
+    runEffect $ telnetFilteringParser (fromSocket sock (2^15)) >-> toOutput evtBusOutput >> (liftIO $ print "remote console input parsing finished")
     return ()
   return ()
 
@@ -34,14 +36,12 @@ extractText = do evt <- await
               where handle (RemoteUserInput txt) = yield txt
                     handle _ = return ()
 
-parseRemoteInput :: Socket -> Producer ByteString IO () -> Producer RemoteConsoleEvent IO ()
-parseRemoteInput sock src = do
-    (result, partial) <- liftIO $ PP.runStateT (parse remoteInputParser) src
-    continue result partial
-    where continue (Just (Left err)) _ = liftIO $ send sock "\nerror when parsing remote console input"
-          continue Nothing _ = liftIO $ send sock "\nparsed entire stream"
-          continue result@(Just (Right bs)) partial = do yield bs
-                                                         parseRemoteInput sock partial
+telnetFilteringParser :: Producer ByteString IO () -> Producer ByteString IO ()
+telnetFilteringParser src = PA.parsed remoteInputParser src >>= onEndOrError
+  where onEndOrError Right{} = liftIO $ print "remote console input parsing finished"
+        onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing remote input")
+        --errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (C8.concat ctxts) <> "\n"
+
 
 traceBS :: Pipe ByteString ByteString IO ()
 traceBS = do msg <- await
