@@ -24,44 +24,15 @@ import qualified Data.List as L
 person :: Monad m => World -> Pipe Event Event m ()
 person world = travelTask world
 
-travelTask :: Monad m => World -> Pipe Event Event m ()
-travelTask world = waitTravelRequest Nothing
-  where afterTravel locId (Failure err loc) = yield (ConsoleOutput $ "travel to " <> (encodeUtf8 $ showVal locId) <> " failed: " <> err) >> waitTravelRequest loc
-        afterTravel locId (Success loc) = yield (ConsoleOutput $ "travel to " <> (encodeUtf8 $ showVal locId) <> " finished") >> waitTravelRequest (Just loc)
-        waitTravelRequest currLoc = await >>= \evt -> case evt of (UserCommand (GoToLocId locId)) -> travelPath currLoc locId >>= afterTravel locId
-                                                                  (ServerEvent (LocationEvent (Location locId _) _ _)) -> yield evt >> waitTravelRequest (Just locId)
-                                                                  (ServerEvent DarknessEvent) -> yield evt >> waitTravelRequest Nothing
-                                                                  _ -> yield evt >> waitTravelRequest currLoc
-        travelPath (Just currLoc) locId = travel world $ findTravelPath currLoc locId (_worldMap world)
-        travelPath Nothing _ = (return $ Failure "current location is unknown" Nothing)
-
-type Reason = ByteString
-data TravelResult = Success LocationId | Failure Reason (Maybe LocationId) deriving (Eq, Show)
-
-travel :: Monad m => World -> Maybe [LocationId] -> Pipe Event Event m TravelResult
-travel world Nothing = return $ Failure "there is no path there" Nothing
-travel world (Just [locId]) = return $ Success locId
-travel world (Just path) = makeStep
-  where chopPath locId path = dropWhile (/=locId) path :: [LocationId]
-        go (from:to:xs) = do findMoveQuests from to
-                             mapM_ (yield . SendToServer) (trigger <$> (findDirection (_directions world) from to))
-        go [_] = return ()
-        go [] = return ()
-        makeStep = await >>= \evt -> case evt of PulseEvent -> go path >> waitMove
-                                                 e -> yield e >> makeStep
-        waitMove = await >>= handleLocationEvent
-        handleLocationEvent evt@(ServerEvent (LocationEvent loc _ _)) = yield evt >> if elem (loc ^. locationId) path
-                                                                                        then travel world (Just $ chopPath (loc ^. locationId) path)
-                                                                                        else return $ Failure "path lost" (Just (loc ^. locationId))
-        handleLocationEvent evt@(ServerEvent (MoveEvent dir)) = let from:to:xs = path
-                                                                 in yield evt >> case ((== dir) <$> trigger <$> (findDirection (_directions world) from to))
-                                                                                      of Nothing -> waitMove
-                                                                                         (Just False) -> return $ Failure "path lost" Nothing
-                                                                                         (Just True) -> waitMove
-        handleLocationEvent evt@(ServerEvent CantGoDir) = yield evt >> (return $ Failure "path lost" Nothing)
-        handleLocationEvent evt@(ServerEvent DarknessEvent) = yield evt >> travel world (Just (L.tail path))
-        handleLocationEvent PulseEvent = waitMove
-        handleLocationEvent e = yield e >> waitMove
+travel :: MonadIO m => Set Direction -> [LocationId] -> Pipe Event Event m ()
+travel directions path = go False path
+    where go actionIssued [] = return ()
+          go actionIssued [_] = return ()
+          go actionIssued remainingPath@(from:to:xs) = await >>= \case
+            PulseEvent -> (when (not actionIssued) (yield $ SendToServer $ fromJust $ direction from to)) >> go True remainingPath
+            (ServerEvent (LocationEvent (Event.Location locationId _) _ _)) -> go False $ dropWhile (/= locationId) remainingPath
+            _ -> go actionIssued remainingPath
+          direction from to = trigger <$> findDirection directions from to
 
 findMoveQuests :: Monad m => LocationId -> LocationId -> Pipe Event Event m ()
 findMoveQuests from to = action $ L.lookup (from, to) travelActions

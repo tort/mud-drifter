@@ -15,6 +15,7 @@ module World ( locsByRegex
              , extractDiscovered
              , World(..)
              , Direction(..)
+             , Trigger(..)
              , WorldMap
              ) where
 
