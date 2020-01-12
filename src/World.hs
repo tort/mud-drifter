@@ -8,7 +8,8 @@ module World ( locsByRegex
              , loadWorld
              , parseServerEvents
              , printLocations
-             , locationBy
+             , locationsBy
+             , findLocationsBy
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -208,7 +209,10 @@ buildMap directions = mkGraph nodes edges
         reverseEdge (Direction (LocationId fromId) (LocationId toId) _) = (toId, fromId, 1)
 
 printLocations :: Text -> World -> IO ()
-printLocations substr world = mapM_ printT $ filter (T.isInfixOf substr . T.toLower . showt) $ (_locations world) ^.. folded
+printLocations substr world = mapM_ printT $ locationsBy substr world
 
-locationBy :: Text -> World -> [LocationId]
-locationBy substr world = _locationId <$> filter (T.isInfixOf substr . T.toLower . showt) (_locations world ^.. folded)
+findLocationsBy :: Text -> World -> [LocationId]
+findLocationsBy substr world = _locationId <$> locationsBy substr world
+
+locationsBy :: Text -> World -> [Location]
+locationsBy substr world = filter (T.isInfixOf substr . T.toLower . showt) (_locations world ^.. folded)

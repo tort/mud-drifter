@@ -28,7 +28,7 @@ person world = undefined
 
 travelTo :: MonadIO m => Text -> World -> Pipe Event Event m ()
 travelTo substr world = action findLocation >> printAfterFinish
-  where findLocation = locationBy substr world
+  where findLocation = findLocationsBy substr world
         action [] = liftIO $ putStrLn ("no matching locations found" :: Text)
         action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
         action _ = liftIO $ printLocations substr world
@@ -37,7 +37,7 @@ travelTo substr world = action findLocation >> printAfterFinish
             of (Just path) -> travelPath path
                Nothing -> liftIO $ putStrLn ("no path found" :: Text)
         travelPath path = travel path world
-        printAfterFinish = liftIO $ purStrLn ("travel succeeded" :: Text)
+        printAfterFinish = liftIO $ putStrLn ("travel succeeded" :: Text)
 
 findCurrentLoc :: MonadIO m => Pipe Event Event m LocationId
 findCurrentLoc = yield (SendToServer "смотр") >> go
