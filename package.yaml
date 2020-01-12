@@ -26,6 +26,7 @@ library:
   source-dirs: src
   dependencies: [ protolude
                 , text
+                , text-show
                 , bytestring 
                 , word8
                 , containers

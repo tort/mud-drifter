@@ -7,6 +7,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Event ( Event(..)
              , UserCommand(..)
@@ -58,12 +59,17 @@ import GHC.Generics (Generic)
 import Data.DeriveTH
 import Control.Lens hiding ((&))
 
-newtype LocationId = LocationId Int deriving (Eq, Ord, Show, Generic)
-newtype LocationTitle = LocationTitle Text deriving (Eq, Ord, Show, Generic)
+import TextShow
+
+newtype LocationId = LocationId { unLocationId :: Int } deriving (Eq, Ord, Show, TextShow, Generic)
+newtype LocationTitle = LocationTitle { unLocationTitle :: Text } deriving (Eq, Ord, Show, Generic)
 
 data Location = Location { _locationId :: LocationId
                          , _locationTitle :: LocationTitle
-                         } deriving (Show, Ord, Generic)
+                         } deriving (Ord, Show, Generic)
+
+instance TextShow Location where
+  showt (Location (LocationId locId) (LocationTitle title)) = showt locId <> ": " <> title
 
 instance Eq Location where
   left == right = _locationId left == _locationId right
@@ -223,6 +229,8 @@ instance ShowVal ItemGenitive where
 
 derive makeIs ''UserCommand
 derive makeIs ''Location
+derive makeIs ''LocationId
+derive makeIs ''LocationTitle
 derive makeIs ''Slot
 derive makeIs ''EquippedItem
 derive makeIs ''ItemState
@@ -234,6 +242,8 @@ derive makeIs ''Event
 
 makeFieldsNoPrefix ''UserCommand
 makeFieldsNoPrefix ''Location
+makeFieldsNoPrefix ''LocationId
+makeFieldsNoPrefix ''LocationTitle
 makeFieldsNoPrefix ''Slot
 makeFieldsNoPrefix ''EquippedItem
 makeFieldsNoPrefix ''ItemState

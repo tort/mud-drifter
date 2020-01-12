@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Person ( person
               , loadWorld
               , findDirection
               , travel
+              , travelTo
+              , findCurrentLoc
               ) where
 
 import Protolude hiding (Location)
 import Pipes
-import qualified Data.Configurator as DC
 import Data.Configurator.Types
 import Mapper
 import Event
@@ -20,19 +21,38 @@ import Control.Lens
 import Data.Text.Encoding
 import qualified Data.Text as T
 import qualified Data.List as L
+import TextShow
 
 person :: Monad m => World -> Pipe Event Event m ()
-person world = travelTask world
+person world = undefined
 
-travel :: MonadIO m => Set Direction -> [LocationId] -> Pipe Event Event m ()
-travel directions path = go False path
+travelTo :: MonadIO m => Text -> World -> Pipe Event Event m ()
+travelTo substr world = action findLocation >> printAfterFinish
+  where findLocation = locationBy substr world
+        action [] = liftIO $ putStrLn ("no matching locations found" :: Text)
+        action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
+        action _ = liftIO $ printLocations substr world
+        travelAction to = findCurrentLoc >>= \from ->
+          case findTravelPath from to (_worldMap world)
+            of (Just path) -> travelPath path
+               Nothing -> liftIO $ putStrLn ("no path found" :: Text)
+        travelPath path = travel path world
+        printAfterFinish = liftIO $ purStrLn ("travel succeeded" :: Text)
+
+findCurrentLoc :: MonadIO m => Pipe Event Event m LocationId
+findCurrentLoc = yield (SendToServer "смотр") >> go
+  where go = await >>= \case evt@(ServerEvent (LocationEvent (Location currLoc _) _ _)) -> yield evt >> return currLoc
+                             evt -> yield evt >> go
+
+travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event m ()
+travel path world = go False path
     where go actionIssued [] = return ()
           go actionIssued [_] = return ()
           go actionIssued remainingPath@(from:to:xs) = await >>= \case
             PulseEvent -> (when (not actionIssued) (yield $ SendToServer $ fromJust $ direction from to)) >> go True remainingPath
-            (ServerEvent (LocationEvent (Event.Location locationId _) _ _)) -> go False $ dropWhile (/= locationId) remainingPath
+            (ServerEvent (LocationEvent (Location locationId _) _ _)) -> go False $ dropWhile (/= locationId) remainingPath
             _ -> go actionIssued remainingPath
-          direction from to = trigger <$> findDirection directions from to
+          direction from to = trigger <$> findDirection (_directions world) from to
 
 findMoveQuests :: Monad m => LocationId -> LocationId -> Pipe Event Event m ()
 findMoveQuests from to = action $ L.lookup (from, to) travelActions
@@ -41,14 +61,6 @@ findMoveQuests from to = action $ L.lookup (from, to) travelActions
 
 findDirection :: Set Direction -> LocationId -> LocationId -> Maybe Direction
 findDirection directions from to = find (\d -> locIdFrom d == from && locIdTo d == to) directions
-
-loadConfigProperty :: Text -> IO (Maybe Text)
-loadConfigProperty propertyName = do conf <- DC.load [Required $ T.unpack personCfgFileName]
-                                     propertyValue <- DC.lookup conf propertyName
-                                     return propertyValue
-
-personCfgFileName :: Text
-personCfgFileName = "person.cfg"
 
 travelActions :: Monad m => [((LocationId, LocationId), (Pipe Event Event m ()))]
 travelActions = [ ((LocationId 5102, LocationId 5103), openDoor South)

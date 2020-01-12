@@ -6,13 +6,9 @@
 module World ( locsByRegex
              , showLocs
              , loadWorld
-             , printWorldStats
-             , listFilesIn
-             , loadLogs
              , parseServerEvents
-             , loadServerEvents
-             , extractMobs
-             , extractDiscovered
+             , printLocations
+             , locationBy
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -45,6 +41,7 @@ import qualified Data.Set as S
 import Logger
 import System.Directory
 import Control.Lens
+import TextShow
 
 data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
@@ -209,3 +206,9 @@ buildMap directions = mkGraph nodes edges
         nodes = (\n -> (n, ())) <$> F.foldl (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
         aheadEdge (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId, 1)
         reverseEdge (Direction (LocationId fromId) (LocationId toId) _) = (toId, fromId, 1)
+
+printLocations :: Text -> World -> IO ()
+printLocations substr world = mapM_ printT $ filter (T.isInfixOf substr . T.toLower . showt) $ (_locations world) ^.. folded
+
+locationBy :: Text -> World -> [LocationId]
+locationBy substr world = _locationId <$> filter (T.isInfixOf substr . T.toLower . showt) (_locations world ^.. folded)
