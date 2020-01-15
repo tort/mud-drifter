@@ -2,7 +2,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 
 module World ( locsByRegex
              , showLocs
@@ -44,6 +45,7 @@ import Logger
 import System.Directory
 import Control.Lens
 import TextShow
+import TextShow.Generic
 
 data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
@@ -58,7 +60,9 @@ data World = World { _worldMap :: WorldMap
 data Direction = Direction { locIdFrom :: LocIdFrom
                            , locIdTo :: LocIdTo
                            , trigger :: Trigger
-                           } deriving (Eq, TextShow, Ord)
+                           }
+                           deriving (Eq, Ord, Generic)
+                           deriving TextShow via FromGeneric Direction
 
 type LocIdFrom = LocationId
 type LocIdTo = LocationId
