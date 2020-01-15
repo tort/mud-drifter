@@ -39,6 +39,7 @@ import qualified Data.List as L
 import Control.Lens hiding ((&))
 import Data.Time
 import Data.Time.Format
+import TextShow
 
 serverLogDir = archiveDir ++ "/server-input-log/"
 evtLogDir = archiveDir ++ "/evt-log/"
@@ -95,7 +96,7 @@ printEvents = forever $ await >>= lift . printEvent
         printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
         printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
         printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
-        printEvent event = print event
+        printEvent event = printT event
 
 {-printMove :: [LocToLocActions] -> IO ()
 printMove moves = mapM_ printM moves

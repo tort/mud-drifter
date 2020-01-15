@@ -85,9 +85,9 @@ setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
         checkItemRoomDescs _ = waitLocEvt
 
 openDoor :: Monad m => RoomDir -> Pipe Event Event m ()
-openDoor dir = (yield $ SendToServer ("смотреть " <> show dir)) >> waitObstacleEvent
+openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> waitObstacleEvent
   where waitObstacleEvent = await >>= checkObstacleEvent
-        checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> show dir)
+        checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> showt dir)
         checkObstacleEvent (ServerEvent (UnknownServerEvent "")) = return ()
         checkObstacleEvent (ServerEvent (GlanceEvent _ _ _)) = return ()
         checkObstacleEvent _ = waitObstacleEvent

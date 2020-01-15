@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -7,7 +8,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Event ( Event(..)
              , UserCommand(..)
@@ -60,13 +60,18 @@ import Data.DeriveTH
 import Control.Lens hiding ((&))
 
 import TextShow
+import TextShow.Generic
 
-newtype LocationId = LocationId { unLocationId :: Int } deriving (Eq, Ord, Show, TextShow, Generic)
-newtype LocationTitle = LocationTitle { unLocationTitle :: Text } deriving (Eq, Ord, Show, Generic)
+newtype LocationId = LocationId Int
+  deriving (Eq, Ord, Generic)
+  deriving TextShow via FromGeneric LocationId
+newtype LocationTitle = LocationTitle Text
+  deriving (Eq, Ord, Generic)
+  deriving TextShow via FromGeneric LocationTitle
 
 data Location = Location { _locationId :: LocationId
                          , _locationTitle :: LocationTitle
-                         } deriving (Ord, Show, Generic)
+                         } deriving (Ord, Generic)
 
 instance TextShow Location where
   showt (Location (LocationId locId) (LocationTitle title)) = showt locId <> ": " <> title
@@ -74,13 +79,13 @@ instance TextShow Location where
 instance Eq Location where
   left == right = _locationId left == _locationId right
 
-instance P.Show RoomDir where
-  show North = "север"
-  show South = "юг"
-  show West = "запад"
-  show East = "восток"
-  show Up = "вверх"
-  show Down = "вниз"
+instance TextShow RoomDir where
+  showt North = "север"
+  showt South = "юг"
+  showt West = "запад"
+  showt East = "восток"
+  showt Up = "вверх"
+  showt Down = "вниз"
 
 instance Binary Event
 instance Binary UserCommand
@@ -114,7 +119,8 @@ data Event = ConsoleInput Text
            | PulseEvent
            | TravelRequest [LocationId]
            | TravelFailure
-           deriving (Eq, Show, Generic)
+           deriving (Eq, Generic)
+           deriving TextShow via FromGeneric Event
 
 type EventBus = (Output Event, Input Event)
 
@@ -130,7 +136,8 @@ data UserCommand = ServerCommand Text
                | Equip
                | WhereMob Text
                | WhereObject Text
-               deriving (Eq, Show, Generic)
+               deriving (Eq, Generic)
+               deriving TextShow via FromGeneric UserCommand
 
 data ServerEvent = CodepagePrompt
                  | LoginPrompt
@@ -159,41 +166,66 @@ data ServerEvent = CodepagePrompt
                  | TakeInBothHands ItemAccusative
                  | MobGaveYouItem MobNominative ItemAccusative
                  | ParseError ByteString
-                 deriving (Eq, Show, Generic, Ord)
+                 deriving (Eq, Generic, Ord)
+                 deriving TextShow via FromGeneric ServerEvent
 
-data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders deriving (Eq, Show, Generic, Ord)
-data EquippedItem = EquippedItem Slot ItemNominative deriving (Eq, Show, Generic, Ord)
-data ItemState = Excellent | VeryGood | Good | Bad deriving (Eq, Show, Generic, Ord)
-data ItemStats = Weapon ItemNominative WeaponClass [Slot] AvgDamage | Armor ItemNominative [Slot] AC ArmorVal deriving (Eq, Show, Generic, Ord)
+data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric Slot
+data EquippedItem = EquippedItem Slot ItemNominative
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric EquippedItem
+data ItemState = Excellent | VeryGood | Good | Bad
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric ItemState
+data ItemStats = Weapon ItemNominative WeaponClass [Slot] AvgDamage | Armor ItemNominative [Slot] AC ArmorVal
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric ItemStats
 type AvgDamage = Double
-data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other deriving (Eq, Show, Generic, Ord)
+data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric WeaponClass
 type AC = Int
 type ArmorVal = Int
 type Price = Int
-data MobStats = EmptyMobStats deriving (Eq, Show, Generic)
-newtype MobRoomDesc = MobRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
+data MobStats = EmptyMobStats deriving (Eq, Generic)
+newtype MobRoomDesc = MobRoomDesc { _text :: Text }
+  deriving (Eq, Ord, Generic)
+  deriving TextShow via FromGeneric MobRoomDesc
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord)
 
-newtype MobNominative = MobNominative Text deriving (Eq, Show, Ord, Generic)
-newtype MobAlias = MobAlias Text deriving (Eq, Show)
-newtype MobGenitive = MobGenitive Text deriving (Eq, Show, Ord, Generic)
+newtype MobNominative = MobNominative Text
+  deriving (Eq, Ord, Generic)
+  deriving TextShow via FromGeneric MobNominative
+newtype MobAlias = MobAlias Text deriving (Eq)
+newtype MobGenitive = MobGenitive Text
+  deriving (Eq, Ord, Generic)
+  deriving TextShow via FromGeneric MobGenitive
 data Mob = Mob { _roomDesc :: MobRoomDesc
                , _name :: MobNominative
                , _handleAlias :: MobAlias
                , _stats :: Maybe MobStats
-               } deriving (Show)
+               }
 
-newtype ItemRoomDesc = ItemRoomDesc { _text :: Text } deriving (Eq, Ord, Show, Generic)
-newtype ItemAccusative = ItemAccusative Text deriving (Eq, Show, Generic, Ord)
-newtype ItemNominative = ItemNominative Text deriving (Eq, Show, Generic, Ord)
-newtype ItemGenitive = ItemGenitive Text deriving (Eq, Show, Generic, Ord)
-newtype ItemAlias = ItemAlias Text deriving (Eq, Show)
+newtype ItemRoomDesc = ItemRoomDesc { _text :: Text }
+  deriving (Eq, Ord, Generic)
+  deriving TextShow via FromGeneric ItemRoomDesc
+newtype ItemAccusative = ItemAccusative Text
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric ItemAccusative
+newtype ItemNominative = ItemNominative Text
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric ItemNominative
+newtype ItemGenitive = ItemGenitive Text
+  deriving (Eq, Generic, Ord)
+  deriving TextShow via FromGeneric ItemGenitive
+newtype ItemAlias = ItemAlias Text deriving (Eq)
 data Item = Item { _roomDesc :: ItemRoomDesc
                  , _nominative :: ItemNominative
                  , _accusative :: ItemAccusative
                  , _alias :: ItemAlias
                  , _stats :: ItemStats
-                 } deriving (Show)
+                 }
 
 makeFieldsNoPrefix ''Item
 

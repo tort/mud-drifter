@@ -2,6 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 module World ( locsByRegex
              , showLocs
@@ -57,7 +58,7 @@ data World = World { _worldMap :: WorldMap
 data Direction = Direction { locIdFrom :: LocIdFrom
                            , locIdTo :: LocIdTo
                            , trigger :: Trigger
-                           } deriving (Eq, Show, Ord)
+                           } deriving (Eq, TextShow, Ord)
 
 type LocIdFrom = LocationId
 type LocIdTo = LocationId
