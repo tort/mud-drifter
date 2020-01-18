@@ -53,6 +53,7 @@ library:
                 , pipes-concurrency 
                 , derive
                 , time
+                , regex-tdfa
                 ]
 
 executables:

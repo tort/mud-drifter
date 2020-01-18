@@ -12,6 +12,7 @@ module World ( locsByRegex
              , printLocations
              , locationsBy
              , findLocationsBy
+             , travelAction
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -46,6 +47,7 @@ import System.Directory
 import Control.Lens
 import TextShow
 import TextShow.Generic
+import Text.Regex.TDFA
 
 data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
@@ -208,10 +210,60 @@ parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
 
 buildMap :: Set Direction -> Gr () Int
 buildMap directions = mkGraph nodes edges
-  where edges = concat $ (\d -> [aheadEdge d, reverseEdge d]) <$> S.toList directions
+  where edges = concat $ (\d -> [aheadEdge d, reverseEdge d]) <$> vertexPairs
         nodes = (\n -> (n, ())) <$> F.foldl (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
-        aheadEdge (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId, 1)
-        reverseEdge (Direction (LocationId fromId) (LocationId toId) _) = (toId, fromId, 1)
+        directionVertexes (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId)
+        questActionVertexes ((LocationId fromId), (LocationId toId)) = (fromId, toId)
+        aheadEdge (fromId, toId) = (fromId, toId, 1)
+        reverseEdge (fromId, toId) = (toId, fromId, 1)
+        vertexPairs = directionsPairs ++ questActionsPairs
+        directionsPairs = directionVertexes <$> (S.toList directions)
+        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO LocationId))
+
+travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m LocationId)
+travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South)
+                           , ((LocationId 5103, LocationId 5102), openDoor North)
+                           , ((LocationId 5104, LocationId 5117), setupLadder)
+                           , ((LocationId 5052, LocationId 4064), payOldGipsy)
+                           , ((LocationId 4064, LocationId 5052), payYoungGipsy)
+                           ]
+
+directionActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
+directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
+  where directionVertexes (Direction from to dir) = ((from, to), movePipe to dir)
+        movePipe to dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> doNothing
+                                          _ -> movePipe to dir
+        doNothing = forever await
+
+allActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
+allActions world = M.union (directionActions world) travelActions
+
+travelAction :: Monad m => World -> LocationId -> LocationId -> Pipe Event Event m LocationId
+travelAction world from to = case M.lookup (from, to) (allActions world) of Nothing -> return to
+                                                                            (Just pipe) -> pipe
+
+payOldGipsy :: Monad m => Pipe Event Event m LocationId
+payOldGipsy = forever $ await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> return Nothing
+                                        _ -> return Nothing
+
+payYoungGipsy :: Monad m => Pipe Event Event m LocationId
+payYoungGipsy = (yield $ SendToServer $ "дать 1 кун цыган") >> return (LocationId 1)
+
+setupLadder :: Monad m => Pipe Event Event m LocationId
+setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt >> return (LocationId 1)
+  where waitLocEvt = await >>= checkItemRoomDescs
+        checkItemRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ItemRoomDesc "На полу лежит лестница.") objs
+                                                                            then yield $ SendToServer "приставить лестница"
+                                                                            else return ()
+        checkItemRoomDescs _ = waitLocEvt
+
+openDoor :: Monad m => RoomDir -> Pipe Event Event m LocationId
+openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> waitObstacleEvent >> return (LocationId 1)
+  where waitObstacleEvent = await >>= checkObstacleEvent
+        checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> showt dir)
+        checkObstacleEvent (ServerEvent (UnknownServerEvent "")) = return ()
+        checkObstacleEvent (ServerEvent (GlanceEvent _ _ _)) = return ()
+        checkObstacleEvent _ = waitObstacleEvent
 
 printLocations :: Text -> World -> IO ()
 printLocations substr world = mapM_ printT $ locationsBy substr world

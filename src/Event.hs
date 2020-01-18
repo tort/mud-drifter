@@ -31,6 +31,7 @@ module Event ( Event(..)
              , ItemGenitive(..)
              , MobNominative(..)
              , ShowVal(..)
+             , Result(..)
              , isServerEvent
              , isMoveEvent
              , isConsoleInput
@@ -61,6 +62,8 @@ import Control.Lens hiding ((&))
 
 import TextShow
 import TextShow.Generic
+
+data Result a = Success | Failure Text
 
 newtype LocationId = LocationId Int
   deriving (Eq, Ord, Generic)

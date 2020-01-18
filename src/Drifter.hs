@@ -52,12 +52,12 @@ onerr :: Monad m => SomeException -> Pipe Event Event m ()
 onerr ex = yield (ConsoleOutput "error!!")
 
 
-scanServerInput :: Event -> Maybe (Result ServerEvent) -> ([Event], Maybe (Result ServerEvent))
+scanServerInput :: Event -> Maybe (A.Result ServerEvent) -> ([Event], Maybe (A.Result ServerEvent))
 scanServerInput (ServerInput text) Nothing = parseWholeServerInput (A.parse serverInputParser text) []
 scanServerInput (ServerInput "") _ = ([], Nothing)
 scanServerInput (ServerInput text) (Just (Partial cont)) = parseWholeServerInput (cont text) []
 
-parseWholeServerInput :: Result ServerEvent -> [Event] -> ([Event], Maybe (Result ServerEvent))
+parseWholeServerInput :: A.Result ServerEvent -> [Event] -> ([Event], Maybe (A.Result ServerEvent))
 parseWholeServerInput (Done "" r) events = (events ++ [ServerEvent r], Nothing)
 parseWholeServerInput (Done remaining evt) events = let nextResult = A.parse serverInputParser remaining
                                                      in parseWholeServerInput nextResult (events ++ [ServerEvent evt])
