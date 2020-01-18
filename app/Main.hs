@@ -46,14 +46,6 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
-{-runGenod :: Pipe Event Event IO () -> IO ()
-runGenod task = runPerson genod task
-
-runPerson :: Person -> Pipe Event Event IO () -> IO ()
-runPerson person task = initPerson person >>= \(o, i) ->
-  runEffect $ fromInput i >-> parseServerInputPipe >-> task >-> commandExecutor >-> toOutput o
-  -}
-
 withPerson :: (Output ByteString, Input Event) -> Pipe Event Event IO () -> IO ()
 withPerson channels task = runEffect $ fromInput (snd channels) >-> task >-> commandExecutor >-> toOutput (fst channels)
 

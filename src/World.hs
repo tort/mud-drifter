@@ -9,9 +9,6 @@ module World ( locsByRegex
              , showLocs
              , loadWorld
              , parseServerEvents
-             , printLocations
-             , locationsBy
-             , findLocationsBy
              , travelAction
              , World(..)
              , Direction(..)
@@ -272,12 +269,3 @@ openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> wait
         checkObstacleEvent (ServerEvent (UnknownServerEvent "")) = return ()
         checkObstacleEvent (ServerEvent (GlanceEvent _ _ _)) = return ()
         checkObstacleEvent _ = waitObstacleEvent
-
-printLocations :: Text -> World -> IO ()
-printLocations substr world = mapM_ printT $ locationsBy substr world
-
-findLocationsBy :: Text -> World -> [LocationId]
-findLocationsBy substr world = _locationId <$> locationsBy substr world
-
-locationsBy :: Text -> World -> [Location]
-locationsBy substr world = filter (T.isInfixOf substr . T.toLower . showt) (_locations world ^.. folded)

@@ -1,7 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE LambdaCase #-}
 
-module Mapper ( mapper
+module Mapper ( showItemAreal
+              , printLocations
+              , locationsBy
+              , findLocationsBy
               , findTravelPath
               ) where
 
@@ -22,23 +26,7 @@ import Data.Foldable
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List as L
-
-mapper :: Monad m => World -> Pipe Event Event m ()
-mapper world = let mapperWithPosition currLoc = do evt <- await
-                                                   case evt of (ServerEvent (LocationEvent loc _ _)) -> yield evt >> mapperWithPosition (Just $ loc^.locationId)
-                                                               _ -> do yield $ case evt of (UserCommand (FindLoc text)) -> ConsoleOutput $ showLocs $ locsByRegex world text
-                                                                                           (UserCommand (FindPathFromTo from to)) -> ConsoleOutput $ showPathBy world (Just from) to
-                                                                                           (UserCommand (FindPathToLocId to)) -> ConsoleOutput $ showPathBy world currLoc to
-                                                                                           (UserCommand (WhereMob subName)) -> ConsoleOutput $ showAreal subName _mobsDiscovered world
-                                                                                           (UserCommand (WhereObject subName)) -> ConsoleOutput $ showItemAreal subName world
-                                                                                           (UserCommand (FindPathTo regex)) -> let matchingLocs = locsByRegex world regex
-                                                                                                                                in ConsoleOutput $ case matchingLocs of
-                                                                                                                                  [] -> "no matching locations found"
-                                                                                                                                  d:[] -> showPathBy world currLoc (d^.locationId)
-                                                                                                                                  _ -> showLocs matchingLocs
-                                                                                           x -> x
-                                                                       mapperWithPosition currLoc
-                in mapperWithPosition Nothing
+import TextShow
 
 type Path = [LocationId]
 
@@ -65,42 +53,36 @@ findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe [LocationId]
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (GA.sp fromId toId worldMap)
 
 showItemAreal :: Text -> World -> ByteString
-showItemAreal subName world = (renderr . limit . filterMobs) (_itemsOnMap world)
+showItemAreal subName world = (renderr . filterEvents) (_itemsOnMap world)
   where renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
         renderMob evt locToCountMap = renderEvent evt <> "\n" <> (renderLocs locToCountMap)
         renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
-        limit = M.take 5
-        filterMobs = M.filterWithKey (\mobRoomDesc a -> filterMob mobRoomDesc)
-        filterMob (ItemInTheRoom itemDesc) = T.isInfixOf subName (T.toLower $ showVal itemDesc)
-        filterMob (LootCorpse itemDesc mob) = T.isInfixOf subName (T.toLower $ showVal itemDesc)
-        filterMob (TakeFromContainer item container) = T.isInfixOf subName (T.toLower $ showVal item)
-        filterMob (MobGaveYouItem mob item) = T.isInfixOf subName (T.toLower $ showVal item)
-        renderEvent (ItemInTheRoom itemDesc) = showVal itemDesc
-        renderEvent (LootCorpse itemDesc mob) = "Вы взяли " <> showVal itemDesc <> " из трупа " <> showVal mob
-        renderEvent (TakeFromContainer itemAccusative containerGenitive) = "Вы взяли " <> showVal itemAccusative <> " из " <> showVal containerGenitive
-        renderEvent (MobGaveYouItem mob item) = showVal mob <> " дал вам " <> showVal item
+        filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
+        filterEvent (ItemInTheRoom (ItemRoomDesc text)) = T.isInfixOf subName (T.toLower text)
+        filterEvent (LootCorpse (ItemAccusative item) (MobGenitive mob)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (TakeFromContainer (ItemAccusative item) (ItemGenitive container)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (MobGaveYouItem (MobNominative mob) (ItemAccusative item)) = T.isInfixOf subName (T.toLower item)
+        renderEvent (ItemInTheRoom (ItemRoomDesc text)) = text
+        renderEvent (LootCorpse (ItemAccusative item) (MobGenitive mob)) = "Вы взяли " <> item <> " из трупа " <> mob
+        renderEvent (TakeFromContainer (ItemAccusative item) (ItemGenitive container)) = "Вы взяли " <> item <> " из " <> container
+        renderEvent (MobGaveYouItem (MobNominative mob) (ItemAccusative item)) = mob <> " дал вам " <> item
 
 showAreal :: ShowVal a => Text -> (World -> Map a (Map LocationId Int)) -> World -> ByteString
-showAreal subName getter world = renderr . limit . filterMobs $ getter world
+showAreal subName getter world = renderr . limit . filterEvents $ getter world
   where renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
         renderMob entity locToCountMap = showVal entity <> "\n" <> (renderLocs locToCountMap)
         renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
         limit = M.take 5
-        filterMobs = M.filterWithKey (\mobRoomDesc a -> filterMob mobRoomDesc)
-        filterMob entity = T.isInfixOf subName (T.toLower $ showVal entity)
+        filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
+        filterEvent entity = T.isInfixOf subName (T.toLower $ showVal entity)
 
-{-showFindPathResponse :: World -> Maybe Int -> Event -> ByteString
-showFindPathResponse world currLoc userInput =
-  let destination = locsByRegex world
-   in case (currLoc, userInput) of
-        (_, (UserCommand (FindPathFromTo from to))) -> showPathBy from to
-        (Just currLoc, (UserCommand (FindPathToLocId to))) -> showPathBy currLoc to
-        (Just currLoc, (UserCommand (FindPathTo regex))) -> let matchingLocs = destination regex
-                                             in case S.toList $ matchingLocs of
-                                                  [] -> "no matching locations found"
-                                                  d:[] -> showPathBy currLoc (locId d)
-                                                  _ -> showLocs matchingLocs
-        (Nothing, _) -> "current location is unknown\n"
--}
+printLocations :: Text -> World -> IO ()
+printLocations substr world = mapM_ printT $ locationsBy substr world
+
+findLocationsBy :: Text -> World -> [LocationId]
+findLocationsBy substr world = _locationId <$> locationsBy substr world
+
+locationsBy :: Text -> World -> [Location]
+locationsBy substr world = filter (T.isInfixOf substr . T.toLower . showt) (_locations world ^.. folded)
