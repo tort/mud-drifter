@@ -230,10 +230,11 @@ travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South
 
 directionActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
 directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
-  where directionVertexes (Direction from to dir) = ((from, to), movePipe to dir)
-        movePipe to dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> doNothing
-                                          _ -> movePipe to dir
-        doNothing = forever await
+  where directionVertexes (Direction from to dir) = ((from, to), movePipe dir)
+        movePipe dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> waitLocation
+                                       _ -> movePipe dir
+        waitLocation = await >>= \case (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+                                       _ -> waitLocation
 
 allActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
 allActions world = M.union (directionActions world) travelActions
@@ -243,11 +244,18 @@ travelAction world from to = case M.lookup (from, to) (allActions world) of Noth
                                                                             (Just pipe) -> pipe
 
 payOldGipsy :: Monad m => Pipe Event Event m LocationId
-payOldGipsy = forever $ await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> return Nothing
-                                        _ -> return Nothing
+payOldGipsy = move
+  where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
+                               _ -> move
+        waitLocation = await >>= \case (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+                                       _ -> waitLocation
 
 payYoungGipsy :: Monad m => Pipe Event Event m LocationId
-payYoungGipsy = (yield $ SendToServer $ "дать 1 кун цыган") >> return (LocationId 1)
+payYoungGipsy = move
+  where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
+                               _ -> move
+        waitLocation = await >>= \case (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+                                       _ -> waitLocation
 
 setupLadder :: Monad m => Pipe Event Event m LocationId
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt >> return (LocationId 1)
