@@ -2,11 +2,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Person ( person
-              , loadWorld
-              , travel
+module Person ( travel
               , travelTo
-              , findCurrentLoc
+              , login
               ) where
 
 import Protolude hiding (Location)
@@ -24,8 +22,12 @@ import TextShow
 
 data Travel
 
-person :: Monad m => World -> Pipe Event Event m ()
-person world = undefined
+login :: Pipe Event Event IO ()
+login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5") >> login
+                        (ServerEvent LoginPrompt) -> yield (SendToServer "генод") >> login
+                        (ServerEvent PasswordPrompt) -> yield (SendToServer "каркасный") >> login
+                        (ServerEvent WelcomePrompt) -> yield (SendToServer "")
+                        _ -> login
 
 travelTo :: MonadIO m => Text -> World -> Pipe Event Event m ()
 travelTo substr world = action findLocation

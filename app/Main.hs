@@ -12,7 +12,6 @@ import ServerInputParser
 import Console
 import RemoteConsole
 import Logger
-import Drifter
 import Event
 import CommandExecutor
 import Mapper
