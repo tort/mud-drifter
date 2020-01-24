@@ -10,6 +10,7 @@ module World ( locsByRegex
              , loadWorld
              , parseServerEvents
              , travelAction
+             , zoneMap
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -216,6 +217,21 @@ buildMap directions = mkGraph nodes edges
         vertexPairs = directionsPairs ++ questActionsPairs
         directionsPairs = directionVertexes <$> (S.toList directions)
         questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO LocationId))
+
+zoneMap :: World -> Int -> Gr () Int
+zoneMap world anyZoneLocId = mkGraph nodes edges
+  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . filterDirInZone $ vertexPairs
+        nodes = fmap (\n -> (n, ())) . filter isInZone $ foldl' (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
+        directionVertexes (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId)
+        questActionVertexes ((LocationId fromId), (LocationId toId)) = (fromId, toId)
+        aheadEdge (fromId, toId) = (fromId, toId, 1)
+        reverseEdge (fromId, toId) = (toId, fromId, 1)
+        vertexPairs = directionsPairs ++ questActionsPairs
+        directionsPairs = directionVertexes <$> (S.toList directions)
+        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO LocationId))
+        filterDirInZone = filter (\(l, r) -> isInZone l && isInZone r)
+        isInZone v = v - (mod v 100) == anyZoneLocId
+        directions = _directions world
 
 travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m LocationId)
 travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South)

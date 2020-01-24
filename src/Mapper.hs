@@ -2,14 +2,16 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Mapper ( showItemAreal
+module Mapper ( printItems
               , printLocations
               , locationsBy
               , findLocationsBy
               , findTravelPath
+              , showPath
+              , zonePath
               ) where
 
-import Protolude hiding (Location, runStateT, head, intercalate)
+import Protolude hiding (Location, runStateT, intercalate)
 import Data.ByteString.Char8()
 import ServerInputParser
 import Pipes
@@ -20,7 +22,8 @@ import Event
 import World
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph hiding (Path)
-import qualified Data.Graph.Inductive.Query.SP as GA
+import qualified Data.Graph.Inductive.Query.SP as SP
+import qualified Data.Graph.Inductive.Query.MST as MST
 import Control.Lens hiding (snoc, (<>))
 import Data.Foldable
 import qualified Data.Set as S
@@ -33,10 +36,11 @@ type Path = [LocationId]
 showPath :: World -> Maybe Path -> ByteString
 showPath world Nothing = "where is no path there\n"
 showPath world (Just []) = "path is empty\n"
-showPath world (Just path) = (encodeUtf8 . addRet . joinToOneMsg) (showDirection . (nodePairToDirection world) <$> toJust <$> nodePairs)
-  where joinToOneMsg = T.intercalate "\n"
+showPath world (Just path) = render $ showDirection . (nodePairToDirection world) . toJust <$> nodePairs
+  where render = encodeUtf8 . addRet . joinToOneMsg
+        joinToOneMsg = T.intercalate ","
         showDirection = trigger
-        addRet txt = T.snoc txt '\n'
+        addRet txt = T.snoc txt ','
         nodePairs = filterDirs $ scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
         filterDirs = filter (\pair -> isJust (fst pair) && isJust (snd pair))
         toJust (Just left, Just right) = (left, right)
@@ -44,17 +48,12 @@ showPath world (Just path) = (encodeUtf8 . addRet . joinToOneMsg) (showDirection
 nodePairToDirection :: World -> (LocationId, LocationId) -> Direction
 nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
 
-showPathBy :: World -> Maybe LocationId -> LocationId -> ByteString
-showPathBy world Nothing _ = "current location is unknown\n"
-showPathBy world (Just fromId) toId = if (fromId == toId) then "you are already there!"
-                                                          else showPath world $ findTravelPath fromId toId (_worldMap world)
-
 findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe [LocationId]
-findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (GA.sp fromId toId worldMap)
+findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (SP.sp fromId toId worldMap)
 
-showItemAreal :: Text -> World -> ByteString
-showItemAreal subName world = (renderr . filterEvents) (_itemsOnMap world)
-  where renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
+printItems :: Text -> World -> Text
+printItems subName world = (render . filterEvents) (_itemsOnMap world)
+  where render mobs = M.foldMapWithKey renderMob mobs
         renderMob evt locToCountMap = renderEvent evt <> "\n" <> (renderLocs locToCountMap)
         renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
@@ -68,16 +67,6 @@ showItemAreal subName world = (renderr . filterEvents) (_itemsOnMap world)
         renderEvent (TakeFromContainer (ItemAccusative item) (ItemGenitive container)) = "Вы взяли " <> item <> " из " <> container
         renderEvent (MobGaveYouItem (MobNominative mob) (ItemAccusative item)) = mob <> " дал вам " <> item
 
-showAreal :: ShowVal a => Text -> (World -> Map a (Map LocationId Int)) -> World -> ByteString
-showAreal subName getter world = renderr . limit . filterEvents $ getter world
-  where renderr mobs = encodeUtf8 $ M.foldMapWithKey renderMob mobs
-        renderMob entity locToCountMap = showVal entity <> "\n" <> (renderLocs locToCountMap)
-        renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
-        showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
-        limit = M.take 5
-        filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
-        filterEvent entity = T.isInfixOf subName (T.toLower $ showVal entity)
-
 printLocations :: Text -> World -> IO ()
 printLocations substr world = mapM_ printT $ locationsBy substr world
 
@@ -85,4 +74,25 @@ findLocationsBy :: Text -> World -> [LocationId]
 findLocationsBy substr world = _locationId <$> locationsBy substr world
 
 locationsBy :: Text -> World -> [Location]
-locationsBy substr world = filter (T.isInfixOf substr . T.toLower . showt) (_locations world ^.. folded)
+locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . showt) (_locations world ^.. folded)
+
+sharePrefix :: Eq a => [a] -> [a] -> ([a], [a], [a])
+sharePrefix l1 l2 = let prefix = map fst $ takeWhile (uncurry (==)) $ zip l1 l2
+                        f = drop $ length prefix
+                     in (prefix, f l1, f l2)
+
+listToPairs :: [a] -> [(a,a)]
+listToPairs list = fmap unwrap . filterDirs . scanToPairs $ list
+  where filterDirs = filter (\(l, r) -> isJust l && isJust r)
+        unwrap (Just left, Just right) = (left, right)
+        scanToPairs = scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing)
+
+zonePath :: World -> Int -> [LocationId]
+zonePath world anyZoneLocId = fmap LocationId $ concat $  mergeTree $ listToPairs (reverse . fmap fst . unLPath <$> MST.msTree zone)
+  where zone = zoneMap world anyZoneLocId
+        mergeTree = foldr (\(l, r) acc -> mergePathPair l r : acc) []
+        mergePathPair l r = let (commonPath, lPrivatePath, rPrivatePath) = sharePrefix l r
+                                lastCommonNode = maybeToList . head . reverse $ commonPath
+                                privatePathBack [] = []
+                                privatePathBack (xs) = L.tail $ reverse $ lastCommonNode ++ xs
+                                in concat [ privatePathBack lPrivatePath, rPrivatePath ]
