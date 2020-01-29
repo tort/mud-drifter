@@ -10,7 +10,6 @@
 {-# LANGUAGE FunctionalDependencies #-}
 
 module Event ( Event(..)
-             , UserCommand(..)
              , ServerEvent(..)
              , EventBus
              , Location(..)
@@ -35,7 +34,6 @@ module Event ( Event(..)
              , isServerEvent
              , isMoveEvent
              , isConsoleInput
-             , isUserCommand
              , isShopListItemEvent
              , isLocationEvent
              , isItemStatsEvent
@@ -91,7 +89,6 @@ instance TextShow RoomDir where
   showt Down = "вниз"
 
 instance Binary Event
-instance Binary UserCommand
 instance Binary ServerEvent
 instance Binary Location
 instance Binary LocationId
@@ -112,7 +109,6 @@ instance Binary MobNominative
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
-           | UserCommand UserCommand
            | SendToServer Text
            | ServerInput ByteString
            | ServerEvent { _serverEvent :: ServerEvent }
@@ -126,21 +122,6 @@ data Event = ConsoleInput Text
            deriving TextShow via FromGeneric Event
 
 type EventBus = (Output Event, Input Event)
-
-data UserCommand = ServerCommand Text
-               | Connect
-               | Zap
-               | FindLoc Text
-               | FindPathFromTo LocationId LocationId
-               | FindPathToLocId LocationId
-               | FindPathTo Text
-               | GoTo Text
-               | GoToLocId LocationId
-               | Equip
-               | WhereMob Text
-               | WhereObject Text
-               deriving (Eq, Generic)
-               deriving TextShow via FromGeneric UserCommand
 
 data ServerEvent = CodepagePrompt
                  | LoginPrompt
@@ -262,7 +243,6 @@ instance ShowVal ItemAccusative where
 instance ShowVal ItemGenitive where
   showVal (ItemGenitive text) = text
 
-derive makeIs ''UserCommand
 derive makeIs ''Location
 derive makeIs ''LocationId
 derive makeIs ''LocationTitle
@@ -275,7 +255,6 @@ derive makeIs ''RoomDir
 derive makeIs ''ServerEvent
 derive makeIs ''Event
 
-makeFieldsNoPrefix ''UserCommand
 makeFieldsNoPrefix ''Location
 makeFieldsNoPrefix ''LocationId
 makeFieldsNoPrefix ''LocationTitle

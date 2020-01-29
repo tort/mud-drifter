@@ -19,7 +19,6 @@ import Control.Concurrent.Async
 import Text.Parsec
 import qualified Text.Parsec as Parsec
 import qualified Data.ByteString.Char8 as DBC8
-import UserInputParser
 import Control.Monad (forever)
 
 consoleInput :: Monad m => Producer Event m ()
