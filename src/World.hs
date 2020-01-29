@@ -11,6 +11,7 @@ module World ( locsByRegex
              , parseServerEvents
              , travelAction
              , zoneMap
+             , loadServerEvents
              , World(..)
              , Direction(..)
              , Trigger(..)

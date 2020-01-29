@@ -15,6 +15,7 @@ import Pipes hiding ((~>))
 import Pipes.Prelude hiding (fromHandle, filter, length, mapM_, print)
 import qualified Pipes.Prelude as PP
 import qualified Data.Text as T
+import TextShow
 import Data.Text.Encoding
 import Data.String
 import Control.Monad
@@ -150,6 +151,9 @@ spec = describe "Parser" $ do
                                                               ]
                                                     location = Location (LocationId 5007) (LocationTitle "Лавка")
                                                     mobs = [MobRoomDesc "Лавочник стоит тут."]
+
+instance Show ServerEvent where
+  show evt = T.unpack $ showt evt
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation e = isMoveEvent e || isLocationEvent e

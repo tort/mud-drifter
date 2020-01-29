@@ -357,7 +357,17 @@ prompt = do many' C.endOfLine
             C.char 'M'
             ansiColor
             C.space
-            skipTillIACGA
+            exp <- C.decimal
+            string $ encodeUtf8 "о"
+            C.space
+            string $ encodeUtf8 "Зауч:0"
+            C.space
+            string $ encodeUtf8 "Вых:"
+            C.skipWhile (/= '>')
+            C.char '>'
+            C.space
+            iacGA
+            --skipTillIACGA
             return PromptEvent
 
 shopList :: A.Parser ServerEvent
