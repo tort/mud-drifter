@@ -217,7 +217,7 @@ buildMap directions = mkGraph nodes edges
         reverseEdge (fromId, toId) = (toId, fromId, 1)
         vertexPairs = directionsPairs ++ questActionsPairs
         directionsPairs = directionVertexes <$> (S.toList directions)
-        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO LocationId))
+        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO ServerEvent))
 
 zoneMap :: World -> Int -> Gr () Int
 zoneMap world anyZoneLocId = mkGraph nodes edges
@@ -229,12 +229,12 @@ zoneMap world anyZoneLocId = mkGraph nodes edges
         reverseEdge (fromId, toId) = (toId, fromId, 1)
         vertexPairs = directionsPairs ++ questActionsPairs
         directionsPairs = directionVertexes <$> (S.toList directions)
-        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO LocationId))
+        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO ServerEvent))
         filterDirInZone = filter (\(l, r) -> isInZone l && isInZone r)
         isInZone v = v - (mod v 100) == anyZoneLocId
         directions = _directions world
 
-travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m LocationId)
+travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
 travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South)
                            , ((LocationId 5103, LocationId 5102), openDoor North)
                            , ((LocationId 5104, LocationId 5117), setupLadder)
@@ -242,47 +242,56 @@ travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South
                            , ((LocationId 4064, LocationId 5052), payYoungGipsy)
                            ]
 
-directionActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
-directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
-  where directionVertexes (Direction from to dir) = ((from, to), movePipe dir)
+directionActions :: Monad m => World -> ServerEvent -> Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
+directionActions world locEvt = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
+  where directionVertexes (Direction from to dir) = ((from, to), openObstacle locEvt dir >> movePipe dir)
         movePipe dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> waitLocation
                                        evt -> yield evt >> movePipe dir
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
                                                                   _ -> waitLocation
 
-allActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
-allActions world = M.union (directionActions world) travelActions
+openObstacle :: Monad m => ServerEvent -> Text -> Pipe Event Event m ()
+openObstacle locEvt@LocationEvent{} dir = if inTheCorridor && north
+                                         then yield $ SendToServer "открыть дверь север"
+                                         else return ()
+  where inTheCorridor = (== LocationId 5103) . _locationId . _location $ locEvt
+        north = dir == "север"
 
-travelAction :: Monad m => World -> LocationId -> LocationId -> Pipe Event Event m LocationId
-travelAction world from to = case M.lookup (from, to) (allActions world) of Nothing -> return to
-                                                                            (Just pipe) -> pipe
+allActions :: Monad m => World -> ServerEvent -> Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
+allActions world locEvt = directionActions world locEvt
 
-payOldGipsy :: Monad m => Pipe Event Event m LocationId
+travelAction :: Monad m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent
+travelAction world fromLocEvt to = case M.lookup (from, to) (allActions world fromLocEvt ) of
+                                          Nothing -> return fromLocEvt
+                                          (Just pipe) -> pipe
+  where from = _locationId $ _location fromLocEvt
+
+payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
 payOldGipsy = move
   where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
                                evt -> yield evt >> move
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
                                                                   _ -> waitLocation
 
-payYoungGipsy :: Monad m => Pipe Event Event m LocationId
+payYoungGipsy :: Monad m => Pipe Event Event m ServerEvent
 payYoungGipsy = move
   where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
                                evt -> yield evt >> move
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
                                                                   _ -> waitLocation
 
-setupLadder :: Monad m => Pipe Event Event m LocationId
-setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt >> return (LocationId 1)
+setupLadder :: Monad m => Pipe Event Event m ServerEvent
+setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
   where waitLocEvt = await >>= \evt -> yield evt >> checkItemRoomDescs evt
-        checkItemRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ItemRoomDesc "На полу лежит лестница.") objs
-                                                                            then yield $ SendToServer "приставить лестница"
-                                                                            else return ()
+        checkItemRoomDescs (ServerEvent locEvt@LocationEvent{}) = if elem (ItemRoomDesc "На полу лежит лестница.") (_objects locEvt)
+                                                                     then yield (SendToServer "приставить лестница") >> return locEvt
+                                                                     else return locEvt
         checkItemRoomDescs _ = waitLocEvt
 
-openDoor :: Monad m => RoomDir -> Pipe Event Event m LocationId
-openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> waitObstacleEvent >> return (LocationId 1)
+openDoor :: Monad m => RoomDir -> Pipe Event Event m ServerEvent
+openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> waitObstacleEvent
   where waitObstacleEvent = await >>= \evt -> yield evt >> checkObstacleEvent evt
-        checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> showt dir)
-        checkObstacleEvent (ServerEvent (UnknownServerEvent "")) = return ()
-        checkObstacleEvent (ServerEvent (GlanceEvent _ _ _)) = return ()
+        checkObstacleEvent (ServerEvent sEvt@(ObstacleEvent _ obstacle)) = yield (SendToServer ("открыть " <> obstacle <> " " <> showt dir)) >> return sEvt
+        checkObstacleEvent (ServerEvent sEvt@(UnknownServerEvent "")) = return sEvt
+        checkObstacleEvent (ServerEvent sEvt@(GlanceEvent _ _ _)) = return sEvt
         checkObstacleEvent evt = waitObstacleEvent
