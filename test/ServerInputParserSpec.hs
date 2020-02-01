@@ -55,6 +55,20 @@ spec = describe "Parser" $ do
                                                                                                 , MobRoomDesc "Местный житель идет здесь."
                                                                                                 ]
                                                                                       }
+        it "parse location with closed doors" $ do log <- C8.readFile "test/logs/locationWithClosedDoor.log"
+                                                   log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5102) (LocationTitle "В сенях")
+                                                                                                        , _objects = [ ]
+                                                                                                        , _mobs = [ MobRoomDesc "Клоп ползает здесь." ]
+                                                                                                        }
+        xit "parse location with autoexits" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
+                                                 log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
+                                                                                                      , _objects = [ ItemRoomDesc "У ваших ног лежит глиняная плошка."
+                                                                                                                   , ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"
+                                                                                                                   ]
+                                                                                                      , _mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
+                                                                                                                , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
+                                                                                                                ]
+                                                                                                     }
         it "parse move to location" $ do log <- C8.readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
         it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
