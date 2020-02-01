@@ -137,6 +137,7 @@ data ServerEvent = CodepagePrompt
                  | ItemStatsEvent ItemStats
                  | ShopListItemEvent ItemNominative Price
                  | PromptEvent
+                 | FightPromptEvent
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir

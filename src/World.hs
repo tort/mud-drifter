@@ -246,9 +246,9 @@ directionActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event
 directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
   where directionVertexes (Direction from to dir) = ((from, to), movePipe dir)
         movePipe dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> waitLocation
-                                       _ -> movePipe dir
-        waitLocation = await >>= \case (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
-                                       _ -> waitLocation
+                                       evt -> yield evt >> movePipe dir
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+                                                                  _ -> waitLocation
 
 allActions :: Monad m => World -> Map (LocationId, LocationId) (Pipe Event Event m LocationId)
 allActions world = M.union (directionActions world) travelActions
@@ -260,20 +260,20 @@ travelAction world from to = case M.lookup (from, to) (allActions world) of Noth
 payOldGipsy :: Monad m => Pipe Event Event m LocationId
 payOldGipsy = move
   where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
-                               _ -> move
-        waitLocation = await >>= \case (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
-                                       _ -> waitLocation
+                               evt -> yield evt >> move
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+                                                                  _ -> waitLocation
 
 payYoungGipsy :: Monad m => Pipe Event Event m LocationId
 payYoungGipsy = move
   where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
-                               _ -> move
-        waitLocation = await >>= \case (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
-                                       _ -> waitLocation
+                               evt -> yield evt >> move
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent (LocationEvent (Location locationId _) _ _)) -> return locationId
+                                                                  _ -> waitLocation
 
 setupLadder :: Monad m => Pipe Event Event m LocationId
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt >> return (LocationId 1)
-  where waitLocEvt = await >>= checkItemRoomDescs
+  where waitLocEvt = await >>= \evt -> yield evt >> checkItemRoomDescs evt
         checkItemRoomDescs (ServerEvent (LocationEvent loc objs mobs)) = if elem (ItemRoomDesc "На полу лежит лестница.") objs
                                                                             then yield $ SendToServer "приставить лестница"
                                                                             else return ()
@@ -281,8 +281,8 @@ setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt >> return 
 
 openDoor :: Monad m => RoomDir -> Pipe Event Event m LocationId
 openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> waitObstacleEvent >> return (LocationId 1)
-  where waitObstacleEvent = await >>= checkObstacleEvent
+  where waitObstacleEvent = await >>= \evt -> yield evt >> checkObstacleEvent evt
         checkObstacleEvent (ServerEvent (ObstacleEvent _ obstacle)) = yield $ SendToServer ("открыть " <> obstacle <> " " <> showt dir)
         checkObstacleEvent (ServerEvent (UnknownServerEvent "")) = return ()
         checkObstacleEvent (ServerEvent (GlanceEvent _ _ _)) = return ()
-        checkObstacleEvent _ = waitObstacleEvent
+        checkObstacleEvent evt = waitObstacleEvent

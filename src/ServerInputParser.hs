@@ -37,6 +37,7 @@ serverInputParser = codepagePrompt
                     <|> shopList
                     <|> darkness
                     <|> prompt
+                    <|> fightPrompt
                     <|> obstacleEvent
                     <|> cantGoDir
                     <|> darkInDirection
@@ -367,8 +368,47 @@ prompt = do many' C.endOfLine
             C.char '>'
             C.space
             iacGA
-            --skipTillIACGA
             return PromptEvent
+
+fightPrompt :: A.Parser ServerEvent
+fightPrompt = do
+            many' C.endOfLine
+            many' clearColors
+            ansiColor
+            hp <- C.decimal
+            C.char 'H'
+            ansiColor
+            C.space
+            ansiColor
+            mv <- C.decimal
+            C.char 'M'
+            ansiColor
+            C.space
+            exp <- C.decimal
+            string $ encodeUtf8 "о"
+            C.space
+            string $ encodeUtf8 "Зауч:0"
+            C.space
+            ansiColor
+            C.char '['
+            tankName <- C.takeWhile (/= ':')
+            C.char ':'
+            tankState <- C.takeWhile (/= ']')
+            C.char ']'
+            ansiColor
+            C.space
+            ansiColor
+            C.char '['
+            targetName <- C.takeWhile (/= ':')
+            C.char ':'
+            targetState <- C.takeWhile (/= ']')
+            C.char ']'
+            ansiColor
+            C.space
+            C.char '>'
+            C.space
+            iacGA
+            return FightPromptEvent
 
 shopList :: A.Parser ServerEvent
 shopList = do skipMany shopHeadParser

@@ -133,6 +133,9 @@ spec = describe "Parser" $ do
                                                  log ~> serverInputParser `shouldParse` PromptEvent
         it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent
+        it "parse fight prompt" $ do let log = "test/logs/enterRoomWithFight.log"
+                                     serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
+                                     (length $ filter (== FightPromptEvent) serverEventList) `shouldBe` 3
         it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
                                                   objects = [ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                   mobs = [MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."]

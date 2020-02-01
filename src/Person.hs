@@ -29,8 +29,8 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
                         (ServerEvent WelcomePrompt) -> yield (SendToServer "")
                         _ -> login
 
-travelTo :: MonadIO m => Text -> World -> Pipe Event Event m ()
-travelTo substr world = action findLocation
+travelTo :: MonadIO m => Text -> World -> Pipe Event Event m (Result a)
+travelTo substr world = action findLocation >> return Success
   where findLocation = findLocationsBy substr world
         action [] = liftIO $ putStrLn ("no matching locations found" :: Text)
         action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo >>= printAfterFinish
