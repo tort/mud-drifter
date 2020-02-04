@@ -61,7 +61,7 @@ import Control.Lens hiding ((&))
 import TextShow
 import TextShow.Generic
 
-data Result a = Success | Failure Text
+data Result a = Success a | Failure Text
 
 newtype LocationId = LocationId Int
   deriving (Eq, Ord, Generic)

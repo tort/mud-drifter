@@ -36,17 +36,16 @@ type Path = [LocationId]
 showPath :: World -> Maybe Path -> ByteString
 showPath world Nothing = "where is no path there\n"
 showPath world (Just []) = "path is empty\n"
-showPath world (Just path) = render $ showDirection . (nodePairToDirection world) . toJust <$> nodePairs
+showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nodePairs
   where render = encodeUtf8 . addRet . joinToOneMsg
         joinToOneMsg = T.intercalate ","
-        showDirection = trigger
+        showDirection (Just roomDir) = showt roomDir
+        showDirection Nothing = "direction not found"
         addRet txt = T.snoc txt ','
         nodePairs = filterDirs $ scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
         filterDirs = filter (\pair -> isJust (fst pair) && isJust (snd pair))
         toJust (Just left, Just right) = (left, right)
-
-nodePairToDirection :: World -> (LocationId, LocationId) -> Direction
-nodePairToDirection world (from, to) = L.head $ S.toList $ S.filter (\(Direction dirFrom dirTo _) -> dirFrom == from && dirTo == to) (_directions world)
+        lookupDir p = M.lookup p $ _directions world
 
 findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe [LocationId]
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (SP.sp fromId toId worldMap)

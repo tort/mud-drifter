@@ -50,7 +50,7 @@ import Text.Regex.TDFA
 
 data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
-                   , _directions :: Set Direction
+                   , _directions :: Directions
                    , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
                    , _itemStats :: [ItemStats]
                    , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
@@ -69,27 +69,36 @@ type LocIdFrom = LocationId
 type LocIdTo = LocationId
 type Trigger = Text
 type WorldMap = Gr () Int
+type Directions = Map (LocationId, LocationId) RoomDir
 
 unwrapRight :: Either ParsingError ServerEvent -> ServerEvent
 unwrapRight (Right val) = val
 
-accDirections :: Set Direction -> [ServerEvent] -> Set Direction
+accDirections :: Map (LocationId, LocationId) RoomDir -> [ServerEvent] -> Map (LocationId, LocationId) RoomDir
 accDirections directions pair =
   let updateWorld locFrom locTo dir
         | locFrom == locTo = directions
         | otherwise = insertOpposite $ insertAhead directions
-        where insertAhead = S.insert (Direction (locFrom^.locationId) (locTo^.locationId) dir)
-              insertOpposite = S.insert (Direction (locTo^.locationId) (locFrom^.locationId) $ oppositeDir dir)
+        where insertAhead = M.insert ((locFrom^.locationId), (locTo^.locationId)) $ parseDir dir
+              insertOpposite = M.insert ((locTo^.locationId), (locFrom^.locationId)) $ oppositeDir $ parseDir dir
    in case pair of [LocationEvent locTo _ _, MoveEvent dir, LocationEvent locFrom _ _] -> updateWorld locFrom locTo dir
                    _ -> directions
 
-oppositeDir :: Text -> Text
-oppositeDir "вверх" = "вниз"
-oppositeDir "вниз" = "вверх"
-oppositeDir "север" = "юг"
-oppositeDir "юг" = "север"
-oppositeDir "запад" = "восток"
-oppositeDir "восток" = "запад"
+parseDir :: Text -> RoomDir
+parseDir "вверх" = Up
+parseDir "вниз" = Down
+parseDir "север" = North
+parseDir "юг" = South
+parseDir "запад" = West
+parseDir "восток" = East
+
+oppositeDir :: RoomDir -> RoomDir
+oppositeDir Up = Down
+oppositeDir Down = Up
+oppositeDir North = South
+oppositeDir South = North
+oppositeDir West = East
+oppositeDir East = West
 
 mappableMove :: [ServerEvent] -> Bool
 mappableMove [LocationEvent{}, MoveEvent _, LocationEvent{}] = True
@@ -160,8 +169,8 @@ extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ serverEvtProduc
 extractItemStats :: Monad m => Producer ServerEvent m () -> Producer ItemStats m ()
 extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter isItemStatsEvent >-> PP.map (\(ItemStatsEvent item) -> item)
 
-extractDirections :: Monad m => Producer ServerEvent m () -> m (Set Direction)
-extractDirections producer = PP.fold accDirections S.empty identity (producer >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
+extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId, LocationId) RoomDir)
+extractDirections producer = PP.fold accDirections M.empty identity (producer >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
                                                                                     >-> PP.scan toTriples [] identity
                                                                                     >-> PP.filter mappableMove)
                                                                                       where toTriples acc event
@@ -181,7 +190,7 @@ loadWorld currentDir = do
   itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
   mobsOnMap <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
-  let worldMap = buildMap directions
+  let worldMap = buildMap locations directions
    in return World { _worldMap = worldMap
                      , _locations = locations
                      , _directions = directions
@@ -207,29 +216,20 @@ parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
         onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing") >> (yield $ ParseError $ errDesc err)
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
-buildMap :: Set Direction -> Gr () Int
-buildMap directions = mkGraph nodes edges
-  where edges = concat $ (\d -> [aheadEdge d, reverseEdge d]) <$> vertexPairs
-        nodes = (\n -> (n, ())) <$> F.foldl (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
-        directionVertexes (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId)
-        questActionVertexes ((LocationId fromId), (LocationId toId)) = (fromId, toId)
+buildMap :: Set Location -> Directions -> Gr () Int
+buildMap locations directions = mkGraph nodes edges
+  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . fmap (\(LocationId l, LocationId r) -> (l, r)) $ M.keys directions
+        nodes = (\(Location (LocationId locId) _) -> (locId, ())) <$> (S.toList locations)
         aheadEdge (fromId, toId) = (fromId, toId, 1)
         reverseEdge (fromId, toId) = (toId, fromId, 1)
-        vertexPairs = directionsPairs ++ questActionsPairs
-        directionsPairs = directionVertexes <$> (S.toList directions)
-        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO ServerEvent))
 
 zoneMap :: World -> Int -> Gr () Int
 zoneMap world anyZoneLocId = mkGraph nodes edges
-  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . filterDirInZone $ vertexPairs
-        nodes = fmap (\n -> (n, ())) . filter isInZone $ foldl' (\acc (Direction (LocationId fromId) (LocationId toId) _) -> fromId : toId : acc) [] directions
-        directionVertexes (Direction (LocationId fromId) (LocationId toId) _) = (fromId, toId)
+  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . filterDirInZone . fmap (\(LocationId l, LocationId r) -> (l, r)) $ M.keys directions
+        nodes = fmap (\n -> (n, ())) . concat . fmap (\(l, r, _) -> l : r : []) $ edges
         questActionVertexes ((LocationId fromId), (LocationId toId)) = (fromId, toId)
         aheadEdge (fromId, toId) = (fromId, toId, 1)
         reverseEdge (fromId, toId) = (toId, fromId, 1)
-        vertexPairs = directionsPairs ++ questActionsPairs
-        directionsPairs = directionVertexes <$> (S.toList directions)
-        questActionsPairs = questActionVertexes <$> M.keys (travelActions :: Map (LocationId, LocationId) (Pipe Event Event IO ServerEvent))
         filterDirInZone = filter (\(l, r) -> isInZone l && isInZone r)
         isInZone v = v - (mod v 100) == anyZoneLocId
         directions = _directions world
@@ -242,29 +242,32 @@ travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South
                            , ((LocationId 4064, LocationId 5052), payYoungGipsy)
                            ]
 
-directionActions :: Monad m => World -> ServerEvent -> Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
-directionActions world locEvt = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
-  where directionVertexes (Direction from to dir) = ((from, to), openObstacle locEvt dir >> movePipe dir)
+{-
+directionActions :: Monad m => World -> Map (LocationId, LocationId) RoomDir
+directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
+  where directionVertexes (Direction from to dir) = ((from, to), dir)
         movePipe dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> waitLocation
                                        evt -> yield evt >> movePipe dir
         waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
                                                                   _ -> waitLocation
+-}
 
-openObstacle :: Monad m => ServerEvent -> Text -> Pipe Event Event m ()
+openObstacle :: MonadIO m => ServerEvent -> RoomDir -> Pipe Event Event m ()
 openObstacle locEvt@LocationEvent{} dir = if inTheCorridor && north
-                                         then yield $ SendToServer "открыть дверь север"
-                                         else return ()
-  where inTheCorridor = (== LocationId 5103) . _locationId . _location $ locEvt
-        north = dir == "север"
+                                             then yield $ SendToServer "открыть дверь север"
+                                             else return ()
+  where inTheCorridor = (== LocationId 5102) . _locationId . _location $ locEvt
+        north = dir == North
 
-allActions :: Monad m => World -> ServerEvent -> Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
-allActions world locEvt = directionActions world locEvt
-
-travelAction :: Monad m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent
-travelAction world fromLocEvt to = case M.lookup (from, to) (allActions world fromLocEvt ) of
+travelAction :: MonadIO m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent
+travelAction world fromLocEvt to = case M.lookup (from, to) (_directions world) of
                                           Nothing -> return fromLocEvt
-                                          (Just pipe) -> pipe
+                                          (Just dir) -> openObstacle fromLocEvt dir >> movePipe dir
   where from = _locationId $ _location fromLocEvt
+        movePipe dir = await >>= \case PulseEvent -> yield (SendToServer . showt $ dir) >> waitLocation
+                                       evt -> yield evt >> movePipe dir
+        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
+                                                                  _ -> waitLocation
 
 payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
 payOldGipsy = move
