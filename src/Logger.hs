@@ -121,7 +121,7 @@ filterQuestEvent e = (not $ isServerInput e)
 filterTravelActions :: Event -> Bool
 filterTravelActions evt = isQuestEvent evt
   where isQuestEvent e = (not $ botCommand e) && (not $ simpleMoveCommands e) && (isLocationEvent e || isConsoleOutput e || isUnknownServerEvent e)
-        isLocationEvent (ServerEvent (LocationEvent loc _ _)) = True
+        isLocationEvent (ServerEvent (LocationEvent loc _ _ _)) = True
         isLocationEvent _ = False
         isConsoleOutput (ConsoleInput _) = True
         isConsoleOutput _ = False
@@ -138,9 +138,9 @@ filterTravelActions evt = isQuestEvent evt
 
 obstacleActions :: Monad m => Producer Event m () -> m (Map (LocationId, LocationId) [Event])
 obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, []), M.empty) identity questEventsProducer
-  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) = ((Just $ loc^.locationId, []), travelActions)
+  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _)) = ((Just $ loc^.locationId, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
-        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _)) =
+        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _)) =
           let newTravelActions = case actions of [] -> travelActions
                                                  _ -> insert (leftLocId, loc^.locationId) (L.reverse actions) travelActions
            in ((Just $ loc^.locationId, []), newTravelActions)
@@ -151,9 +151,9 @@ type LocPair = [LocationId]
 
 scanDoorEvents :: [Event] -> [LocToLocActions]
 scanDoorEvents evts = L.filter (\x -> (length $ fst x) >= 2) $ (\pair -> ((fst . snd) pair, (snd . fst) pair))  <$> (L.filter changeLocsOnly $ zipped)
-  where doorEvents ([], actions) (ServerEvent (LocationEvent (Location locId _) _ _)) = ([locId], [])
-        doorEvents (from:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _)) = ([from, locId], [])
-        doorEvents (from:to:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _)) = ([to, locId], [])
+  where doorEvents ([], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _)) = ([locId], [])
+        doorEvents (from:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _)) = ([from, locId], [])
+        doorEvents (from:to:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _)) = ([to, locId], [])
         doorEvents (locPair, actions) ev = (locPair, ev:actions)
         events = scanl doorEvents ([], []) evts :: [LocToLocActions]
         zipped = events `zip` (L.tail events) :: [(LocToLocActions, LocToLocActions)]

@@ -3,7 +3,7 @@
 
 module ServerInputParserSpec (spec) where
 
-import Protolude hiding (Location)
+import Protolude hiding (Location, Up, Down)
 import qualified Protolude as P
 import Test.Hspec
 import Test.QuickCheck
@@ -46,11 +46,13 @@ spec = describe "Parser" $ do
                                                                                        , _objects = [ ItemRoomDesc "Ваш походный сундучок стоит здесь." ]
                                                                                        , _mobs = [ MobRoomDesc "Дочка старейшины стоит здесь."
                                                                                                  , MobRoomDesc "Дородная женщина стоит здесь." ]
+                                                                                      , _exits = [OpenExit North]
                                                                                        }
         it "parse location with closed doors" $ do log <- C8.readFile "test/logs/locationWithClosedDoor.log"
                                                    log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5102) (LocationTitle "В сенях")
                                                                                                         , _objects = [ ]
                                                                                                         , _mobs = [ MobRoomDesc "Клоп ползает здесь." ]
+                                                                                                        , _exits = [ClosedExit North,OpenExit East,ClosedExit South]
                                                                                                         }
         it "trims mobs room descriptions" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
                                                log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
@@ -60,6 +62,7 @@ spec = describe "Parser" $ do
                                                                                                     , _mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
                                                                                                               , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
                                                                                                               ]
+                                                                                                    , _exits = [OpenExit Down]
                                                                                                     }
         it "parse location with autoexits" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
                                                 log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
@@ -69,6 +72,7 @@ spec = describe "Parser" $ do
                                                                                                      , _mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
                                                                                                                , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
                                                                                                                ]
+                                                                                                     , _exits = [OpenExit Down]
                                                                                                      }
         it "parse move to location" $ do log <- C8.readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
@@ -108,6 +112,7 @@ spec = describe "Parser" $ do
                                                                                                          , MobRoomDesc "Блоха прячется в мусоре."
                                                                                                          , MobRoomDesc "(летит) Моль летает здесь."
                                                                                                          ]
+                                                                                                , _exits = [OpenExit North,OpenExit West,OpenExit Down]
                                                                                                 }
                                                                                 ]
         it "parse equipment list" $ do log <- C8.readFile "test/logs/listEquipment2.log"
@@ -156,8 +161,9 @@ spec = describe "Parser" $ do
                                                   mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
                                                          , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
                                                          ]
+                                                  exits = [OpenExit Down]
                                                in do log <- C8.readFile "test/logs/schoolEntrance.log"
-                                                     log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs)
+                                                     log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
         it "parse unknown obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.1.log"
                                                                     log ~> serverInputParser `shouldParse` (ObstacleEvent South "дверь")
         it "parse known obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.2.log"
@@ -170,15 +176,17 @@ spec = describe "Parser" $ do
                                                                                                , _mobs = [ MobRoomDesc "Местная жительница идет по своим делам."
                                                                                                          , MobRoomDesc "Местный житель идет здесь."
                                                                                                          ]
+                                                                                               , _exits = [OpenExit East, OpenExit West]
                                                                                                }
         it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
-                                            log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs)
+                                            log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
                                               where objects = [ ItemRoomDesc "Лужица дождевой воды разлита у ваших ног." ]
                                                     location = Location (LocationId 5026) (LocationTitle "Лесная улица")
                                                     mobs = [MobRoomDesc "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."]
+                                                    exits = [OpenExit North,OpenExit South]
 
 instance TextShow ServerEvent where
-  showt (LocationEvent loc items mobs) = renderTitle <> "\n  Items: " <> renderItems <> "\n  Mobs: " <> renderMobs
+  showt (LocationEvent loc items mobs _) = renderTitle <> "\n  Items: " <> renderItems <> "\n  Mobs: " <> renderMobs
     where renderTitle = showt loc
           renderItems = T.intercalate "\n  " $ fmap renderItem items
           renderItem (ItemRoomDesc text) = text

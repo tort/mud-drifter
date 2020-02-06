@@ -104,6 +104,7 @@ instance Binary WeaponClass
 instance Binary RoomDir
 instance Binary ItemRoomDesc
 instance Binary MobRoomDesc
+instance Binary RoomExit
 instance Binary ItemAccusative
 instance Binary ItemNominative
 instance Binary MobGenitive
@@ -130,7 +131,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [ItemRoomDesc], _mobs :: [MobRoomDesc] }
+                 | LocationEvent { _location :: Location, _objects :: [ItemRoomDesc], _mobs :: [MobRoomDesc], _exits :: [RoomExit] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -173,7 +174,7 @@ data MobStats = EmptyMobStats deriving (Eq, Generic)
 newtype MobRoomDesc = MobRoomDesc { _text :: Text }
   deriving (Eq, Ord, Generic, Show)
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
-data RoomExit = OpenExit RoomDir | ClosedExit RoomDir
+data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)
 
 newtype MobNominative = MobNominative Text
   deriving (Eq, Ord, Generic, Show)

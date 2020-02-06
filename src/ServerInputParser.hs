@@ -160,7 +160,7 @@ locationParser = do
     let location = Location { _locationId = LocationId locId
                             , _locationTitle = LocationTitle $ T.strip $ decodeUtf8 locationName
                             }
-     in return $ LocationEvent location (ItemRoomDesc <$> objects) (MobRoomDesc <$> mobs)
+     in return $ LocationEvent location (ItemRoomDesc <$> objects) (MobRoomDesc <$> mobs) exits
     where schoolEntrance = do cs
                               string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "
                               cs
@@ -192,8 +192,8 @@ locationParser = do
                   south = C.char 's' <|> C.char 'S' >> return South
                   east = C.char 'e' <|> C.char 'E' >> return East
                   west = C.char 'w' <|> C.char 'W' >> return West
-                  up = C.char 'd' <|> C.char 'D' >> return Up
-                  down = C.char 'u' <|> C.char 'U' >> return Down
+                  up = C.char 'd' <|> C.char 'D' >> return Down
+                  down = C.char 'u' <|> C.char 'U' >> return Up
 
 roomObjects :: C8.ByteString -> A.Parser [Text]
 roomObjects colorCode = do cs

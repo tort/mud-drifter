@@ -48,7 +48,7 @@ travelTo substr world = action findLocation
         action [] = lift $ throwError "no matching locations found"
         action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
         action _ = (liftIO $ printLocations substr world) >> (lift $ throwError  "multiple locations found")
-        travelAction to = findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _) ->
+        travelAction to = findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
           case findTravelPath from to (_worldMap world)
             of (Just path) -> travelPath path currLocEvt
                Nothing -> lift $ throwError "no path found"
