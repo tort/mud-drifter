@@ -260,7 +260,7 @@ openObstacle locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exits loc
                                           evt -> yield evt >> glanceDirection
         awaitObstacle = await >>= \case (ServerEvent (ObstacleEvent _ obstacle)) -> removeObstacle obstacle
                                         evt -> yield evt >> awaitObstacle
-        removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> showt dir)
+        removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> showt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
 
 travelAction :: MonadIO m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent

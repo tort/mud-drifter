@@ -12,6 +12,7 @@ module Logger ( runEvtLogger
               , obstacleActions
               , scanDoorEvents
               , parseEventLogProducer
+              , archive
               ) where
 
 import Protolude hiding ((<>), toStrict, Location)
@@ -47,29 +48,22 @@ archiveDir = "archive"
 
 runEvtLogger evtBusInput h = runLogger evtBusInput h serverInteractions
 
-runServerInputLogger :: Input Event -> IO ()
-runServerInputLogger input = do startTimestamp <- timestamp
-                                h <- openFile serverInputLogFilename WriteMode
-                                writeLog h
-                                IO.hClose h
-                                stopTimestamp <- timestamp
-                                archive $ archivedLogFilename startTimestamp stopTimestamp
-                                runServerInputLogger input
-  where writeLog h = runEffect $ fromInput input >-> filter >-> PBS.toHandle h
+runServerInputLogger :: Input ByteString -> IO ()
+runServerInputLogger input = do
+  startTimestamp <- timestamp
+  withFile serverInputLogFilename WriteMode writeLog
+  stopTimestamp <- timestamp
+  archive serverInputLogFilename $ archivedLogFilename startTimestamp stopTimestamp
+  where writeLog h = do runEffect $ fromInput input >-> PBS.toHandle h
         archivedLogFilename startTs stopTs = serverLogDir ++ "genod-" ++ startTs ++ "__" ++ stopTs ++ ".log"
         timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" <$> getCurrentTime
         serverInputLogFilename = "server-input.log"
-        archive toFilename =
-          openFile serverInputLogFilename ReadMode >>= \from ->
-            openFile toFilename WriteMode >>= \to ->
-              do runEffect $ PBS.fromHandle from >-> PBS.toHandle to
-                 IO.hClose from
-                 IO.hClose to
-        filter = await >>= \case (ServerInput input) -> yield input >> filter
-                                 ServerClosedChannel -> return ()
-                                 ServerIOException -> return ()
-                                 UserInputIOException -> return ()
-                                 _ -> filter
+
+archive :: String -> String -> IO ()
+archive fromFileName toFilename =
+  withFile fromFileName ReadMode $ \from ->
+    withFile toFilename WriteMode $ \to -> do
+      runEffect $ PBS.fromHandle from >-> PBS.toHandle to
 
 runLogger :: Input Event -> Handle -> Pipe Event ByteString IO () -> IO ()
 runLogger evtBusInput h msgFilter = runEffect $ fromInput evtBusInput >-> msgFilter >-> PBS.toHandle h >> liftIO (C8.putStr "logger input stream ceased\n")
