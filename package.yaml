@@ -54,6 +54,7 @@ library:
                 , derive
                 , time
                 , regex-tdfa
+                , mtl
                 ]
 
 executables:

@@ -148,8 +148,8 @@ locationParser = do
     cs
     string "0;37m"
     desc <- takeTill (== telnetEscape)
-    many' exitsParser
     many' schoolEntrance
+    exits <- exitsParser
     snow <- many' $ do cs >> string "1;37m"
                        string $ encodeUtf8 "Снежный ковер лежит у вас под ногами."
                        cs >> string "0;37m"
@@ -178,18 +178,29 @@ locationParser = do
                            A.word8 _bracketleft
                            C.space
                            string "Exits: "
-                           exitsStr <- takeTill (== _bracketright)
+                           exits <- many' exitParser
                            A.word8 _bracketright
                            cs
                            string "0;37m"
                            C.endOfLine
+                           return exits
+          exitParser = (openExit <|> closedExit) >>= \exit -> C.space >> return exit
+            where openExit = dir >>= return . OpenExit
+                  closedExit = C.char '(' >> dir >>= \d -> C.char ')' >> return (ClosedExit d)
+                  dir = north <|> south <|> east <|> west <|> up <|> down
+                  north = C.char 'n' <|> C.char 'N' >> return North
+                  south = C.char 's' <|> C.char 'S' >> return South
+                  east = C.char 'e' <|> C.char 'E' >> return East
+                  west = C.char 'w' <|> C.char 'W' >> return West
+                  up = C.char 'd' <|> C.char 'D' >> return Up
+                  down = C.char 'u' <|> C.char 'U' >> return Down
 
 roomObjects :: C8.ByteString -> A.Parser [Text]
 roomObjects colorCode = do cs
                            string colorCode
                            objectsStr <- takeTill (== telnetEscape)
                            return $ toObjects objectsStr
-                             where toObjects = dropTrailingCr . T.lines . decodeUtf8
+                             where toObjects = dropTrailingCr . fmap T.strip . T.lines . decodeUtf8
                                    dropTrailingCr strings = T.dropWhileEnd (== '\r') <$> strings
 
 move :: A.Parser ServerEvent
@@ -202,15 +213,10 @@ move = do
     return $ MoveEvent (decodeUtf8 direction)
 
 clearColors :: A.Parser ()
-clearColors = do
-    cs
-    string "0;0m"
-    return ()
+clearColors = cs >> string "0;0m" >> return ()
 
 cs :: A.Parser ()
-cs = do C.char '\ESC'
-        C.char '['
-        return ()
+cs = C.char '\ESC' >> C.char '[' >> return ()
 
 telnetEscape :: Word8
 telnetEscape = 0x1b

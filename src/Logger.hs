@@ -96,7 +96,7 @@ printEvents = forever $ await >>= lift . printEvent
         printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
         printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
         printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
-        printEvent event = printT event
+        printEvent event = printT . T.pack . show $ event
 
 {-printMove :: [LocToLocActions] -> IO ()
 printMove moves = mapM_ printM moves

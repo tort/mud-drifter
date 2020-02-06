@@ -62,8 +62,7 @@ data Direction = Direction { locIdFrom :: LocIdFrom
                            , locIdTo :: LocIdTo
                            , trigger :: Trigger
                            }
-                           deriving (Eq, Ord, Generic)
-                           deriving TextShow via FromGeneric Direction
+                           deriving (Eq, Ord, Generic, Show)
 
 type LocIdFrom = LocationId
 type LocIdTo = LocationId
@@ -253,11 +252,13 @@ directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directi
 -}
 
 openObstacle :: MonadIO m => ServerEvent -> RoomDir -> Pipe Event Event m ()
-openObstacle locEvt@LocationEvent{} dir = if inTheCorridor && north
-                                             then yield $ SendToServer "открыть дверь север"
-                                             else return ()
-  where inTheCorridor = (== LocationId 5102) . _locationId . _location $ locEvt
-        north = dir == North
+openObstacle locEvt@LocationEvent{} dir = glanceDirection
+  where glanceDirection = await >>= \case PulseEvent -> yield (SendToServer $ "смотреть " <> showt dir) >> awaitObstacle
+                                          evt -> yield evt >> glanceDirection
+        awaitObstacle = await >>= \case (ServerEvent (ObstacleEvent _ obstacle)) -> removeObstacle obstacle
+                                        evt -> yield evt >> awaitObstacle
+        removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> showt dir)
+                                                  evt -> yield evt >> removeObstacle obstacle
 
 travelAction :: MonadIO m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent
 travelAction world fromLocEvt to = case M.lookup (from, to) (_directions world) of

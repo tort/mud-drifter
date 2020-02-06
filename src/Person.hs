@@ -5,6 +5,7 @@
 module Person ( travel
               , travelTo
               , login
+              , cover
               ) where
 
 import Protolude hiding (Location)
@@ -20,8 +21,6 @@ import qualified Data.Text as T
 import qualified Data.List as L
 import TextShow
 
-data Travel
-
 login :: Pipe Event Event IO ()
 login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5") >> login
                         (ServerEvent LoginPrompt) -> yield (SendToServer "генод") >> login
@@ -29,28 +28,36 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
                         (ServerEvent WelcomePrompt) -> yield (SendToServer "")
                         _ -> login
 
-travelTo :: MonadIO m => Text -> World -> Pipe Event Event m (Result ServerEvent)
-travelTo substr world = action findLocation
-  where findLocation = findLocationsBy substr world
-        action [] = return $ Failure "no matching locations found"
-        action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
-        action _ = (liftIO $ printLocations substr world) >> return (Failure "multiple locations found")
-        travelAction to = findCurrentLoc >>= \currLocEvt@(LocationEvent (Location from _) _ _) ->
-          case findTravelPath from to (_worldMap world)
-            of (Just path) -> travelPath path currLocEvt
-               Nothing -> return (Failure "no path found")
-        travelPath path currLocEvt = travel path currLocEvt world
-
 findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
 findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event m (Result ServerEvent)
+travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
 travel path locationEvent world = go path locationEvent
-  where go [] _ = return (Failure "path lost")
-        go [_] locEvt = return $ Success locEvt
+  where go [] _ = lift $ throwError "path lost"
+        go [_] locEvt = return locEvt
         go remainingPath@(from:to:xs) locEvtFrom = (waitMove remainingPath >-> travelAction world locEvtFrom to) >>= \locEvt@LocationEvent{} ->
-                                                     go (dropWhile (/= (_locationId $ _location locEvt)) remainingPath) locEvt
+                                                                              go (dropWhile (/= (_locationId $ _location locEvt)) remainingPath) locEvt
         waitMove remainingPath = await >>= \case (ServerEvent l@LocationEvent{}) -> return l
                                                  evt -> yield evt >> waitMove remainingPath
+
+travelTo :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelTo substr world = action findLocation
+  where findLocation = findLocationsBy substr world
+        action [] = lift $ throwError "no matching locations found"
+        action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
+        action _ = (liftIO $ printLocations substr world) >> (lift $ throwError  "multiple locations found")
+        travelAction to = findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _) ->
+          case findTravelPath from to (_worldMap world)
+            of (Just path) -> travelPath path currLocEvt
+               Nothing -> lift $ throwError "no path found"
+        travelPath path currLocEvt = travel path currLocEvt world
+
+cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
+cover world = awaitFightBegin >> return PromptEvent
+  where awaitFightBegin = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent) -> awaitFightEnd
+                                                                     _ -> awaitFightBegin
+        awaitFightEnd = await >>= \case (ServerEvent PromptEvent) -> awaitFightBegin
+                                        PulseEvent -> awaitFightEnd
+                                        evt -> yield evt >> awaitFightEnd
