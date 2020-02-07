@@ -163,16 +163,18 @@ discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEv
 
 
 extractLocs :: Monad m => Producer ServerEvent m () -> m (Set Location)
-extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ serverEvtProducer >-> PP.filter isLocationEvent >-> PP.map (\(LocationEvent loc _ _ _) -> loc)
+extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ locations
   where toSet acc item = S.insert item acc
+        locations = serverEvtProducer >-> PP.filter isLocationEvent >-> PP.map _location
 
 extractItemStats :: Monad m => Producer ServerEvent m () -> Producer ItemStats m ()
 extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter isItemStatsEvent >-> PP.map (\(ItemStatsEvent item) -> item)
 
 extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId, LocationId) RoomDir)
-extractDirections producer = PP.fold accDirections M.empty identity (producer >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
-                                                                                    >-> PP.scan toTriples [] identity
-                                                                                    >-> PP.filter mappableMove)
+extractDirections serverEvents = PP.fold accDirections M.empty identity locationsAndMovesTriples
+  where locationsAndMoves = serverEvents >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
+        locationsAndMovesTriples = (locationsAndMoves >-> PP.scan toTriples [] identity
+                                                      >-> PP.filter mappableMove)
                                                                                       where toTriples acc event
                                                                                               | length acc < 3 = event : acc
                                                                                               | otherwise = event : take 2 acc
