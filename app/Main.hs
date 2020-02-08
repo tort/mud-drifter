@@ -20,6 +20,7 @@ import qualified Pipes.Concurrent as PC
 import qualified Pipes.Prelude as PP
 import Pipes.Network.TCP
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.Text as T
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted
 import World
@@ -53,7 +54,7 @@ initPerson person = do
   toServerBox <- spawn $ newest 100
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
-  async $ connect "bylins.su" "4000" $ \(sock, _) -> do
+  async $ connect mudHost mudPort $ \(sock, _) -> do
     toServerInputParserBox <- spawn $ newest 100
     print "connected"
     toRemoteConsoleBox <- spawn $ newest 100
@@ -69,6 +70,8 @@ initPerson person = do
     atomically sealToLoggerBox
     print "disconnected"
   return (fst toServerBox, snd toDrifterBox)
+    where mudHost = T.unpack . host . residence $ person
+          mudPort = show . port . residence $ person
 
 {-
 runDrifter :: IO ()
