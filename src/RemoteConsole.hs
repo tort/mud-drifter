@@ -23,9 +23,11 @@ import Control.Monad
 
 runRemoteConsole :: (Output ByteString, Input ByteString) -> IO ()
 runRemoteConsole (evtBusOutput, evtBusInput) = do
-  serve (Host "0.0.0.0") "4000" $ \(sock, addr) -> do
-    async $ runEffect $ fromInput evtBusInput >-> toSocket sock
-    runEffect $ telnetFilteringParser (fromSocket sock (2^15)) >-> toOutput evtBusOutput >> (liftIO $ print "remote console input parsing finished")
+  listen (Host "0.0.0.0") "4000" $ \(sock, addr) -> do
+    accept sock $ \(s, _) -> do
+      async $ runEffect $ telnetFilteringParser (fromSocket s (2^15)) >-> toOutput evtBusOutput >> (liftIO $ print "remote console input parsing finished")
+      runEffect $ fromInput evtBusInput >-> toSocket s >> (liftIO $ print "server -> remote console stream finished")
+      return ()
     return ()
   return ()
 

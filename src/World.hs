@@ -12,6 +12,7 @@ module World ( locsByRegex
              , travelAction
              , zoneMap
              , loadServerEvents
+             , serverLogEventsProducer
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -53,6 +54,7 @@ data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
                    , _directions :: Directions
                    , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
+                   , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
                    , _itemStats :: [ItemStats]
                    , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
                    , _mobStats :: [Mob]
@@ -182,21 +184,37 @@ extractDirections serverEvents = PP.fold accDirections M.empty identity location
 listFilesIn :: FilePath -> IO [FilePath]
 listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir
 
+serverLogEventsProducer :: Producer ServerEvent IO ()
+serverLogEventsProducer = parseServerEvents . loadLogs =<< liftIO logFiles
+  where logFiles = getCurrentDirectory >>= \currentDir -> listFilesIn (currentDir ++ "/" ++ serverLogDir)
+
+obstaclesOnMap :: IO (Map (LocationId, RoomDir) Text)
+obstaclesOnMap = fmap M.fromList $ PP.toListM $ PP.map toMapItems <-< PP.filter isLocationThenObstacle <-< PP.zip obstacleEvents (PP.drop 1 <-< obstacleEvents)
+  where isObstacleEvt ObstacleEvent{} = True
+        isObstacleEvt LocationEvent{} = True
+        isObstacleEvt _ = False
+        obstacleEvents = PP.filter isObstacleEvt <-< serverLogEventsProducer
+        isLocationThenObstacle (LocationEvent{}, ObstacleEvent{}) = True
+        isLocationThenObstacle _ = False
+        toMapItems (locEvt, (ObstacleEvent dir obstacle)) = ((_locationId . _location $ locEvt, dir), obstacle)
+
 loadWorld :: FilePath -> IO World
 loadWorld currentDir = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
-  directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
+  directions <- extractDirections . parseServerEvents . loadLogs $ serverLogFiles
   locations <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
   mobsOnMap <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
+  obstaclesOnMap <- obstaclesOnMap
   let worldMap = buildMap locations directions
    in return World { _worldMap = worldMap
                      , _locations = locations
                      , _directions = directions
                      , _itemsOnMap = itemsOnMap
+                     , _obstaclesOnMap = obstaclesOnMap
                      , _itemStats = itemsStats
                      , _mobsDiscovered = mobsOnMap
                      , _mobStats = []
@@ -254,21 +272,25 @@ directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directi
                                                                   _ -> waitLocation
 -}
 
-openObstacle :: MonadIO m => ServerEvent -> RoomDir -> Pipe Event Event m ()
-openObstacle locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exits locEvt)
-                                             then glanceDirection
+openObstacle :: MonadIO m => World -> ServerEvent -> RoomDir -> Pipe Event Event m ()
+openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exits locEvt)
+                                             then findObstacleName >>= removeObstacle
                                              else return ()
-  where glanceDirection = await >>= \case PulseEvent -> yield (SendToServer $ "смотреть " <> showt dir) >> awaitObstacle
+  where glanceDirection = await >>= \case PulseEvent -> yield (SendToServer $ "смотреть " <> showt dir) >> return ()
                                           evt -> yield evt >> glanceDirection
-        awaitObstacle = await >>= \case (ServerEvent (ObstacleEvent _ obstacle)) -> removeObstacle obstacle
+        awaitObstacle = await >>= \case (ServerEvent (ObstacleEvent _ obstacle)) -> return obstacle
                                         evt -> yield evt >> awaitObstacle
+        findObstacleName = case M.lookup (locId, dir) obstaclesOnMap of (Just obstacleName) -> return obstacleName
+                                                                        Nothing -> glanceDirection >> awaitObstacle
+        locId = _locationId . _location $ locEvt
+        obstaclesOnMap = _obstaclesOnMap world
         removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> showt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
 
 travelAction :: MonadIO m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent
 travelAction world fromLocEvt to = case M.lookup (from, to) (_directions world) of
                                           Nothing -> return fromLocEvt
-                                          (Just dir) -> openObstacle fromLocEvt dir >> movePipe dir
+                                          (Just dir) -> openObstacle world fromLocEvt dir >> movePipe dir
   where from = _locationId $ _location fromLocEvt
         movePipe dir = await >>= \case PulseEvent -> yield (SendToServer . showt $ dir) >> waitLocation
                                        evt -> yield evt >> movePipe dir
