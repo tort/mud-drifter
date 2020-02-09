@@ -39,7 +39,6 @@ library:
                 , suspend
                 , network-simple
                 , network
-                , configurator
                 , parsec
                 , attoparsec
                 , MissingH

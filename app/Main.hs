@@ -6,72 +6,24 @@ module Main where
 
 import Protolude
 import Pipes
-import Pipes.Concurrent
 
 import ServerInputParser
 import Console
-import RemoteConsole
-import Logger
 import Event
-import CommandExecutor
 import Mapper
 import Person
-import qualified Pipes.Concurrent as PC
-import qualified Pipes.Prelude as PP
-import Pipes.Network.TCP
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.Text as T
-import Control.Concurrent.Timer
-import Control.Concurrent.Suspend.Lifted
 import World
 
 main :: IO ()
 main = return ()
-
-type Name = Text
-type Password = Text
 type RoomId = Int
-
-data MudServer = MudServer { host :: Text
-                           , port :: Int
-                           } deriving (Eq, Show)
-
-data Person = Person { personName :: Name
-                     , personPassword :: Password
-                     , residence :: MudServer
-                     } deriving (Eq, Show)
 
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
                }
-
-withPerson :: (Output ByteString, Input Event) -> Pipe Event Event IO () -> IO ()
-withPerson channels task = runEffect $ fromInput (snd channels) >-> task >-> commandExecutor >-> toOutput (fst channels)
-
-initPerson :: Person -> IO (Output ByteString, Input Event)
-initPerson person = do
-  toServerBox <- spawn $ newest 100
-  toDrifterBox <- spawn $ newest 100
-  (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
-  async $ connect mudHost mudPort $ \(sock, _) -> do
-    toServerInputParserBox <- spawn $ newest 100
-    print "connected"
-    toRemoteConsoleBox <- spawn $ newest 100
-    let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toServerInputParserBox) `mappend` outToLoggerBox
-        emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
-    async $ runRemoteConsole (fst toServerBox, snd toRemoteConsoleBox)
-    async $ runEffect $ fromInput (snd toServerBox) >-> toSocket sock
-    async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox) >>= liftIO . print
-    async $ runServerInputLogger inToLoggerBox
-    repeatedTimer emitPulseEvery (sDelay 1)
-    runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
-    performGC
-    atomically sealToLoggerBox
-    print "disconnected"
-  return (fst toServerBox, snd toDrifterBox)
-    where mudHost = T.unpack . host . residence $ person
-          mudPort = show . port . residence $ person
 
 {-
 runDrifter :: IO ()
