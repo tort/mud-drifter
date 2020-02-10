@@ -9,6 +9,7 @@ module Person ( travel
               , initPerson
               , run
               , runE
+              , killEmAll
               , Person(..)
               , MudServer(..)
               ) where
@@ -23,6 +24,7 @@ import Control.Lens
 import Data.Text.Encoding
 import qualified Data.Text as T
 import qualified Data.List as L
+import qualified Data.Map.Strict as M
 import TextShow
 import qualified Pipes.Concurrent as PC
 import Pipes.Concurrent
@@ -118,3 +120,17 @@ cover world = awaitFightBegin >> return PromptEvent
         awaitFightEnd = await >>= \case (ServerEvent PromptEvent) -> awaitFightBegin
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
+
+killEmAll :: MonadIO m => World -> Map MobRoomDesc MobNominative -> Pipe Event Event m ServerEvent
+killEmAll world targets = awaitTargets >> return PromptEvent
+  where awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
+                                       evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (target mobs)
+                                       evt -> yield evt >> awaitTargets
+        attack evt Nothing = yield evt >> awaitTargets
+        attack _ (Just (MobNominative mob)) = yield (SendToServer $ "убить " <> mob) >> awaitFightBegin
+        awaitFightBegin = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent) -> awaitFightEnd
+                                                                     _ -> awaitFightBegin
+        awaitFightEnd = await >>= \case (ServerEvent PromptEvent) -> yield (SendToServer "смотреть") >> awaitTargets
+                                        PulseEvent -> awaitFightEnd
+                                        evt -> yield evt >> awaitFightEnd
+        target = join . find isJust . fmap (flip M.lookup targets)
