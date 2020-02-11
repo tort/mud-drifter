@@ -13,6 +13,7 @@ module World ( locsByRegex
              , zoneMap
              , loadServerEvents
              , serverLogEventsProducer
+             , mobRoomDescToNominative
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -197,6 +198,39 @@ obstaclesOnMap = fmap M.fromList $ PP.toListM $ PP.map toMapItems <-< PP.filter 
         isLocationThenObstacle (LocationEvent{}, ObstacleEvent{}) = True
         isLocationThenObstacle _ = False
         toMapItems (locEvt, (ObstacleEvent dir obstacle)) = ((_locationId . _location $ locEvt, dir), obstacle)
+
+
+nubList :: Ord a => [a] -> [a]
+nubList = S.elems . S.fromList
+
+mobNominatives :: IO [Nominative Mob]
+mobNominatives = nubList <$> loadMobs
+  where isFightPrompt FightPromptEvent{} = True
+        isFightPrompt _ = False
+        toPair (FightPromptEvent _ target) = target
+        loadMobs = PP.toListM $ PP.map toPair <-< PP.filter isFightPrompt <-< serverLogEventsProducer
+
+mobRoomDescs :: IO [MobRoomDesc]
+mobRoomDescs = nubList <$> loadMobRoomDescs
+  where loadMobRoomDescs = PP.toListM $ PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer
+
+type NominativeWords =  [Text]
+
+mobRoomDescToNominative :: IO (Map MobRoomDesc Text)
+mobRoomDescToNominative = toMap <$> mobNominativesWords <*> mobRoomDescs
+  where mobNominativesWords :: IO [NominativeWords]
+        mobNominativesWords = (fmap . fmap) (T.words . unNominative) mobNominatives
+        unNominative (Nominative text) = text
+        toNominative :: [NominativeWords] -> MobRoomDesc -> Maybe (MobRoomDesc, Text)
+        toNominative noms mobDesc = (\alias -> (mobDesc, alias)) <$> findMobAlias noms mobDesc
+        toMap noms roomDescs = M.fromList $ catMaybes $ toNominative noms <$> roomDescs
+
+findMobAlias :: [NominativeWords] -> MobRoomDesc -> Maybe Text
+findMobAlias mobNominativesWords roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
+  where roomDescWords = T.words . unRoomDesc $ roomDesc
+        unRoomDesc (MobRoomDesc text) = T.toLower text
+        toResult [] = Nothing
+        toResult res = Just . T.intercalate "." . maximum $ res
 
 loadWorld :: FilePath -> IO World
 loadWorld currentDir = do
