@@ -58,13 +58,13 @@ printItems subName world = (render . filterEvents) (_itemsOnMap world)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
         filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
         filterEvent (ItemInTheRoom (ItemRoomDesc text)) = T.isInfixOf subName (T.toLower text)
-        filterEvent (LootCorpse (ItemAccusative item) (MobGenitive mob)) = T.isInfixOf subName (T.toLower item)
-        filterEvent (TakeFromContainer (ItemAccusative item) (ItemGenitive container)) = T.isInfixOf subName (T.toLower item)
-        filterEvent (MobGaveYouItem (MobNominative mob) (ItemAccusative item)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (LootCorpse (Accusative item) (Genitive mob)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (TakeFromContainer (Accusative item) (Genitive container)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (MobGaveYouItem (Nominative mob) (Accusative item)) = T.isInfixOf subName (T.toLower item)
         renderEvent (ItemInTheRoom (ItemRoomDesc text)) = text
-        renderEvent (LootCorpse (ItemAccusative item) (MobGenitive mob)) = "Вы взяли " <> item <> " из трупа " <> mob
-        renderEvent (TakeFromContainer (ItemAccusative item) (ItemGenitive container)) = "Вы взяли " <> item <> " из " <> container
-        renderEvent (MobGaveYouItem (MobNominative mob) (ItemAccusative item)) = mob <> " дал вам " <> item
+        renderEvent (LootCorpse (Accusative item) (Genitive mob)) = "Вы взяли " <> item <> " из трупа " <> mob
+        renderEvent (TakeFromContainer (Accusative item) (Genitive container)) = "Вы взяли " <> item <> " из " <> container
+        renderEvent (MobGaveYouItem (Nominative mob) (Accusative item)) = mob <> " дал вам " <> item
 
 printLocations :: Text -> World -> IO ()
 printLocations substr world = mapM_ printT $ locationsBy substr world

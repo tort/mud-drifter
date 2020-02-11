@@ -248,7 +248,7 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
             itemAccusative <- takeTill (== _period)
             A.word8 _period
             C.endOfLine
-            return $ PickItemEvent $ ItemAccusative $ decodeUtf8 itemAccusative
+            return $ PickItemEvent $ Accusative $ decodeUtf8 itemAccusative
 
 readWord :: A.Parser ByteString
 readWord = do wrd <- takeTill (\x -> x == _period || x == _space || x == _cr || x == 10)
@@ -269,7 +269,7 @@ mobGaveYouItem = do mob <- readWordsTill "дал"
                     item <- takeTill (== _period)
                     A.word8 _period
                     C.endOfLine
-                    return $ MobGaveYouItem (MobNominative $ decodeUtf8 mob) (ItemAccusative $ decodeUtf8 item)
+                    return $ MobGaveYouItem (Nominative $ decodeUtf8 mob) (Accusative $ decodeUtf8 item)
 
 youTook :: A.Parser ServerEvent
 youTook = do
@@ -282,26 +282,26 @@ lootCorpse = do item <- readWordsTill "из трупа "
                 source <- takeTill (== _period)
                 A.word8 _period
                 C.endOfLine
-                return $ LootCorpse (ItemAccusative $ decodeUtf8 item) (MobGenitive $ decodeUtf8 source)
+                return $ LootCorpse (Accusative $ decodeUtf8 item) (Genitive $ decodeUtf8 source)
 
 takeItemFromContainer :: A.Parser ServerEvent
 takeItemFromContainer = do item <- readWordsTill "из "
                            container <- takeTill (== _period)
                            A.word8 _period
                            C.endOfLine
-                           return $ TakeFromContainer (ItemAccusative $ decodeUtf8 item) (ItemGenitive $ decodeUtf8 container)
+                           return $ TakeFromContainer (Accusative $ decodeUtf8 item) (Genitive $ decodeUtf8 container)
 
 takeInLeftHand :: A.Parser ServerEvent
 takeInLeftHand = do item <- readWordsTill "в левую руку"
                     A.word8 _period
                     C.endOfLine
-                    return  $ TakeInLeftHand (ItemAccusative $ decodeUtf8 item)
+                    return  $ TakeInLeftHand (Accusative $ decodeUtf8 item)
 
 takeInRightHand :: A.Parser ServerEvent
 takeInRightHand = do item <- readWordsTill "в правую руку"
                      A.word8 _period
                      C.endOfLine
-                     return  $ TakeInRightHand (ItemAccusative $ decodeUtf8 item)
+                     return  $ TakeInRightHand (Accusative $ decodeUtf8 item)
 
 takeInBothHands :: A.Parser ServerEvent
 takeInBothHands = do string $ encodeUtf8 "Вы взяли"
@@ -309,7 +309,7 @@ takeInBothHands = do string $ encodeUtf8 "Вы взяли"
                      item <- readWordsTill "в обе руки"
                      A.word8 _period
                      C.endOfLine
-                     return  $ TakeInBothHands (ItemAccusative $ decodeUtf8 item)
+                     return  $ TakeInBothHands (Accusative $ decodeUtf8 item)
 
 darkInDirection :: A.Parser ServerEvent
 darkInDirection = do cs >> "0;33m"
@@ -414,7 +414,7 @@ fightPrompt = do
             C.char '>'
             C.space
             iacGA
-            return FightPromptEvent
+            return $ FightPromptEvent (Nominative . decodeUtf8 $ tankName) (Nominative . decodeUtf8 $ targetName)
 
 shopList :: A.Parser ServerEvent
 shopList = do skipMany shopHeadParser
@@ -427,7 +427,7 @@ shopList = do skipMany shopHeadParser
               name <- itemNameParser
               C.skipSpace
               price <- C.decimal
-              return $ ShopListItemEvent (ItemNominative name) price
+              return $ ShopListItemEvent (Nominative name) price
 
 shopHeadParser :: A.Parser ()
 shopHeadParser = do C.skipSpace
@@ -454,7 +454,7 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                         acVal <- acParser
                                         C.endOfLine
                                         armVal <- armorValParser
-                                        return $ Armor (ItemNominative name) slots (fromInteger acVal) (fromInteger armVal)
+                                        return $ Armor (Nominative name) slots (fromInteger acVal) (fromInteger armVal)
                        armorNameParser = do name <- itemNameParser
                                             string $ encodeUtf8 "БРОНЯ"
                                             return (decodeUtf8 name)
@@ -472,7 +472,7 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                          fiveLines
                                          C.endOfLine
                                          damageAvg <- damageAvgParser
-                                         return $ Weapon (ItemNominative name) weaponClass slots damageAvg
+                                         return $ Weapon (Nominative name) weaponClass slots damageAvg
                        line = do C.endOfLine
                                  A.skipWhile (not . C.isEndOfLine)
                        armorSlot = do C.endOfLine
@@ -568,7 +568,7 @@ listInventory = do string $ encodeUtf8 "Вы несете:"
                                               itemName <- itemNameParser
                                               itemState <- itemStateParser
                                               A.skipWhile (not . C.isEndOfLine)
-                                              return (ItemNominative itemName, itemState)
+                                              return (Nominative itemName, itemState)
 
 listEquipment :: A.Parser ServerEvent
 listEquipment = do string $ encodeUtf8 "На вас надето:"
@@ -597,7 +597,7 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                               itemName <- itemNameParser
                                               state <- itemStateParser
                                               A.skipWhile (not . C.isEndOfLine)
-                                              return (EquippedItem bp (ItemNominative itemName), state)
+                                              return (EquippedItem bp (Nominative itemName), state)
 
 itemNameParser :: A.Parser Text
 itemNameParser = do itemName <- manyTill' C.anyChar (string $ encodeUtf8 "  ")

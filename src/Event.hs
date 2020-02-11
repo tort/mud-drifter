@@ -24,11 +24,9 @@ module Event ( Event(..)
              , RoomExit(..)
              , MobRoomDesc(..)
              , ItemRoomDesc(..)
-             , ItemAccusative(..)
-             , ItemNominative(..)
-             , MobGenitive(..)
-             , ItemGenitive(..)
-             , MobNominative(..)
+             , Accusative(..)
+             , Nominative(..)
+             , Genitive(..)
              , ShowVal(..)
              , Result(..)
              , isServerEvent
@@ -105,11 +103,11 @@ instance Binary RoomDir
 instance Binary ItemRoomDesc
 instance Binary MobRoomDesc
 instance Binary RoomExit
-instance Binary ItemAccusative
-instance Binary ItemNominative
-instance Binary MobGenitive
-instance Binary ItemGenitive
-instance Binary MobNominative
+instance Binary (Accusative Item)
+instance Binary (Nominative Item)
+instance Binary (Genitive Mob)
+instance Binary (Genitive Item)
+instance Binary (Nominative Mob)
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -136,33 +134,33 @@ data ServerEvent = CodepagePrompt
                  | DarknessEvent
                  | UnknownServerEvent ByteString
                  | ListEquipmentEvent [(EquippedItem, ItemState)]
-                 | ListInventoryEvent [(ItemNominative, ItemState)]
+                 | ListInventoryEvent [(Nominative Item, ItemState)]
                  | ItemStatsEvent ItemStats
-                 | ShopListItemEvent ItemNominative Price
+                 | ShopListItemEvent (Nominative Item) Price
                  | PromptEvent
-                 | FightPromptEvent
+                 | FightPromptEvent (Nominative Mob) (Nominative Mob)
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
                  | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
-                 | PickItemEvent ItemAccusative
+                 | PickItemEvent (Accusative Item)
                  | ItemInTheRoom ItemRoomDesc
-                 | LootCorpse ItemAccusative MobGenitive
-                 | TakeFromContainer ItemAccusative ItemGenitive
-                 | TakeInRightHand ItemAccusative
-                 | TakeInLeftHand ItemAccusative
-                 | TakeInBothHands ItemAccusative
-                 | MobGaveYouItem MobNominative ItemAccusative
+                 | LootCorpse (Accusative Item) (Genitive Mob)
+                 | TakeFromContainer (Accusative Item) (Genitive Item)
+                 | TakeInRightHand (Accusative Item)
+                 | TakeInLeftHand (Accusative Item)
+                 | TakeInBothHands (Accusative Item)
+                 | MobGaveYouItem (Nominative Mob) (Accusative Item)
                  | ParseError ByteString
                  deriving (Eq, Generic, Ord, Show)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders
   deriving (Eq, Generic, Ord, Show)
-data EquippedItem = EquippedItem Slot ItemNominative
+data EquippedItem = EquippedItem Slot (Nominative Item)
   deriving (Eq, Generic, Ord, Show)
 data ItemState = Excellent | VeryGood | Good | Bad
   deriving (Eq, Generic, Ord, Show)
-data ItemStats = Weapon ItemNominative WeaponClass [Slot] AvgDamage | Armor ItemNominative [Slot] AC ArmorVal
+data ItemStats = Weapon (Nominative Item) WeaponClass [Slot] AvgDamage | Armor (Nominative Item) [Slot] AC ArmorVal
   deriving (Eq, Generic, Ord, Show)
 type AvgDamage = Double
 data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other
@@ -171,41 +169,45 @@ type AC = Int
 type ArmorVal = Int
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Generic)
+
 newtype MobRoomDesc = MobRoomDesc { _text :: Text }
   deriving (Eq, Ord, Generic, Show)
+
+instance TextShow MobRoomDesc where
+  showt (MobRoomDesc text) = text
+
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
 data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)
 
-newtype MobNominative = MobNominative Text
+data Mob
+data Item
+
+newtype Nominative a = Nominative Text
   deriving (Eq, Ord, Generic, Show)
 newtype MobAlias = MobAlias Text deriving (Eq)
-newtype MobGenitive = MobGenitive Text
+newtype Genitive a = Genitive Text
   deriving (Eq, Ord, Generic, Show)
-data Mob = Mob { _roomDesc :: MobRoomDesc
-               , _name :: MobNominative
-               , _handleAlias :: MobAlias
-               , _stats :: Maybe MobStats
-               }
+data MobData = MobData { _roomDesc :: MobRoomDesc
+                       , _name :: (Nominative Mob)
+                       , _handleAlias :: MobAlias
+                       , _stats :: Maybe MobStats
+                       }
 
 newtype ItemRoomDesc = ItemRoomDesc { _text :: Text }
   deriving (Eq, Ord, Generic, Show)
-newtype ItemAccusative = ItemAccusative Text
-  deriving (Eq, Generic, Ord, Show)
-newtype ItemNominative = ItemNominative Text
-  deriving (Eq, Generic, Ord, Show)
-newtype ItemGenitive = ItemGenitive Text
+newtype Accusative a = Accusative Text
   deriving (Eq, Generic, Ord, Show)
 newtype ItemAlias = ItemAlias Text deriving (Eq)
-data Item = Item { _roomDesc :: ItemRoomDesc
-                 , _nominative :: ItemNominative
-                 , _accusative :: ItemAccusative
-                 , _alias :: ItemAlias
-                 , _stats :: ItemStats
-                 }
+data ItemData = ItemData { _roomDesc :: ItemRoomDesc
+                         , _nominative :: (Nominative Item)
+                         , _accusative :: (Accusative Item)
+                         , _alias :: ItemAlias
+                         , _stats :: ItemStats
+                         }
 
-makeFieldsNoPrefix ''Item
+makeFieldsNoPrefix ''ItemData
 
-instance Eq Mob where
+instance Eq MobData where
   left == right = left^.roomDesc == right^.roomDesc
 
 class ShowVal a where
@@ -223,17 +225,14 @@ instance ShowVal ItemRoomDesc where
 instance ShowVal MobRoomDesc where
   showVal (MobRoomDesc text) = text
 
-instance ShowVal MobGenitive where
-  showVal (MobGenitive text) = text
+instance ShowVal (Nominative a) where
+  showVal (Nominative text) = text
 
-instance ShowVal MobNominative where
-  showVal (MobNominative text) = text
+instance ShowVal (Accusative a) where
+  showVal (Accusative text) = text
 
-instance ShowVal ItemAccusative where
-  showVal (ItemAccusative text) = text
-
-instance ShowVal ItemGenitive where
-  showVal (ItemGenitive text) = text
+instance ShowVal (Genitive a) where
+  showVal (Genitive text) = text
 
 derive makeIs ''Location
 derive makeIs ''LocationId
@@ -258,4 +257,4 @@ makeFieldsNoPrefix ''WeaponClass
 makeFieldsNoPrefix ''RoomDir
 makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
-makeFieldsNoPrefix ''Mob
+makeFieldsNoPrefix ''MobData
