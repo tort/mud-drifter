@@ -49,11 +49,11 @@ data Person = Person { personName :: Name
                      , residence :: MudServer
                      } deriving (Eq, Show)
 
-run :: MonadIO m => (Output ByteString, Input Event) -> Pipe Event Event m () -> m ()
-run person task = runEffect $ fromInput (snd person) >-> task >-> commandExecutor >-> toOutput (fst person)
+run :: (MonadIO m, Show a) => (Output ByteString, Input Event) -> Pipe Event Event m a -> m ()
+run person task = runEffect $ fromInput (snd person) >-> (task >>= print) >-> commandExecutor >-> toOutput (fst person)
 
-runE :: MonadIO m => (Output ByteString, Input Event) -> Pipe Event Event (ExceptT Text m) () -> m ()
-runE person task = run person $ (runExceptP task) >>= print
+runE :: (MonadIO m, Show a) => (Output ByteString, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
+runE person task = run person $ (runExceptP task)
 
 initPerson :: Person -> IO (Output ByteString, Input Event)
 initPerson person = do
