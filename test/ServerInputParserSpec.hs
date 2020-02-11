@@ -76,6 +76,12 @@ spec = describe "Parser" $ do
                                                                                                      }
         it "parse move to location" $ do log <- C8.readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
+        it "parse location with ice" $ do log <- C8.readFile "test/logs/locationWithIce.log"
+                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5601) (LocationTitle "Мелководье")
+                                                                                               , _objects = [ ItemRoomDesc "Лужица ржаного кваса разлита у ваших ног." ]
+                                                                                               , _mobs = []
+                                                                                               , _exits = [OpenExit North, OpenExit South]
+                                                                                               }
         it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
         it "parse in darkness server event" $ do let log = "test/logs/enterDarkRoom.log"
@@ -116,19 +122,19 @@ spec = describe "Parser" $ do
                                                                                                 }
                                                                                 ]
         it "parse equipment list" $ do log <- C8.readFile "test/logs/listEquipment2.log"
-                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body (ItemNominative "легкий латный доспех"), Excellent)
-                                                                                                  , (EquippedItem Head (ItemNominative "легкий латный шлем"), Excellent)
-                                                                                                  , (EquippedItem Legs (ItemNominative "легкие латные поножи"), Excellent)
-                                                                                                  , (EquippedItem Waist (ItemNominative "холщовый мешок"), Excellent)
-                                                                                                  , (EquippedItem Wield (ItemNominative "длинный бронзовый меч"), VeryGood)
-                                                                                                  , (EquippedItem Hold (ItemNominative "бронзовый топорик"), VeryGood)
+                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body (Nominative "легкий латный доспех"), Excellent)
+                                                                                                  , (EquippedItem Head (Nominative "легкий латный шлем"), Excellent)
+                                                                                                  , (EquippedItem Legs (Nominative "легкие латные поножи"), Excellent)
+                                                                                                  , (EquippedItem Waist (Nominative "холщовый мешок"), Excellent)
+                                                                                                  , (EquippedItem Wield (Nominative "длинный бронзовый меч"), VeryGood)
+                                                                                                  , (EquippedItem Hold (Nominative "бронзовый топорик"), VeryGood)
                                                                                                   ])
         it "parse empty equipment list" $ do log <- C8.readFile "test/logs/listEquipmentEmpty.log"
                                              log ~> serverInputParser `shouldParse` (ListEquipmentEvent [])
         it "parse inventory" $ do log <- C8.readFile "test/logs/inventory.log"
-                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ (ItemNominative "холщовый мешок", Excellent)
-                                                                                             , (ItemNominative "бронзовый топорик", VeryGood)
-                                                                                             , (ItemNominative "длинный бронзовый меч", VeryGood)
+                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ (Nominative "холщовый мешок", Excellent)
+                                                                                             , (Nominative "бронзовый топорик", VeryGood)
+                                                                                             , (Nominative "длинный бронзовый меч", VeryGood)
                                                                                              ])
         it "parse cr after unknown server event" $ do let log = "test/logs/mobPortal.log"
                                                       serverEventList <- toListM $ parseServerEvents (loadServerEvents log)
@@ -137,11 +143,11 @@ spec = describe "Parser" $ do
         it "parse empty inventory" $ do log <- C8.readFile "test/logs/inventoryEmpty.log"
                                         log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
         it "parse weapon stats in shop" $ do log <- C8.readFile "test/logs/statsWeapon.log"
-                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ItemNominative "длинный бронзовый меч") LongBlade [Wield, Hold, DualWield] 3.5)
+                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (Nominative "длинный бронзовый меч") LongBlade [Wield, Hold, DualWield] 3.5)
         it "parse armor stats in shop" $ do log <- C8.readFile "test/logs/statsArmor.log"
-                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor (ItemNominative "легкий латный доспех") [Body] 3 4)
+                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor (Nominative "легкий латный доспех") [Body] 3 4)
         it "parse weapon stats" $ do log <- C8.readFile "test/logs/statsWeaponScroll.log"
-                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ItemNominative "бронзовый топорик") Axe [Wield, Hold] 3.5)
+                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (Nominative "бронзовый топорик") Axe [Wield, Hold] 3.5)
         it "parse shop items" $ do let log = "test/logs/shopList.log"
                                    serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter isShopListItemEvent
                                    length serverEventList `shouldBe` 43
@@ -154,8 +160,10 @@ spec = describe "Parser" $ do
         it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent
         it "parse fight prompt" $ do let log = "test/logs/enterRoomWithFight.log"
+                                         isFightPromptEvent FightPromptEvent{} = True
+                                         isFightPromptEvent _ = False
                                      serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                                     (length $ filter (== FightPromptEvent) serverEventList) `shouldBe` 3
+                                     (length $ filter isFightPromptEvent serverEventList) `shouldBe` 3
         it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
                                                   objects = [ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                   mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."

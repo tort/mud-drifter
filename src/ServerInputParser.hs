@@ -154,6 +154,10 @@ locationParser = do
                        string $ encodeUtf8 "Снежный ковер лежит у вас под ногами."
                        cs >> string "0;37m"
                        C.endOfLine
+    ice <- many' $ do cs >> string "1;34m"
+                      string $ encodeUtf8 "У вас под ногами толстый лед."
+                      cs >> string "0;37m"
+                      C.endOfLine
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"
     clearColors
