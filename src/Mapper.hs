@@ -9,6 +9,7 @@ module Mapper ( printItems
               , findTravelPath
               , showPath
               , zonePath
+              , printMobsByRegex
               ) where
 
 import Protolude hiding (Location, runStateT, intercalate)
@@ -68,6 +69,9 @@ printItems subName world = (render . filterEvents) (_itemsOnMap world)
 
 printLocations :: Text -> World -> IO ()
 printLocations substr world = mapM_ printT $ locationsBy substr world
+
+printMobsByRegex :: World -> Text -> IO ()
+printMobsByRegex world regex = mapM_ printT $ L.filter (\(MobRoomDesc t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _mobsDiscovered world
 
 findLocationsBy :: Text -> World -> [LocationId]
 findLocationsBy substr world = _locationId <$> locationsBy substr world

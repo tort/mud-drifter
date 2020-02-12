@@ -3,7 +3,9 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Person ( travel
-              , travelTo
+              , travelToLoc
+              , travelToMob
+              , travelAndKill
               , login
               , cover
               , initPerson
@@ -101,8 +103,8 @@ travel path locationEvent world = go path locationEvent
         waitMove remainingPath = await >>= \case (ServerEvent l@LocationEvent{}) -> return l
                                                  evt -> yield evt >> waitMove remainingPath
 
-travelTo :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
-travelTo substr world = action findLocation
+travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelToLoc substr world = action findLocation
   where findLocation = findLocationsBy substr world
         action [] = lift $ throwError "no matching locations found"
         action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
@@ -121,8 +123,8 @@ cover world = awaitFightBegin >> return PromptEvent
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
 
-killEmAll :: MonadIO m => World -> Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
-killEmAll world targets = awaitTargets >> return PromptEvent
+killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
+killEmAll targets = awaitTargets >> return PromptEvent
   where awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (target mobs)
                                        evt -> yield evt >> awaitTargets
@@ -134,3 +136,34 @@ killEmAll world targets = awaitTargets >> return PromptEvent
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
         target = join . find isJust . fmap (flip M.lookup targets)
+
+travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelToMob world mob = pipe $ mobArea
+  where mobArea :: Maybe (Map LocationId Int)
+        mobArea = M.lookup mob . _mobsDiscovered $ world
+        pipe (Just area)
+          | M.size area < 1 = lift $ throwError "no habitation found"
+          | M.size area > 1 = lift $ throwError "multiple habitation locations found"
+          | M.size area == 1 = travelToLoc loc world
+        pipe Nothing = lift $ throwError "no habitation found"
+        loc = showt . L.head . M.keys . fromJust $ mobArea
+
+travelAndKill :: MonadIO m => World -> Map MobRoomDesc Text -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelAndKill world targets mob = pipe $ mobArea
+  where mobArea :: Maybe (Map LocationId Int)
+        mobArea = M.lookup mob . _mobsDiscovered $ world
+        pipe (Just area)
+          | M.size area < 1 = lift $ throwError "no habitation found"
+          | M.size area > 1 = lift $ throwError "multiple habitation locations found"
+          | M.size area == 1 = travelToLoc loc world >>= tryFight
+        pipe Nothing = lift $ throwError "no habitation found"
+        loc = showt . L.head . M.keys . fromJust $ mobArea
+        tryFight locEvt = if L.elem mob (_mobs locEvt)
+                             then fight
+                             else lift $ throwError "target is absent"
+        fight = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> target [mob]) >> awaitFightEnd
+                                evt -> yield evt >> fight
+        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent) -> return PromptEvent
+                                        PulseEvent -> awaitFightEnd
+                                        evt -> yield evt >> awaitFightEnd
+        target = fromJust . join . find isJust . fmap (flip M.lookup targets)
