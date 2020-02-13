@@ -52,6 +52,7 @@ serverInputParser = codepagePrompt
                     <|> liquidContainerIsEmpty
                     <|> isNotHungry
                     <|> isNotThirsty
+                    <|> examineContainer
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -150,6 +151,47 @@ gulp = do string $ encodeUtf8 "Вы выпили "
           container <- C.takeTill (== '.')
           C.char '.'
           return $ Drink (T.pack liquid) (decodeUtf8 container)
+
+examineContainer :: A.Parser ServerEvent
+examineContainer = do
+  skipWhile (not . C.isEndOfLine)
+  C.endOfLine
+  slots <- many1 armorSlot
+  C.endOfLine
+  condition
+  C.endOfLine
+  contName <- nameAndWhere
+  C.endOfLine
+  itms <- isEmpty <|> partiallyFilled
+  return $ ExamineContainer (decodeUtf8 contName) itms
+    where inAmmunition = string $ encodeUtf8 "в амуниции"
+          inHands = string $ encodeUtf8 "в руках"
+          isEmpty = do string $ encodeUtf8 " Внутри ничего нет."
+                       return []
+          condition = do string $ encodeUtf8 "Состояние: "
+                         _ <- C.takeTill (== '.')
+                         C.char '.'
+          nameAndWhere = do contName <- C.takeTill (== '(')
+                            C.char '('
+                            inAmmunition <|> inHands
+                            C.char ')'
+                            return contName
+          partiallyFilled = do string $ encodeUtf8 "Заполнен содержимым "
+                               _ <- C.takeTill (== ':')
+                               C.char ':'
+                               C.endOfLine
+                               many1 item
+          item = singleItem <|> multipleItems
+          multipleItems = do nom <- takeTill (\c -> c == _bracketleft || C.isEndOfLine c)
+                             (C.char '[' >> return ()) <|> C.endOfLine
+                             number <- C.decimal
+                             C.char ']'
+                             C.endOfLine
+                             return $ Multiple (Nominative . T.strip . decodeUtf8 $ nom) number
+          singleItem = do nom <- takeTill (\c -> c == telnetEscape || C.isEndOfLine c)
+                          state <- itemStateParser
+                          C.endOfLine
+                          return $ Single (Nominative . T.strip . decodeUtf8 $ nom) state
 
 welcomePrompt :: A.Parser ServerEvent
 welcomePrompt = do
@@ -522,31 +564,6 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                          return $ Weapon (Nominative name) weaponClass slots damageAvg
                        line = do C.endOfLine
                                  A.skipWhile (not . C.isEndOfLine)
-                       armorSlot = do C.endOfLine
-                                      string $ encodeUtf8 "Можно"
-                                      C.skipSpace
-                                      slot <- generalSlot <|> feetSlot
-                                      A.skipWhile (not . C.isEndOfLine)
-                                      return slot
-                       generalSlot = do string $ encodeUtf8 "надеть на"
-                                        C.skipSpace
-                                        body <|> waist <|> shoulders <|> hands <|> arms <|> head <|> legs
-                       feetSlot = do string $ encodeUtf8 "обуть"
-                                     return Feet
-                       body = do string $ encodeUtf8 "туловище"
-                                 return Body
-                       waist = do string $ encodeUtf8 "пояс"
-                                  return Waist
-                       hands = do string $ encodeUtf8 "кисти"
-                                  return Hands
-                       shoulders = do string $ encodeUtf8 "плечи"
-                                      return Shoulders
-                       arms = do string $ encodeUtf8 "руки"
-                                 return Arms
-                       head = do string $ encodeUtf8 "голову"
-                                 return Head
-                       legs = do string $ encodeUtf8 "ноги"
-                                 return Legs
                        wpnSlot = do C.endOfLine
                                     string $ encodeUtf8 "Можно взять в"
                                     C.skipSpace
@@ -603,6 +620,33 @@ itemStats = do string $ encodeUtf8 "Вы узнали следующее:"
                                             return dmgAvg
                        fiveLines = line >> line >> line >> line >> line
 
+
+armorSlot = do C.endOfLine
+               string $ encodeUtf8 "Можно"
+               C.skipSpace
+               slot <- generalSlot <|> feetSlot
+               A.skipWhile (not . C.isEndOfLine)
+               return slot
+  where generalSlot = do string $ encodeUtf8 "надеть на"
+                         C.skipSpace
+                         body <|> waist <|> shoulders <|> hands <|> arms <|> head <|> legs
+        feetSlot = do string $ encodeUtf8 "обуть"
+                      return Feet
+        body = do string $ encodeUtf8 "туловище"
+                  return Body
+        waist = do string $ encodeUtf8 "пояс"
+                   return Waist
+        hands = do string $ encodeUtf8 "кисти"
+                   return Hands
+        shoulders = do string $ encodeUtf8 "плечи"
+                       return Shoulders
+        arms = do string $ encodeUtf8 "руки"
+                  return Arms
+        head = do string $ encodeUtf8 "голову"
+                  return Head
+        legs = do string $ encodeUtf8 "ноги"
+                  return Legs
+
 listInventory :: A.Parser ServerEvent
 listInventory = do string $ encodeUtf8 "Вы несете:"
                    list <- emptyInventory <|> many1 inventoryItem
@@ -647,7 +691,7 @@ listEquipment = do string $ encodeUtf8 "На вас надето:"
                                               return (EquippedItem bp (Nominative itemName), state)
 
 itemNameParser :: A.Parser Text
-itemNameParser = do itemName <- manyTill' C.anyChar (string $ encodeUtf8 "  ")
+itemNameParser = do itemName <- C.manyTill' C.anyChar (C.space *> C.space)
                     return (decodeUtf8 $ C8.pack itemName)
 
 itemStateParser :: A.Parser ItemState

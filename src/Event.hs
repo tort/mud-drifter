@@ -18,6 +18,7 @@ module Event ( Event(..)
              , EquippedItem(..)
              , ItemState(..)
              , ItemStats(..)
+             , InventoryItem(..)
              , Mob(..)
              , WeaponClass(..)
              , RoomDir(..)
@@ -108,6 +109,7 @@ instance Binary (Nominative Item)
 instance Binary (Genitive Mob)
 instance Binary (Genitive Item)
 instance Binary (Nominative Mob)
+instance Binary InventoryItem
 
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
@@ -158,6 +160,7 @@ data ServerEvent = CodepagePrompt
                  | NotHungry
                  | NotThirsty
                  | LiquidContainerIsEmpty
+                 | ExamineContainer { _name :: Text, _items :: [InventoryItem] }
                  | ParseError ByteString
                  deriving (Eq, Generic, Ord, Show)
 
@@ -176,6 +179,9 @@ type AC = Int
 type ArmorVal = Int
 type Price = Int
 data MobStats = EmptyMobStats deriving (Eq, Generic)
+
+data InventoryItem = Single (Nominative Item) ItemState | Multiple (Nominative Item) Int
+  deriving (Eq, Ord, Generic, Show)
 
 newtype MobRoomDesc = MobRoomDesc { _text :: Text }
   deriving (Eq, Ord, Generic, Show)
