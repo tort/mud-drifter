@@ -151,6 +151,13 @@ data ServerEvent = CodepagePrompt
                  | TakeInLeftHand (Accusative Item)
                  | TakeInBothHands (Accusative Item)
                  | MobGaveYouItem (Nominative Mob) (Accusative Item)
+                 | Drink Text Text
+                 | Eat Text
+                 | DrinkFromAbsentObject
+                 | ItemAbsent Text
+                 | NotHungry
+                 | NotThirsty
+                 | LiquidContainerIsEmpty
                  | ParseError ByteString
                  deriving (Eq, Generic, Ord, Show)
 

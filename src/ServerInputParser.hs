@@ -45,6 +45,13 @@ serverInputParser = codepagePrompt
                     <|> pickUp
                     <|> youTook
                     <|> mobGaveYouItem
+                    <|> gulp
+                    <|> eat
+                    <|> drinkFromAbsentObject
+                    <|> itemAbsent
+                    <|> liquidContainerIsEmpty
+                    <|> isNotHungry
+                    <|> isNotThirsty
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -107,6 +114,42 @@ passwordPrompt = do
     string $ encodeUtf8 "Персонаж с таким именем уже существует. Введите пароль : "
     iacGA
     return PasswordPrompt
+
+isNotThirsty :: A.Parser ServerEvent
+isNotThirsty = isFull <|> isOverFull >> return NotThirsty
+  where isFull = string $ encodeUtf8 "Вы не чувствуете жажды."
+        isOverFull = string $ encodeUtf8 "В вас больше не лезет."
+
+isNotHungry :: A.Parser ServerEvent
+isNotHungry = isFull <|> isOverFull >> return NotHungry
+  where isFull = string $ encodeUtf8 "Вы наелись."
+        isOverFull = string $ encodeUtf8 "Вы слишком сыты для этого!"
+
+drinkFromAbsentObject :: A.Parser ServerEvent
+drinkFromAbsentObject = do string $ encodeUtf8 "Вы не смогли это найти!"
+                           return DrinkFromAbsentObject
+
+liquidContainerIsEmpty :: A.Parser ServerEvent
+liquidContainerIsEmpty = do string $ encodeUtf8 "Пусто."
+                            return LiquidContainerIsEmpty
+
+itemAbsent :: A.Parser ServerEvent
+itemAbsent = do string $ encodeUtf8 "У вас нет '"
+                item <- manyTill' C.anyChar (string $ encodeUtf8 "'.")
+                return $ ItemAbsent (T.pack item)
+
+eat :: A.Parser ServerEvent
+eat = do string $ encodeUtf8 "Вы съели "
+         food <- C.takeTill (== '.')
+         C.char '.'
+         return $ Eat (decodeUtf8 food)
+
+gulp :: A.Parser ServerEvent
+gulp = do string $ encodeUtf8 "Вы выпили "
+          liquid <- manyTill' C.anyChar (string $ encodeUtf8 " из ")
+          container <- C.takeTill (== '.')
+          C.char '.'
+          return $ Drink (T.pack liquid) (decodeUtf8 container)
 
 welcomePrompt :: A.Parser ServerEvent
 welcomePrompt = do
