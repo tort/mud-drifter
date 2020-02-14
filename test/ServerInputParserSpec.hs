@@ -157,16 +157,6 @@ spec = describe "Parser" $ do
                                                                                                                    , Multiple (Nominative "ломоть хлеба") 11
                                                                                                                    ]
                                                                                                         }
-        it "parse examine container event after prompt" $ do let log = "test/logs/examineContainer2.log"
-                                                             serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                                                             serverEventList `shouldBe` [ PromptEvent
-                                                                                        , ExamineContainer { _name = "холщовый мешок"
-                                                                                                                     , _items = [ Single (Nominative "рыбья кость") Excellent
-                                                                                                                                , Multiple (Nominative "ломоть хлеба") 11
-                                                                                                                                ]
-                                                                                                                     }
-                                                                                        , PromptEvent
-                                                                                        ]
         it "parse shop list with prompt" $ do let log = "test/logs/shopListWithPrompt.log"
                                               serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
                                               (length $ filter isShopListItemEvent serverEventList) `shouldBe` 27
