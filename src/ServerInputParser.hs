@@ -259,7 +259,9 @@ locationParser = do
                             }
      in return $ LocationEvent location (ItemRoomDesc <$> objects) (MobRoomDesc <$> mobs) exits
     where schoolEntrance = do cs
-                              string $ encodeUtf8 "1;32mСовсем малых, да не обученных так и тянет "
+                              string $ encodeUtf8 "1;32mСовсем малых, да не"
+                              C.skipMany C.space
+                              string $ encodeUtf8 "обученных так и тянет "
                               cs
                               string $ encodeUtf8 "1;33mвойти "
                               cs

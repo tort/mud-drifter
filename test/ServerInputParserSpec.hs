@@ -190,6 +190,17 @@ spec = describe "Parser" $ do
                                                   exits = [OpenExit Down]
                                                in do log <- C8.readFile "test/logs/schoolEntrance.log"
                                                      log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
+        it "parse school entrance location misspelled" $ do
+          log <- C8.readFile "test/logs/rentLocation.log"
+          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 4056) (LocationTitle "Гостиный двор")
+                                                               , _objects = [ ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!" ]
+                                                               , _mobs = [ MobRoomDesc "Велянка Ванесса летает здесь."
+                                                                         , MobRoomDesc "Шум и блеск экипировки выдает чье-то присутствие."
+                                                                         , MobRoomDesc "С орлиным клювом пересмешник Пересмех (пономарь Тайных знаний) летает здесь."
+                                                                         , MobRoomDesc "Хозяин постоялого двора с интересом рассматривает Вас."
+                                                                         ]
+                                                               , _exits = [ OpenExit East ]
+                                                               }
         it "parse unknown obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.1.log"
                                                                     log ~> serverInputParser `shouldParse` (ObstacleEvent South "дверь")
         it "parse known obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.2.log"
