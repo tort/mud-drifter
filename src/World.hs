@@ -294,9 +294,7 @@ zoneMap world anyZoneLocId = mkGraph nodes edges
         directions = _directions world
 
 travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
-travelActions = M.fromList [ ((LocationId 5102, LocationId 5103), openDoor South)
-                           , ((LocationId 5103, LocationId 5102), openDoor North)
-                           , ((LocationId 5104, LocationId 5117), setupLadder)
+travelActions = M.fromList [ ((LocationId 5104, LocationId 5117), setupLadder)
                            , ((LocationId 5052, LocationId 4064), payOldGipsy)
                            , ((LocationId 4064, LocationId 5052), payYoungGipsy)
                            ]
@@ -357,11 +355,3 @@ setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
                                                                      then yield (SendToServer "приставить лестница") >> return locEvt
                                                                      else return locEvt
         checkItemRoomDescs _ = waitLocEvt
-
-openDoor :: Monad m => RoomDir -> Pipe Event Event m ServerEvent
-openDoor dir = (yield $ SendToServer ("смотреть " <> showt dir)) >> waitObstacleEvent
-  where waitObstacleEvent = await >>= \evt -> yield evt >> checkObstacleEvent evt
-        checkObstacleEvent (ServerEvent sEvt@(ObstacleEvent _ obstacle)) = yield (SendToServer ("открыть " <> obstacle <> " " <> showt dir)) >> return sEvt
-        checkObstacleEvent (ServerEvent sEvt@(UnknownServerEvent "")) = return sEvt
-        checkObstacleEvent (ServerEvent sEvt@(GlanceEvent _ _ _)) = return sEvt
-        checkObstacleEvent evt = waitObstacleEvent
