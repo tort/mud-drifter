@@ -186,8 +186,13 @@ listFilesIn :: FilePath -> IO [FilePath]
 listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir
 
 serverLogEventsProducer :: Producer ServerEvent IO ()
-serverLogEventsProducer = parseServerEvents . loadLogs =<< liftIO logFiles
+serverLogEventsProducer = combineStreams =<< liftIO logFiles
   where logFiles = getCurrentDirectory >>= \currentDir -> listFilesIn (currentDir ++ "/" ++ serverLogDir)
+        combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file) (return ())
+        logfileEvtStream file = PP.dropWhile notLocation <-< (parseServerEvents . loadServerEvents $ file)
+        isLocation LocationEvent{} = True
+        isLocation _ = False
+        notLocation = not . isLocation
 
 obstaclesOnMap :: IO (Map (LocationId, RoomDir) Text)
 obstaclesOnMap = fmap M.fromList $ PP.toListM $ PP.map toMapItems <-< PP.filter isLocationThenObstacle <-< PP.zip obstacleEvents (PP.drop 1 <-< obstacleEvents)
@@ -236,7 +241,7 @@ loadWorld :: FilePath -> IO World
 loadWorld currentDir = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
-  directions <- extractDirections . parseServerEvents . loadLogs $ serverLogFiles
+  directions <- extractDirections serverLogEventsProducer
   locations <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
@@ -266,7 +271,7 @@ printWorldStats world = yield $ ConsoleOutput worldStats
 
 parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
 parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
-  where onEndOrError Right{} = liftIO $ print "Server stream finished"
+  where onEndOrError Right{} = return ()
         onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing") >> (yield $ ParseError $ errDesc err)
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
