@@ -76,11 +76,23 @@ spec = describe "Parser" $ do
                                                                                                      }
         it "parse move to location" $ do log <- C8.readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
+        it "parse location with thin ice" $ do log <- C8.readFile "test/logs/locationWithThinIce.log"
+                                               log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5600) (LocationTitle "У истока реки")
+                                                                                                    , _objects = []
+                                                                                                    , _mobs = []
+                                                                                                    , _exits = [OpenExit North, OpenExit South]
+                                                                                                    }
         it "parse location with ice" $ do log <- C8.readFile "test/logs/locationWithIce.log"
                                           log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5601) (LocationTitle "Мелководье")
                                                                                                , _objects = [ ItemRoomDesc "Лужица ржаного кваса разлита у ваших ног." ]
                                                                                                , _mobs = []
                                                                                                , _exits = [OpenExit North, OpenExit South]
+                                                                                               }
+        it "parse location with mud" $ do log <- C8.readFile "test/logs/muddyLocation.log"
+                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5200) (LocationTitle "Лесная дорога")
+                                                                                               , _objects = []
+                                                                                               , _mobs = []
+                                                                                               , _exits = [OpenExit North, OpenExit East, OpenExit South, OpenExit West]
                                                                                                }
         it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
@@ -151,7 +163,7 @@ spec = describe "Parser" $ do
         it "parse shop items" $ do let log = "test/logs/shopList.log"
                                    serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter isShopListItemEvent
                                    length serverEventList `shouldBe` 43
-        it "parse examine container event" $ do log <- C8.readFile "test/logs/examineContainer2.log"
+        it "parse examine container event" $ do log <- C8.readFile "test/logs/examineContainer.log"
                                                 log ~> serverInputParser `shouldParse` ExamineContainer { _name = "холщовый мешок"
                                                                                                         , _items = [ Single (Nominative "рыбья кость") Excellent
                                                                                                                    , Multiple (Nominative "ломоть хлеба") 11
