@@ -129,9 +129,12 @@ killEmAll targets = awaitTargets >> return PromptEvent
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (target mobs)
                                        evt -> yield evt >> awaitTargets
         attack evt Nothing = yield evt >> awaitTargets
-        attack _ (Just mob) = yield (SendToServer $ "убить " <> mob) >> awaitFightBegin
-        awaitFightBegin = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent{}) -> awaitFightEnd
-                                                                     _ -> awaitFightBegin
+        attack _ (Just mob) = yield (SendToServer $ "убить " <> mob) >> awaitFightBegin 0
+        awaitFightBegin pulsesCount = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent{}) -> awaitFightEnd
+                                                                                 PulseEvent -> if pulsesCount < 2
+                                                                                                  then awaitFightBegin (pulsesCount + 1)
+                                                                                                  else yield (SendToServer "смотреть") >> awaitTargets
+                                                                                 _ -> awaitFightBegin pulsesCount
         awaitFightEnd = await >>= \case (ServerEvent PromptEvent) -> yield (SendToServer "смотреть") >> awaitTargets
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
