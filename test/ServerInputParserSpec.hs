@@ -172,11 +172,11 @@ spec = describe "Parser" $ do
         it "parse shop list with prompt" $ do let log = "test/logs/shopListWithPrompt.log"
                                               serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
                                               (length $ filter isShopListItemEvent serverEventList) `shouldBe` 27
-                                              (length $ filter (== PromptEvent) serverEventList) `shouldBe` 1
+                                              (length $ filter isPrompt serverEventList) `shouldBe` 1
         it "parse single line prompt event" $ do log <- C8.readFile "test/logs/prompt.1.log"
-                                                 log ~> serverInputParser `shouldParse` PromptEvent
+                                                 log ~> serverInputParser `shouldParse` PromptEvent 712 185
         it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
-                                              log ~> serverInputParser `shouldParse` PromptEvent
+                                              log ~> serverInputParser `shouldParse` PromptEvent 143 101
         it "parse fight prompt" $ do let log = "test/logs/enterRoomWithFight.log"
                                          isFightPromptEvent FightPromptEvent{} = True
                                          isFightPromptEvent _ = False
@@ -215,6 +215,8 @@ spec = describe "Parser" $ do
                                                                                                          ]
                                                                                                , _exits = [OpenExit East, OpenExit West]
                                                                                                }
+        it "parses my stats" $ do log <- C8.readFile "test/logs/myStats.log"
+                                  log ~> serverInputParser `shouldParse` MyStats
         it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
                                               where objects = [ ItemRoomDesc "Лужица дождевой воды разлита у ваших ног." ]
@@ -237,6 +239,10 @@ moveOrLocation e = isMoveEvent e || isLocationEvent e
 nonEmptyUnknown :: ServerEvent -> Bool
 nonEmptyUnknown (UnknownServerEvent "") = False
 nonEmptyUnknown _ = True
+
+isPrompt :: ServerEvent -> Bool
+isPrompt PromptEvent{} = True
+isPrompt _ = False
 
 locationsAndCounts :: FilePath -> IO (Int, Int)
 locationsAndCounts file = do

@@ -162,6 +162,7 @@ data ServerEvent = CodepagePrompt
                  | LiquidContainerIsEmpty
                  | ExamineContainer { _name :: Text, _items :: [InventoryItem] }
                  | MobRipEvent
+                 | MyStats
                  | ParseError ByteString
                  deriving (Eq, Generic, Ord, Show)
 

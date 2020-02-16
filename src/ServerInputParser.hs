@@ -54,6 +54,7 @@ serverInputParser = codepagePrompt
                     <|> isNotThirsty
                     <|> examineContainer
                     <|> ripMob
+                    <|> myStats
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -116,6 +117,21 @@ passwordPrompt = do
     string $ encodeUtf8 "Персонаж с таким именем уже существует. Введите пароль : "
     iacGA
     return PasswordPrompt
+
+myStats :: A.Parser ServerEvent
+myStats = do
+  cs >> string "0;36m"
+  C.skipWhile (== '-')
+  C.endOfLine
+  C.char '|' >> C.char '|' >> C.space
+  cs >> string "0;37m"
+  string (encodeUtf8 "Вы ")
+  myName <- C.takeTill (== ',')
+  C.char ',' >> C.space
+  myClass <- C.takeTill (== '.')
+  C.char '.' >> C.skipWhile C.isSpace
+  cs >> string "0;36m" >> C.char '|' >> C.char '|' >> C.endOfLine
+  return MyStats
 
 ripMob :: A.Parser ServerEvent
 ripMob = do string $ encodeUtf8 "Ваш опыт повысился на "
