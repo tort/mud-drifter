@@ -100,7 +100,7 @@ printMove moves = mapM_ printM moves
 filterQuestEvent :: Event -> Bool
 filterQuestEvent e = (not $ isServerInput e)
                         && (not $ isMoveEvent e)
-                        && (e /= (ServerEvent PromptEvent))
+                        && (e /= (ServerEvent PromptEvent{}))
                         && (not $ emptyUnknownServerEvent e)
                         && (not $ isConsoleOutput e)
   where emptyUnknownServerEvent (ServerEvent (UnknownServerEvent "")) = True

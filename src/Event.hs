@@ -139,7 +139,7 @@ data ServerEvent = CodepagePrompt
                  | ListInventoryEvent [(Nominative Item, ItemState)]
                  | ItemStatsEvent ItemStats
                  | ShopListItemEvent (Nominative Item) Price
-                 | PromptEvent
+                 | PromptEvent Int Int
                  | FightPromptEvent (Nominative Mob) (Nominative Mob)
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
@@ -161,6 +161,7 @@ data ServerEvent = CodepagePrompt
                  | NotThirsty
                  | LiquidContainerIsEmpty
                  | ExamineContainer { _name :: Text, _items :: [InventoryItem] }
+                 | MobRipEvent
                  | ParseError ByteString
                  deriving (Eq, Generic, Ord, Show)
 

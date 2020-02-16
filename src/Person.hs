@@ -116,26 +116,32 @@ travelToLoc substr world = action findLocation
         travelPath path currLocEvt = travel path currLocEvt world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
-cover world = awaitFightBegin >> return PromptEvent
+cover world = awaitFightBegin
   where awaitFightBegin = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent{}) -> awaitFightEnd
                                                                      _ -> awaitFightBegin
-        awaitFightEnd = await >>= \case (ServerEvent PromptEvent) -> awaitFightBegin
+        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> yield evt >> awaitFightBegin
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
 
 killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
-killEmAll targets = awaitTargets >> return PromptEvent
+killEmAll targets = awaitTargets
   where awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (target mobs)
                                        evt -> yield evt >> awaitTargets
         attack evt Nothing = yield evt >> awaitTargets
-        attack _ (Just mob) = yield (SendToServer $ "убить " <> mob) >> awaitFightBegin 0
+        attack e (Just mob) = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> mob) >> awaitFightBegin 0
+                                              evt -> yield evt >> attack e (Just mob)
         awaitFightBegin pulsesCount = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent{}) -> awaitFightEnd
                                                                                  PulseEvent -> if pulsesCount < 2
                                                                                                   then awaitFightBegin (pulsesCount + 1)
                                                                                                   else yield (SendToServer "смотреть") >> awaitTargets
                                                                                  _ -> awaitFightBegin pulsesCount
-        awaitFightEnd = await >>= \case (ServerEvent PromptEvent) -> yield (SendToServer "смотреть") >> awaitTargets
+        awaitFightEnd = await >>= \case (ServerEvent PromptEvent{}) -> yield (SendToServer "смотреть") >> awaitTargets
+                                        evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
+                                                                            yield (SendToServer "взять все труп")
+                                                                            yield (SendToServer "брос труп")
+                                                                            yield evt
+                                                                            awaitFightEnd
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
         target = join . find isJust . fmap (flip M.lookup targets)
@@ -166,7 +172,7 @@ travelAndKill world targets mob = pipe $ mobArea
                              else lift $ throwError "target is absent"
         fight = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> target [mob]) >> awaitFightEnd
                                 evt -> yield evt >> fight
-        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent) -> return PromptEvent
+        awaitFightEnd = await >>= \case evt@(ServerEvent p@PromptEvent{}) -> return p
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
         target = fromJust . join . find isJust . fmap (flip M.lookup targets)

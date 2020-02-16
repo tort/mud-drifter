@@ -53,6 +53,7 @@ serverInputParser = codepagePrompt
                     <|> isNotHungry
                     <|> isNotThirsty
                     <|> examineContainer
+                    <|> ripMob
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -116,6 +117,13 @@ passwordPrompt = do
     iacGA
     return PasswordPrompt
 
+ripMob :: A.Parser ServerEvent
+ripMob = do string $ encodeUtf8 "Ваш опыт повысился на "
+            C.decimal
+            skipWhile (not . C.isEndOfLine)
+            C.endOfLine
+            return MobRipEvent
+
 isNotThirsty :: A.Parser ServerEvent
 isNotThirsty = isFull <|> isOverFull >> return NotThirsty
   where isFull = string $ encodeUtf8 "Вы не чувствуете жажды."
@@ -158,7 +166,7 @@ examineContainer = do
   C.endOfLine
   slots <- many1 armorSlot
   C.endOfLine
-  condition
+  containerAge
   C.endOfLine
   contName <- nameAndWhere
   C.endOfLine
@@ -168,9 +176,12 @@ examineContainer = do
           inHands = string $ encodeUtf8 "в руках"
           isEmpty = do string $ encodeUtf8 " Внутри ничего нет."
                        return []
-          condition = do string $ encodeUtf8 "Состояние: "
-                         _ <- C.takeTill (== '.')
-                         C.char '.'
+          wearAndTear = do C.endOfLine
+                           _ <- manyTill (skip . const $ True) (string $ encodeUtf8 " состоянии.")
+                           return ()
+          containerAge = do string $ encodeUtf8 "Состояние: "
+                            _ <- C.takeTill (== '.')
+                            C.char '.'
           nameAndWhere = do contName <- C.takeTill (== '(')
                             C.char '('
                             inAmmunition <|> inHands
@@ -473,7 +484,7 @@ prompt = do many' C.endOfLine
             C.char '>'
             C.space
             iacGA
-            return PromptEvent
+            return (PromptEvent hp mv)
 
 fightPrompt :: A.Parser ServerEvent
 fightPrompt = do
