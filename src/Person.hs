@@ -136,7 +136,7 @@ killEmAll targets = awaitTargets
                                                                                                   then awaitFightBegin (pulsesCount + 1)
                                                                                                   else yield (SendToServer "смотреть") >> awaitTargets
                                                                                  _ -> awaitFightBegin pulsesCount
-        awaitFightEnd = await >>= \case (ServerEvent PromptEvent{}) -> yield (SendToServer "смотреть") >> awaitTargets
+        awaitFightEnd = await >>= \case (ServerEvent PromptEvent{}) -> watch
                                         evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
                                                                             yield (SendToServer "взять все труп")
                                                                             yield (SendToServer "брос труп")
@@ -144,6 +144,8 @@ killEmAll targets = awaitTargets
                                                                             awaitFightEnd
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
+        watch = await >>= \case PulseEvent -> yield (SendToServer "смотреть") >> awaitTargets
+                                evt -> yield evt >> watch
         target = join . find isJust . fmap (flip M.lookup targets)
 
 travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent

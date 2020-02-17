@@ -132,7 +132,7 @@ myStats = do -- header begin
   row9
   maxHp <- row10
   maxMv <- row11
-  return MyStats
+  return $ MyStats maxHp maxMv
     where colParser key valParser = do C.space >> cs >> colorCode >> string (encodeUtf8 key) >> C.char ':' >> C.skipWhile C.isSpace
                                        v <- valParser
                                        C.skipWhile C.isSpace
