@@ -119,19 +119,157 @@ passwordPrompt = do
     return PasswordPrompt
 
 myStats :: A.Parser ServerEvent
-myStats = do
-  cs >> string "0;36m"
-  C.skipWhile (== '-')
-  C.endOfLine
-  C.char '|' >> C.char '|' >> C.space
-  cs >> string "0;37m"
-  string (encodeUtf8 "Вы ")
-  myName <- C.takeTill (== ',')
-  C.char ',' >> C.space
-  myClass <- C.takeTill (== '.')
-  C.char '.' >> C.skipWhile C.isSpace
-  cs >> string "0;36m" >> C.char '|' >> C.char '|' >> C.endOfLine
+myStats = do -- header begin
+  header
+  row1
+  row2
+  row3
+  row4
+  row5
+  row6
+  row7
+  row8
+  row9
+  maxHp <- row10
+  maxMv <- row11
   return MyStats
+    where colParser key valParser = do C.space >> cs >> colorCode >> string (encodeUtf8 key) >> C.char ':' >> C.skipWhile C.isSpace
+                                       v <- valParser
+                                       C.skipWhile C.isSpace
+                                       return v
+          leftFrame = C.space >> C.char '|' >> C.char '|'
+          ncVDivider = C.skipWhile (== '-')
+          vDivider = cs >> colorCode >> C.skipWhile (== '-')
+          splitter = cs >> string "0;36m" >> C.char '|'
+          nonColoredSplitter = C.char '|'
+          rightFrame = cs >> string "0;36m" >> C.char '|' >> C.char '|'
+          nonColoredRightFrame = C.char '|' >> C.char '|'
+          colorCode = C.take 5
+          strParser = decodeUtf8 <$> C.takeTill C.isSpace
+          dblValParser = C.decimal >> C.char '(' >> many' C.space >> C.decimal >>= \v -> C.char ')' >> return v
+          header = do
+            C.space >> cs >> string "0;36m" >> C.skipWhile (== '-') >> C.endOfLine
+            C.space >> C.char '|' >> C.char '|' >> C.space
+            cs >> string "0;37m"
+            string (encodeUtf8 "Вы ")
+            myName <- C.takeTill (== ',')
+            C.char ',' >> C.space
+            myClass <- C.takeTill (== '.')
+            C.char '.' >> C.skipWhile C.isSpace
+            cs >> string "0;36m" >> C.char '|' >> C.char '|' >> C.endOfLine
+            C.space >> C.skipWhile (== '-') >> C.endOfLine
+          row1 = do leftFrame
+                    colParser "Племя" strParser
+                    splitter
+                    colParser "Рост" dblValParser
+                    splitter
+                    armor <- colParser "Броня" C.decimal
+                    splitter
+                    colParser "Сопротивление" (return ())
+                    rightFrame
+                    C.endOfLine
+          row2 = do leftFrame
+                    colParser "Род" strParser
+                    splitter
+                    colParser "Вес" dblValParser
+                    splitter
+                    ac <- colParser "Защита" (C.signed C.decimal)
+                    splitter
+                    resistFire <- colParser "Огню" C.decimal
+                    rightFrame
+                    C.endOfLine
+          row3 = do leftFrame
+                    colParser "Вера" strParser
+                    splitter
+                    colParser "Размер" dblValParser
+                    splitter
+                    colParser "Поглощение" C.decimal
+                    splitter
+                    colParser "Воздуху" C.decimal
+                    rightFrame
+                    C.endOfLine
+          row4 = do leftFrame
+                    colParser "Уровень" $ cs >> colorCode >> C.decimal
+                    splitter
+                    colParser "Сила" dblValParser
+                    splitter
+                    colParser "Атака" (C.signed C.decimal)
+                    splitter
+                    colParser "Воде" C.decimal
+                    rightFrame
+                    C.endOfLine
+          row5 = do leftFrame
+                    colParser "Перевоплощений" $ cs >> colorCode >> C.decimal
+                    splitter
+                    colParser "Ловкость" dblValParser
+                    splitter
+                    colParser "Урон" C.decimal
+                    splitter
+                    colParser "Земле" C.decimal
+                    rightFrame
+                    C.endOfLine
+          row6 = do leftFrame
+                    colParser "Возраст" $ cs >> colorCode >> C.decimal
+                    splitter
+                    colParser "Телосложение" dblValParser
+                    splitter
+                    ncVDivider
+                    nonColoredSplitter
+                    colParser "Тьме" $ C.decimal >>= \v -> cs >> colorCode >> return v
+                    nonColoredRightFrame
+                    C.endOfLine
+          row7 = do leftFrame
+                    colParser "Опыт" $ cs >> colorCode >> C.decimal
+                    splitter
+                    colParser "Мудрость" dblValParser
+                    splitter
+                    colParser "Колдовство" C.decimal
+                    splitter
+                    vDivider
+                    nonColoredRightFrame
+                    C.endOfLine
+          row8 = do leftFrame
+                    colParser "ДСУ" $ cs >> colorCode >> C.decimal
+                    splitter
+                    colParser "Ум" dblValParser
+                    splitter
+                    colParser "Запоминание" C.decimal
+                    splitter
+                    colParser "Живучесть" C.decimal
+                    rightFrame
+                    C.endOfLine
+          row9 = do leftFrame
+                    colParser "Денег" $ cs >> colorCode >> C.decimal
+                    splitter
+                    colParser "Обаяние" dblValParser
+                    splitter
+                    ncVDivider
+                    nonColoredSplitter
+                    colParser "Разум" C.decimal
+                    rightFrame
+                    C.endOfLine
+          row10 = do leftFrame
+                     colParser "На счету" $ cs >> colorCode >> C.decimal
+                     splitter
+                     hp <- colParser "Жизнь" dblValParser
+                     splitter
+                     colParser "Воля" $ C.decimal >>= \v -> cs >> colorCode >> return v
+                     nonColoredSplitter
+                     colParser "Иммунитет" C.decimal
+                     rightFrame
+                     C.endOfLine
+                     return hp
+          row11 = do leftFrame
+                     C.space >> cs >> colorCode >> skipWhile (/= telnetEscape)
+                     splitter
+                     mv <- colParser "Выносл." dblValParser
+                     splitter
+                     colParser "Здоровье" C.decimal
+                     splitter
+                     ncVDivider
+                     nonColoredRightFrame
+                     C.endOfLine
+                     return mv
 
 ripMob :: A.Parser ServerEvent
 ripMob = do string $ encodeUtf8 "Ваш опыт повысился на "
