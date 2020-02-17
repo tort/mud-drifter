@@ -178,3 +178,26 @@ travelAndKill world targets mob = pipe $ mobArea
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
         target = fromJust . join . find isJust . fmap (flip M.lookup targets)
+
+supplyTask :: Monad m => Pipe Event Event m ServerEvent
+supplyTask = init
+  where init = await >>= \case PulseEvent -> yield (SendToServer "счет все") >> readStats
+                               evt -> yield evt >> init
+        readStats = await>>= \e -> yield e >> case e of (ServerEvent (MyStats maxHp maxMv)) -> trackHp maxHp maxMv
+                                                        evt -> readStats
+        trackHp maxHp maxMv = await >>= \evt -> yield evt >> case evt of (ServerEvent (PromptEvent hp mv)) -> if (div (100 * hp) maxHp) < 90 || (div (100 * mv) maxMv) < 20
+                                                                                                                 then rest maxHp maxMv
+                                                                                                                 else trackHp maxHp maxMv
+                                                                         _ -> trackHp maxHp maxMv
+        rest maxHp maxMv = await >>= \case PulseEvent -> yield (SendToServer "отдохнуть") >> awaitFullHp maxHp maxMv
+                                           evt -> yield evt >> rest maxHp maxMv
+        awaitFullHp maxHp maxMv = await >>= \case evt@(ServerEvent (PromptEvent hp mv)) -> yield evt >> if hp >= maxHp && mv >= maxMv
+                                                                                                           then yield (SendToServer "встать") >> trackHp maxHp maxMv
+                                                                                                           else awaitFullHp maxHp maxMv
+                                                  PulseEvent -> awaitFullHp maxHp maxMv
+                                                  evt -> yield evt >> awaitFullHp maxHp maxMv
+
+runZone :: MonadIO m => World -> Map MobRoomDesc Text -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
+runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
+  cover world >-> supplyTask >-> killEmAll allKillableMobs >-> travel path locEvt world
+  where path = zonePath world startFrom
