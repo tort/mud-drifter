@@ -147,7 +147,8 @@ data ServerEvent = CodepagePrompt
                  | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
                  | PickItemEvent (Accusative Item)
                  | ItemInTheRoom ItemRoomDesc
-                 | LootCorpse (Accusative Item) (Genitive Mob)
+                 | LootItem (Accusative Item) (Genitive Mob)
+                 | LootMoney (Genitive Mob)
                  | TakeFromContainer (Accusative Item) (Genitive Item)
                  | TakeInRightHand (Accusative Item)
                  | TakeInLeftHand (Accusative Item)

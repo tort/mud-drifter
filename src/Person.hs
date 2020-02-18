@@ -12,6 +12,7 @@ module Person ( travel
               , run
               , runE
               , killEmAll
+              , runZone
               , Person(..)
               , MudServer(..)
               ) where
@@ -124,8 +125,13 @@ cover world = awaitFightBegin
                                         evt -> yield evt >> awaitFightEnd
 
 killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
-killEmAll targets = awaitTargets
-  where awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
+killEmAll targets = (forever lootAll) >-> awaitTargets
+  where lootAll = await >>= \e -> yield e >> case e of evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
+                                                                                           yield (SendToServer "взять все труп")
+                                                                                           yield (SendToServer "брос труп")
+                                                       (ServerEvent (LootItem _ _)) -> yield (SendToServer "полож все мешок")
+                                                       _ -> return ()
+        awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (target mobs)
                                        evt -> yield evt >> awaitTargets
         attack evt Nothing = yield evt >> awaitTargets
@@ -136,12 +142,7 @@ killEmAll targets = awaitTargets
                                                                                                   then awaitFightBegin (pulsesCount + 1)
                                                                                                   else yield (SendToServer "смотреть") >> awaitTargets
                                                                                  _ -> awaitFightBegin pulsesCount
-        awaitFightEnd = await >>= \case (ServerEvent PromptEvent{}) -> watch
-                                        evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
-                                                                            yield (SendToServer "взять все труп")
-                                                                            yield (SendToServer "брос труп")
-                                                                            yield evt
-                                                                            awaitFightEnd
+        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> yield evt >> watch
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
         watch = await >>= \case PulseEvent -> yield (SendToServer "смотреть") >> awaitTargets

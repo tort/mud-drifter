@@ -542,11 +542,32 @@ youTook = do
   lootCorpse <|> takeItemFromContainer <|> takeInRightHand <|> takeInLeftHand <|> takeInBothHands
 
 lootCorpse :: A.Parser ServerEvent
-lootCorpse = do item <- readWordsTill "из трупа "
-                source <- takeTill (== _period)
-                A.word8 _period
-                C.endOfLine
-                return $ LootCorpse (Accusative $ decodeUtf8 item) (Genitive $ decodeUtf8 source)
+lootCorpse = lootMoney <|> lootItem
+  where lootMoney = lootOneCoin <|> lootPileCoins
+        lootPileCoins = do tinyPile <|> smallPile <|> littlePile
+                           C.space
+                           string . encodeUtf8 $ "из трупа"
+                           C.space
+                           source <- takeTill (== _period)
+                           A.word8 _period
+                           C.endOfLine
+                           return . LootMoney . Genitive . decodeUtf8 $ source
+        lootOneCoin = do (string $ encodeUtf8 "одну куну")
+                         C.space
+                         (string . encodeUtf8 $ "из трупа")
+                         C.space
+                         source <- takeTill (== _period)
+                         A.word8 _period
+                         C.endOfLine
+                         return . LootMoney . Genitive . decodeUtf8 $ source
+        lootItem = do item <- readWordsTill "из трупа "
+                      source <- takeTill (== _period)
+                      A.word8 _period
+                      C.endOfLine
+                      return $ LootItem (Accusative $ decodeUtf8 item) (Genitive $ decodeUtf8 source)
+        tinyPile = string . encodeUtf8 $ "малюсенькую горстку кун"
+        smallPile = string . encodeUtf8 $ "небольшую горстку кун"
+        littlePile = string . encodeUtf8 $ "маленькую кучку кун"
 
 takeItemFromContainer :: A.Parser ServerEvent
 takeItemFromContainer = do item <- readWordsTill "из "

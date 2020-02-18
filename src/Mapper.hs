@@ -59,11 +59,11 @@ printItems subName world = (render . filterEvents) (_itemsOnMap world)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
         filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
         filterEvent (ItemInTheRoom (ItemRoomDesc text)) = T.isInfixOf subName (T.toLower text)
-        filterEvent (LootCorpse (Accusative item) (Genitive mob)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (LootItem (Accusative item) (Genitive mob)) = T.isInfixOf subName (T.toLower item)
         filterEvent (TakeFromContainer (Accusative item) (Genitive container)) = T.isInfixOf subName (T.toLower item)
         filterEvent (MobGaveYouItem (Nominative mob) (Accusative item)) = T.isInfixOf subName (T.toLower item)
         renderEvent (ItemInTheRoom (ItemRoomDesc text)) = text
-        renderEvent (LootCorpse (Accusative item) (Genitive mob)) = "Вы взяли " <> item <> " из трупа " <> mob
+        renderEvent (LootItem (Accusative item) (Genitive mob)) = "Вы взяли " <> item <> " из трупа " <> mob
         renderEvent (TakeFromContainer (Accusative item) (Genitive container)) = "Вы взяли " <> item <> " из " <> container
         renderEvent (MobGaveYouItem (Nominative mob) (Accusative item)) = mob <> " дал вам " <> item
 

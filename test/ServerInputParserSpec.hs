@@ -216,7 +216,13 @@ spec = describe "Parser" $ do
                                                                                                , _exits = [OpenExit East, OpenExit West]
                                                                                                }
         it "parses my stats" $ do log <- C8.readFile "test/logs/myStats.log"
-                                  log ~> serverInputParser `shouldParse` MyStats
+                                  log ~> serverInputParser `shouldParse` (MyStats 223 112)
+        it "parses loot message" $ do log <- C8.readFile "test/logs/loot.log"
+                                      log ~> serverInputParser `shouldParse` (LootItem (Accusative "грабли") (Genitive "огородника"))
+        it "parses one coin loot" $ do log <- C8.readFile "test/logs/oneCoinLoot.log"
+                                       log ~> serverInputParser `shouldParse` LootMoney (Genitive "чибиса")
+        it "parses one pile of coins loot" $ do log <- C8.readFile "test/logs/pileOfCoinsLoot.log"
+                                                log ~> serverInputParser `shouldParse` LootMoney (Genitive "огородника")
         it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
                                               where objects = [ ItemRoomDesc "Лужица дождевой воды разлита у ваших ног." ]
