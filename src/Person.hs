@@ -128,8 +128,8 @@ trackBash :: Monad m => Pipe Event Event m ServerEvent
 trackBash = forever awaitBash
   where awaitBash = await >>= \case evt@(ServerEvent ImBashedEvent) -> yield evt >> stand
                                     evt -> yield evt
-        stand = await >>= \case PulseEvent -> yield (SendToServer "встать") >> awaitBash
-                                evt -> yield evt
+        stand = await >>= \case PulseEvent -> yield (SendToServer "встать")
+                                evt -> yield evt >> stand
 
 killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
 killEmAll targets = (forever lootAll) >-> awaitTargets
