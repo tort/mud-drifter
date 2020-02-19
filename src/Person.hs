@@ -126,22 +126,24 @@ cover world = awaitFightBegin
 
 killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
 killEmAll targets = (forever lootAll) >-> awaitTargets
-  where lootAll = await >>= \e -> yield e >> case e of evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
-                                                                                           yield (SendToServer "взять все труп")
-                                                                                           yield (SendToServer "брос труп")
-                                                       (ServerEvent (LootItem _ _)) -> yield (SendToServer "полож все мешок")
-                                                       _ -> return ()
+  where lootAll = await >>= \case evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
+                                                                      yield (SendToServer "взять все труп")
+                                                                      yield (SendToServer "брос труп")
+                                                                      yield evt
+                                  evt@(ServerEvent (LootItem _ _)) -> do yield (SendToServer "полож все мешок")
+                                                                         yield evt
+                                  evt -> yield evt
         awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (target mobs)
                                        evt -> yield evt >> awaitTargets
         attack evt Nothing = yield evt >> awaitTargets
         attack e (Just mob) = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> mob) >> awaitFightBegin 0
                                               evt -> yield evt >> attack e (Just mob)
-        awaitFightBegin pulsesCount = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent{}) -> awaitFightEnd
-                                                                                 PulseEvent -> if pulsesCount < 2
-                                                                                                  then awaitFightBegin (pulsesCount + 1)
-                                                                                                  else yield (SendToServer "смотреть") >> awaitTargets
-                                                                                 _ -> awaitFightBegin pulsesCount
+        awaitFightBegin pulsesCount = await >>= \case evt@(ServerEvent FightPromptEvent{}) -> yield evt >> awaitFightEnd
+                                                      PulseEvent -> if pulsesCount < 2
+                                                                       then awaitFightBegin (pulsesCount + 1)
+                                                                       else yield (SendToServer "смотреть") >> awaitTargets
+                                                      evt -> yield evt >> awaitFightBegin pulsesCount
         awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> yield evt >> watch
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
@@ -184,17 +186,17 @@ supplyTask :: Monad m => Pipe Event Event m ServerEvent
 supplyTask = init
   where init = await >>= \case PulseEvent -> yield (SendToServer "счет все") >> readStats
                                evt -> yield evt >> init
-        readStats = await>>= \e -> yield e >> case e of (ServerEvent (MyStats maxHp maxMv)) -> trackHp maxHp maxMv
-                                                        evt -> readStats
+        readStats = await >>= \case evt@(ServerEvent (MyStats maxHp maxMv)) -> yield evt >> trackHp maxHp maxMv
+                                    evt -> yield evt >> readStats
         trackHp maxHp maxMv = await >>= \evt -> yield evt >> case evt of (ServerEvent (PromptEvent hp mv)) -> if (div (100 * hp) maxHp) < 90 || (div (100 * mv) maxMv) < 20
                                                                                                                  then rest maxHp maxMv
                                                                                                                  else trackHp maxHp maxMv
                                                                          _ -> trackHp maxHp maxMv
         rest maxHp maxMv = await >>= \case PulseEvent -> yield (SendToServer "отдохнуть") >> awaitFullHp maxHp maxMv
                                            evt -> yield evt >> rest maxHp maxMv
-        awaitFullHp maxHp maxMv = await >>= \case evt@(ServerEvent (PromptEvent hp mv)) -> yield evt >> if hp >= maxHp && mv >= maxMv
-                                                                                                           then yield (SendToServer "встать") >> trackHp maxHp maxMv
-                                                                                                           else awaitFullHp maxHp maxMv
+        awaitFullHp maxHp maxMv = await >>= \case evt@(ServerEvent (PromptEvent hp mv)) -> if hp >= maxHp && mv >= maxMv
+                                                                                              then yield (SendToServer "встать") >> yield evt >> trackHp maxHp maxMv
+                                                                                              else yield evt >> awaitFullHp maxHp maxMv
                                                   PulseEvent -> awaitFullHp maxHp maxMv
                                                   evt -> yield evt >> awaitFullHp maxHp maxMv
 
