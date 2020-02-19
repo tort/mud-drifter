@@ -117,12 +117,19 @@ travelToLoc substr world = action findLocation
         travelPath path currLocEvt = travel path currLocEvt world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
-cover world = awaitFightBegin
+cover world = trackBash >-> awaitFightBegin
   where awaitFightBegin = await >>= \evt -> yield evt >> case evt of (ServerEvent FightPromptEvent{}) -> awaitFightEnd
                                                                      _ -> awaitFightBegin
         awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> yield evt >> awaitFightBegin
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
+
+trackBash :: Monad m => Pipe Event Event m ServerEvent
+trackBash = forever awaitBash
+  where awaitBash = await >>= \case evt@(ServerEvent ImBashedEvent) -> yield evt >> stand
+                                    evt -> yield evt
+        stand = await >>= \case PulseEvent -> yield (SendToServer "встать") >> awaitBash
+                                evt -> yield evt
 
 killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
 killEmAll targets = (forever lootAll) >-> awaitTargets

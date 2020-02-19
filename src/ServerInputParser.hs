@@ -7,7 +7,7 @@ module ServerInputParser ( serverInputParser
                          , RemoteConsoleEvent(..)
                          ) where
 
-import Protolude hiding (Location, Down, Up, Dual, option)
+import Protolude hiding (Location, Down, Up, Dual, option, try)
 import Control.Applicative
 import Control.Monad
 import Pipes.Attoparsec
@@ -55,6 +55,7 @@ serverInputParser = codepagePrompt
                     <|> examineContainer
                     <|> ripMob
                     <|> myStats
+                    <|> imBashed
                     <|> unknownMessage
 
 codepagePrompt :: A.Parser ServerEvent
@@ -271,6 +272,20 @@ myStats = do -- header begin
                      C.endOfLine
                      return mv
 
+imBashed :: A.Parser ServerEvent
+imBashed = do many' clearColors
+              cs
+              string "1;31m"
+              variant1 <|> variant2
+              return ImBashedEvent
+  where variant1 = do string (encodeUtf8 "Вы полетели на землю от мощного удара")
+                      C.space
+                      mob <- C.takeTill (== '.')
+                      C.char '.'
+                      return ()
+        variant2 = do readWordsTill "вас на землю. Поднимайтесь!"
+                      return ()
+
 ripMob :: A.Parser ServerEvent
 ripMob = do string $ encodeUtf8 "Ваш опыт повысился на "
             C.decimal
@@ -331,7 +346,7 @@ examineContainer = do
           isEmpty = do string $ encodeUtf8 " Внутри ничего нет."
                        return []
           wearAndTear = do C.endOfLine
-                           _ <- manyTill (skip . const $ True) (string $ encodeUtf8 " состоянии.")
+                           _ <- readWordsTill " состоянии."
                            return ()
           containerAge = do string $ encodeUtf8 "Состояние: "
                             _ <- C.takeTill (== '.')
@@ -911,7 +926,7 @@ iacGA :: A.Parser Word8
 iacGA = do iac
            ga
 
-takeTillEndOfLineOrGA :: A.Parser B.ByteString
+takeTillEndOfLineOrGA :: A.Parser ByteString
 takeTillEndOfLineOrGA = do txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
                            eitherP C.endOfLine iacGA
                            skipMany $ A.word8 _cr
