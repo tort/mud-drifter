@@ -225,11 +225,8 @@ spec = describe "Parser" $ do
                                                 log ~> serverInputParser `shouldParse` LootMoney (Genitive "огородника")
         it "parses i'm bashed" $ do log <- C8.readFile "test/logs/imBashed.log"
                                     log ~> serverInputParser `shouldParse` ImBashedEvent
-        it "parse bashes" $ do let log = "archive/server-input-log/genod-20200219_073706__20200219_074933.log"
-                                   isBash ImBashedEvent = True
-                                   isBash _ = False
-                               serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                               (length $ filter isBash serverEventList) `shouldBe` 2
+        it "parses i'm bashed with colors drop" $ do log <- C8.readFile "test/logs/imBashed.2.log"
+                                                     log ~> serverInputParser `shouldParse` ImBashedEvent
         it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
                                               where objects = [ ItemRoomDesc "Лужица дождевой воды разлита у ваших ног." ]
