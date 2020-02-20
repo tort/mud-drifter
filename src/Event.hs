@@ -3,10 +3,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
 
 module Event ( Event(..)
              , ServerEvent(..)
@@ -25,9 +26,8 @@ module Event ( Event(..)
              , RoomDir(..)
              , RoomExit(..)
              , ObjRef(..)
-             , Accusative(..)
-             , Nominative(..)
-             , Genitive(..)
+             , ObjCase(..)
+             , ObjCases(..)
              , ShowVal(..)
              , Result(..)
              , isServerEvent
@@ -105,9 +105,13 @@ instance Binary RoomExit
 instance Binary (ObjRef Item Nominative)
 instance Binary (ObjRef Item Accusative)
 instance Binary (ObjRef Item Genitive)
+instance Binary (ObjRef Item InRoomDesc)
+instance Binary (ObjRef Item Alias)
 instance Binary (ObjRef Mob Nominative)
 instance Binary (ObjRef Mob Accusative)
 instance Binary (ObjRef Mob Genitive)
+instance Binary (ObjRef Mob InRoomDesc)
+instance Binary (ObjRef Mob Alias)
 instance Binary InventoryItem
 
 data Event = ConsoleInput Text
@@ -130,7 +134,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [ObjRef Item Nominative], _mobs :: [ObjRef Mob Nominative], _exits :: [RoomExit] }
+                 | LocationEvent { _location :: Location, _objects :: [ObjRef Item InRoomDesc], _mobs :: [ObjRef Mob InRoomDesc], _exits :: [RoomExit] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -145,7 +149,7 @@ data ServerEvent = CodepagePrompt
                  | DarkInDirection RoomDir
                  | GlanceEvent RoomDir LocationTitle [ObjRef Mob Nominative]
                  | PickItemEvent (ObjRef Item Accusative)
-                 | ItemInTheRoom (ObjRef Item Nominative)
+                 | ItemInTheRoom (ObjRef Item InRoomDesc)
                  | LootItem (ObjRef Item Accusative) (ObjRef Mob Genitive)
                  | LootMoney (ObjRef Mob Genitive)
                  | TakeFromContainer (ObjRef Item Accusative) (ObjRef Item Genitive)
@@ -185,8 +189,17 @@ type Price = Int
 data InventoryItem = Single (ObjRef Item Nominative) ItemState | Multiple (ObjRef Item Nominative) Int
   deriving (Eq, Ord, Generic, Show)
 
-newtype ObjRef a b = ObjRef { unObjRef :: Text }
+data ObjCase = Nominative
+             | Accusative
+             | Genitive
+             | InRoomDesc
+             | Alias
+             deriving (Eq, Ord, Show)
+
+newtype ObjRef a (b :: ObjCase) = ObjRef { unObjRef :: Text }
   deriving (Eq, Ord, Generic, Show)
+
+type ObjCases a = Map ObjCase Text
 
 instance TextShow (ObjRef a b) where
   showt = unObjRef
@@ -196,20 +209,6 @@ data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord
 
 data Mob
 data Item
-
-data Nominative
-data Accusative
-data Genitive
-
-newtype ObjAlias a = ObjAlias Text deriving (Eq)
-
-data ObjCases a = ObjCases { _nominative :: ObjRef a Nominative
-                           , _accusative :: ObjRef a Accusative
-                           , _genitive :: ObjRef a Genitive
-                           , _alias :: ObjAlias a
-                           }
-
-data MobStats = MobStats { _nominative :: Text } deriving (Eq)
 
 class ShowVal a where
   showVal :: a -> Text

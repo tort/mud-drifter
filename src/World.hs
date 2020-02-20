@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DataKinds #-}
 
 module World ( locsByRegex
              , showLocs
@@ -13,7 +14,7 @@ module World ( locsByRegex
              , zoneMap
              , loadServerEvents
              , serverLogEventsProducer
-             , mobRoomDescToNominative
+             , mobRoomDescToAlias
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -57,7 +58,7 @@ data World = World { _worldMap :: WorldMap
                    , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
                    , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
                    , _itemStats :: [ItemStats]
-                   , _mobsDiscovered :: Map (ObjRef Mob Nominative) (Map LocationId Int)
+                   , _mobsDiscovered :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
                    , _mobStats :: [Mob]
                    , _questActions :: Map (LocationId, LocationId) [Event]
                    }
@@ -130,11 +131,8 @@ binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.fi
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
 
-extractItems :: Monad m => Pipe ServerEvent [ObjRef Item Nominative] m ()
-extractItems = PP.filter isLocationEvent >-> PP.map _objects
-
-extractMobs :: Monad m => Pipe ServerEvent [ObjRef Mob Nominative] m ()
-extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs _) -> mobs)
+extractObjects :: Monad m => (ServerEvent -> [ObjRef a Nominative]) -> Pipe ServerEvent [ObjRef a Nominative] m ()
+extractObjects getter = PP.filter isLocationEvent >-> PP.map getter
 
 extractDiscovered :: (Monad m, Ord a) => (ServerEvent -> [a]) -> Producer ServerEvent m () -> m (Map a (Map LocationId Int))
 extractDiscovered entityExtractor producer = PP.fold toMap M.empty identity (producer >-> PP.filter isLocationEvent)
@@ -215,21 +213,21 @@ mobNominatives = nubList <$> loadMobs
         toPair (FightPromptEvent _ target) = target
         loadMobs = PP.toListM $ PP.map toPair <-< PP.filter isFightPrompt <-< serverLogEventsProducer
 
-mobRoomDescs :: IO [ObjRef Mob Nominative]
+mobRoomDescs :: IO [ObjRef Mob InRoomDesc]
 mobRoomDescs = nubList <$> loadMobRoomDescs
   where loadMobRoomDescs = PP.toListM $ PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer
 
 type NominativeWords =  [Text]
 
-mobRoomDescToNominative :: IO (Map (ObjRef Mob Nominative) Text)
-mobRoomDescToNominative = toMap <$> mobNominativesWords <*> mobRoomDescs
+mobRoomDescToAlias :: IO (Map (ObjRef Mob InRoomDesc) Text)
+mobRoomDescToAlias = toMap <$> mobNominativesWords <*> mobRoomDescs
   where mobNominativesWords :: IO [NominativeWords]
         mobNominativesWords = (fmap . fmap) (T.words . unObjRef) mobNominatives
-        toNominative :: [NominativeWords] -> ObjRef Mob Nominative -> Maybe (ObjRef Mob Nominative, Text)
+        toNominative :: [NominativeWords] -> ObjRef Mob InRoomDesc -> Maybe (ObjRef Mob InRoomDesc, Text)
         toNominative noms mobDesc = (\alias -> (mobDesc, alias)) <$> findMobAlias noms mobDesc
         toMap noms roomDescs = M.fromList $ catMaybes $ toNominative noms <$> roomDescs
 
-findMobAlias :: [NominativeWords] -> ObjRef Mob Nominative -> Maybe Text
+findMobAlias :: [NominativeWords] -> ObjRef Mob InRoomDesc -> Maybe Text
 findMobAlias mobNominativesWords roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
   where roomDescWords = T.words . unRoomDesc $ roomDesc
         unRoomDesc (ObjRef text) = T.toLower text
