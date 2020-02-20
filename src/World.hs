@@ -61,7 +61,7 @@ data World = World { _worldMap :: WorldMap
                    , _mobsDiscovered :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
                    , _mobStats :: [Mob]
                    , _questActions :: Map (LocationId, LocationId) [Event]
-                   , _knownMobs :: Map MobRoomDesc (ObjCases Mob)
+                   , _roomDescToMob :: Map MobRoomDesc (ObjCases Mob)
                    }
 
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -246,7 +246,7 @@ loadWorld currentDir customMobProperties = do
   mobsOnMap <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- obstaclesOnMap
-  knownMobs <- mobRoomDescToAlias
+  roomDescToMob <- mobRoomDescToAlias
   let worldMap = buildMap locations directions
    in return World { _worldMap = worldMap
                    , _locations = locations
@@ -257,7 +257,7 @@ loadWorld currentDir customMobProperties = do
                    , _mobsDiscovered = mobsOnMap
                    , _mobStats = []
                    , _questActions = questActions
-                   , _knownMobs = M.union customMobProperties knownMobs
+                   , _roomDescToMob = M.unionWith M.union customMobProperties roomDescToMob
                    }
 
 printWorldStats :: World -> Producer Event IO ()

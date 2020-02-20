@@ -158,7 +158,7 @@ killEmAll world = (forever lootAll) >-> awaitTargets
         watch = await >>= \case PulseEvent -> yield (SendToServer "смотреть") >> awaitTargets
                                 evt -> yield evt >> watch
         findAlias :: MobRoomDesc -> Maybe Text
-        findAlias mobRef = M.lookup Alias =<< M.lookup mobRef (_knownMobs world)
+        findAlias mobRef = M.lookup Alias =<< M.lookup mobRef (_roomDescToMob world)
         chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe Text
         chooseTarget targets = join . find isJust . fmap findAlias $ targets
 

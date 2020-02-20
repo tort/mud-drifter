@@ -191,8 +191,11 @@ data InventoryItem = Single (ObjRef Item Nominative) ItemState | Multiple (ObjRe
   deriving (Eq, Ord, Generic, Show)
 
 data ObjCase = Nominative
-             | Accusative
              | Genitive
+             | Dative
+             | Accusative
+             | Instrumental
+             | Prepositional
              | InRoomDesc
              | Alias
              deriving (Eq, Ord, Show)
