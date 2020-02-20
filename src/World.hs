@@ -61,6 +61,7 @@ data World = World { _worldMap :: WorldMap
                    , _mobsDiscovered :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
                    , _mobStats :: [Mob]
                    , _questActions :: Map (LocationId, LocationId) [Event]
+                   , _knownMobs :: Map MobRoomDesc (ObjCases Mob)
                    }
 
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -131,7 +132,7 @@ binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.fi
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
 
-extractObjects :: Monad m => (ServerEvent -> [ObjRef a Nominative]) -> Pipe ServerEvent [ObjRef a Nominative] m ()
+extractObjects :: Monad m => (ServerEvent -> [ObjRef a InRoomDesc]) -> Pipe ServerEvent [ObjRef a InRoomDesc] m ()
 extractObjects getter = PP.filter isLocationEvent >-> PP.map getter
 
 extractDiscovered :: (Monad m, Ord a) => (ServerEvent -> [a]) -> Producer ServerEvent m () -> m (Map a (Map LocationId Int))
@@ -213,29 +214,29 @@ mobNominatives = nubList <$> loadMobs
         toPair (FightPromptEvent _ target) = target
         loadMobs = PP.toListM $ PP.map toPair <-< PP.filter isFightPrompt <-< serverLogEventsProducer
 
-mobRoomDescs :: IO [ObjRef Mob InRoomDesc]
+mobRoomDescs :: IO [MobRoomDesc]
 mobRoomDescs = nubList <$> loadMobRoomDescs
-  where loadMobRoomDescs = PP.toListM $ PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer
+  where loadMobRoomDescs = PP.toListM $ PP.concat <-< extractObjects _mobs <-< serverLogEventsProducer
 
 type NominativeWords =  [Text]
 
-mobRoomDescToAlias :: IO (Map (ObjRef Mob InRoomDesc) Text)
+mobRoomDescToAlias :: IO (Map MobRoomDesc (ObjCases Mob))
 mobRoomDescToAlias = toMap <$> mobNominativesWords <*> mobRoomDescs
   where mobNominativesWords :: IO [NominativeWords]
         mobNominativesWords = (fmap . fmap) (T.words . unObjRef) mobNominatives
-        toNominative :: [NominativeWords] -> ObjRef Mob InRoomDesc -> Maybe (ObjRef Mob InRoomDesc, Text)
-        toNominative noms mobDesc = (\alias -> (mobDesc, alias)) <$> findMobAlias noms mobDesc
-        toMap noms roomDescs = M.fromList $ catMaybes $ toNominative noms <$> roomDescs
+        toNominative :: [NominativeWords] -> MobRoomDesc -> (MobRoomDesc, ObjCases Mob)
+        toNominative noms mobDesc = (\alias -> (mobDesc, alias)) $ findMobAlias noms mobDesc
+        toMap noms roomDescs = M.fromList . fmap (toNominative noms) $ roomDescs
 
-findMobAlias :: [NominativeWords] -> ObjRef Mob InRoomDesc -> Maybe Text
+findMobAlias :: [NominativeWords] -> ObjRef Mob InRoomDesc -> ObjCases Mob
 findMobAlias mobNominativesWords roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
   where roomDescWords = T.words . unRoomDesc $ roomDesc
         unRoomDesc (ObjRef text) = T.toLower text
-        toResult [] = Nothing
-        toResult res = Just . T.intercalate "." . maximum $ res
+        toResult [] = M.empty
+        toResult res = M.singleton Alias . T.intercalate "." . maximum $ res
 
-loadWorld :: FilePath -> IO World
-loadWorld currentDir = do
+loadWorld :: FilePath -> Map MobRoomDesc (ObjCases Mob) -> IO World
+loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
   directions <- extractDirections serverLogEventsProducer
@@ -245,17 +246,19 @@ loadWorld currentDir = do
   mobsOnMap <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- obstaclesOnMap
+  knownMobs <- mobRoomDescToAlias
   let worldMap = buildMap locations directions
    in return World { _worldMap = worldMap
-                     , _locations = locations
-                     , _directions = directions
-                     , _itemsOnMap = itemsOnMap
-                     , _obstaclesOnMap = obstaclesOnMap
-                     , _itemStats = itemsStats
-                     , _mobsDiscovered = mobsOnMap
-                     , _mobStats = []
-                     , _questActions = questActions
-                     }
+                   , _locations = locations
+                   , _directions = directions
+                   , _itemsOnMap = itemsOnMap
+                   , _obstaclesOnMap = obstaclesOnMap
+                   , _itemStats = itemsStats
+                   , _mobsDiscovered = mobsOnMap
+                   , _mobStats = []
+                   , _questActions = questActions
+                   , _knownMobs = M.union customMobProperties knownMobs
+                   }
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats

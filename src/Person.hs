@@ -132,8 +132,8 @@ trackBash = forever awaitBash
         stand = await >>= \case PulseEvent -> yield (SendToServer "встать")
                                 evt -> yield evt >> stand
 
-killEmAll :: MonadIO m => Map MobRoomDesc (ObjCases Mob) -> Pipe Event Event m ServerEvent
-killEmAll knownMobs = (forever lootAll) >-> awaitTargets
+killEmAll :: MonadIO m => World -> Pipe Event Event m ServerEvent
+killEmAll world = (forever lootAll) >-> awaitTargets
   where lootAll = await >>= \case evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
                                                                       yield (SendToServer "взять все труп")
                                                                       yield (SendToServer "брос труп")
@@ -157,14 +157,12 @@ killEmAll knownMobs = (forever lootAll) >-> awaitTargets
                                         evt -> yield evt >> awaitFightEnd
         watch = await >>= \case PulseEvent -> yield (SendToServer "смотреть") >> awaitTargets
                                 evt -> yield evt >> watch
-        findAlias :: ObjRef Mob InRoomDesc -> Maybe (Text)
-        findAlias mobRef = M.lookup Alias =<< M.lookup mobRef knownMobs
+        findAlias :: MobRoomDesc -> Maybe Text
+        findAlias mobRef = M.lookup Alias =<< M.lookup mobRef (_knownMobs world)
         chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe Text
         chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
-type Target = ObjRef Mob InRoomDesc
-
-travelToMob :: MonadIO m => World -> Target -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelToMob world mob = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)
         mobArea = M.lookup mob . _mobsDiscovered $ world
@@ -175,9 +173,7 @@ travelToMob world mob = pipe $ mobArea
         pipe Nothing = lift $ throwError "no habitation found"
         loc = showt . L.head . M.keys . fromJust $ mobArea
 
-type MobRoomDesc = ObjRef Mob InRoomDesc
-
-travelAndKill :: MonadIO m => World -> Map Target Text -> Target -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelAndKill :: MonadIO m => World -> Map MobRoomDesc Text -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelAndKill world targets mob = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)
         mobArea = M.lookup mob . _mobsDiscovered $ world
@@ -217,5 +213,5 @@ supplyTask = init
 
 runZone :: MonadIO m => World -> Map MobRoomDesc (ObjCases Mob) -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
-  cover world >-> supplyTask >-> killEmAll allKillableMobs >-> travel path locEvt world
+  cover world >-> supplyTask >-> killEmAll world >-> travel path locEvt world
   where path = zonePath world startFrom

@@ -28,6 +28,7 @@ module Event ( Event(..)
              , ObjRef(..)
              , ObjCase(..)
              , ObjCases(..)
+             , MobRoomDesc(..)
              , ShowVal(..)
              , Result(..)
              , isServerEvent
@@ -200,6 +201,8 @@ newtype ObjRef a (b :: ObjCase) = ObjRef { unObjRef :: Text }
   deriving (Eq, Ord, Generic, Show)
 
 type ObjCases a = Map ObjCase Text
+
+type MobRoomDesc = ObjRef Mob InRoomDesc
 
 instance TextShow (ObjRef a b) where
   showt = unObjRef
