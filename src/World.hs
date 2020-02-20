@@ -221,19 +221,20 @@ mobRoomDescs = nubList <$> loadMobRoomDescs
 type NominativeWords =  [Text]
 
 mobRoomDescToAlias :: IO (Map MobRoomDesc (ObjCases Mob))
-mobRoomDescToAlias = toMap <$> mobNominativesWords <*> mobRoomDescs
-  where mobNominativesWords :: IO [NominativeWords]
-        mobNominativesWords = (fmap . fmap) (T.words . unObjRef) mobNominatives
-        toNominative :: [NominativeWords] -> MobRoomDesc -> (MobRoomDesc, ObjCases Mob)
-        toNominative noms mobDesc = (\alias -> (mobDesc, alias)) $ findMobAlias noms mobDesc
-        toMap noms roomDescs = M.fromList . fmap (toNominative noms) $ roomDescs
+mobRoomDescToAlias = toMap <$> mobNominatives <*> mobRoomDescs
+  where toAlias :: [ObjRef Mob Nominative] -> MobRoomDesc -> (MobRoomDesc, ObjCases Mob)
+        toAlias noms mobDesc = (\alias -> (mobDesc, alias)) $ findMobAlias noms mobDesc
+        toMap noms roomDescs = M.fromList . fmap (toAlias noms) $ roomDescs
 
-findMobAlias :: [NominativeWords] -> ObjRef Mob InRoomDesc -> ObjCases Mob
-findMobAlias mobNominativesWords roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
+findMobAlias :: [ObjRef Mob Nominative] -> ObjRef Mob InRoomDesc -> ObjCases Mob
+findMobAlias mobNominatives roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
   where roomDescWords = T.words . unRoomDesc $ roomDesc
         unRoomDesc (ObjRef text) = T.toLower text
         toResult [] = M.empty
         toResult res = M.singleton Alias . T.intercalate "." . maximum $ res
+        mobNominativesWords :: [NominativeWords]
+        mobNominativesWords = fmap (T.words . unObjRef) mobNominatives
+
 
 loadWorld :: FilePath -> Map MobRoomDesc (ObjCases Mob) -> IO World
 loadWorld currentDir customMobProperties = do
