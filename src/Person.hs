@@ -131,7 +131,7 @@ trackBash = forever awaitBash
         stand = await >>= \case PulseEvent -> yield (SendToServer "встать")
                                 evt -> yield evt >> stand
 
-killEmAll :: MonadIO m => Map MobRoomDesc Text -> Pipe Event Event m ServerEvent
+killEmAll :: MonadIO m => Map Target Text -> Pipe Event Event m ServerEvent
 killEmAll targets = (forever lootAll) >-> awaitTargets
   where lootAll = await >>= \case evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
                                                                       yield (SendToServer "взять все труп")
@@ -158,7 +158,7 @@ killEmAll targets = (forever lootAll) >-> awaitTargets
                                 evt -> yield evt >> watch
         target = join . find isJust . fmap (flip M.lookup targets)
 
-travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelToMob :: MonadIO m => World -> Target -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelToMob world mob = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)
         mobArea = M.lookup mob . _mobsDiscovered $ world
@@ -169,7 +169,9 @@ travelToMob world mob = pipe $ mobArea
         pipe Nothing = lift $ throwError "no habitation found"
         loc = showt . L.head . M.keys . fromJust $ mobArea
 
-travelAndKill :: MonadIO m => World -> Map MobRoomDesc Text -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
+type Target = ObjRef Mob Nominative
+
+travelAndKill :: MonadIO m => World -> Map Target Text -> Target -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelAndKill world targets mob = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)
         mobArea = M.lookup mob . _mobsDiscovered $ world
@@ -207,7 +209,7 @@ supplyTask = init
                                                   PulseEvent -> awaitFullHp maxHp maxMv
                                                   evt -> yield evt >> awaitFullHp maxHp maxMv
 
-runZone :: MonadIO m => World -> Map MobRoomDesc Text -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
+runZone :: MonadIO m => World -> Map Target Text -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
   cover world >-> supplyTask >-> killEmAll allKillableMobs >-> travel path locEvt world
   where path = zonePath world startFrom

@@ -43,34 +43,34 @@ spec = describe "Parser" $ do
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- C8.readFile "test/logs/locationMessage.log"
                                  log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5032) (LocationTitle "В светлой комнате")
-                                                                                       , _objects = [ ItemRoomDesc "Ваш походный сундучок стоит здесь." ]
-                                                                                       , _mobs = [ MobRoomDesc "Дочка старейшины стоит здесь."
-                                                                                                 , MobRoomDesc "Дородная женщина стоит здесь." ]
+                                                                                       , _objects = [ ObjRef "Ваш походный сундучок стоит здесь." ]
+                                                                                       , _mobs = [ ObjRef "Дочка старейшины стоит здесь."
+                                                                                                 , ObjRef "Дородная женщина стоит здесь." ]
                                                                                       , _exits = [OpenExit North]
                                                                                        }
         it "parse location with closed doors" $ do log <- C8.readFile "test/logs/locationWithClosedDoor.log"
                                                    log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5102) (LocationTitle "В сенях")
                                                                                                         , _objects = [ ]
-                                                                                                        , _mobs = [ MobRoomDesc "Клоп ползает здесь." ]
+                                                                                                        , _mobs = [ ObjRef "Клоп ползает здесь." ]
                                                                                                         , _exits = [ClosedExit North,OpenExit East,ClosedExit South]
                                                                                                         }
         it "trims mobs room descriptions" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
                                                log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
-                                                                                                    , _objects = [ ItemRoomDesc "У ваших ног лежит глиняная плошка."
-                                                                                                                 , ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"
+                                                                                                    , _objects = [ ObjRef "У ваших ног лежит глиняная плошка."
+                                                                                                                 , ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"
                                                                                                                  ]
-                                                                                                    , _mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
-                                                                                                              , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
+                                                                                                    , _mobs = [ ObjRef "Полянин Дорман стоит здесь."
+                                                                                                              , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                                                                               ]
                                                                                                     , _exits = [OpenExit Down]
                                                                                                     }
         it "parse location with autoexits" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
                                                 log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
-                                                                                                     , _objects = [ ItemRoomDesc "У ваших ног лежит глиняная плошка."
-                                                                                                                  , ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"
+                                                                                                     , _objects = [ ObjRef "У ваших ног лежит глиняная плошка."
+                                                                                                                  , ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"
                                                                                                                   ]
-                                                                                                     , _mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
-                                                                                                               , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
+                                                                                                     , _mobs = [ ObjRef "Полянин Дорман стоит здесь."
+                                                                                                               , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                                                                                ]
                                                                                                      , _exits = [OpenExit Down]
                                                                                                      }
@@ -84,7 +84,7 @@ spec = describe "Parser" $ do
                                                                                                     }
         it "parse location with ice" $ do log <- C8.readFile "test/logs/locationWithIce.log"
                                           log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5601) (LocationTitle "Мелководье")
-                                                                                               , _objects = [ ItemRoomDesc "Лужица ржаного кваса разлита у ваших ног." ]
+                                                                                               , _objects = [ ObjRef "Лужица ржаного кваса разлита у ваших ног." ]
                                                                                                , _mobs = []
                                                                                                , _exits = [OpenExit North, OpenExit South]
                                                                                                }
@@ -125,28 +125,28 @@ spec = describe "Parser" $ do
                                                      serverEventList `shouldBe` [ MoveEvent "восток"
                                                                                 , LocationEvent { _location = (Location (LocationId 5112) (LocationTitle "На кухне"))
                                                                                                 , _objects = []
-                                                                                                , _mobs = [ MobRoomDesc "(летит) Комар жужжит здесь."
-                                                                                                         , MobRoomDesc "Таракан быстро пробежал здесь."
-                                                                                                         , MobRoomDesc "Блоха прячется в мусоре."
-                                                                                                         , MobRoomDesc "(летит) Моль летает здесь."
+                                                                                                , _mobs = [ ObjRef "(летит) Комар жужжит здесь."
+                                                                                                         , ObjRef "Таракан быстро пробежал здесь."
+                                                                                                         , ObjRef "Блоха прячется в мусоре."
+                                                                                                         , ObjRef "(летит) Моль летает здесь."
                                                                                                          ]
                                                                                                 , _exits = [OpenExit North,OpenExit West,OpenExit Down]
                                                                                                 }
                                                                                 ]
         it "parse equipment list" $ do log <- C8.readFile "test/logs/listEquipment2.log"
-                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body (Nominative "легкий латный доспех"), Excellent)
-                                                                                                  , (EquippedItem Head (Nominative "легкий латный шлем"), Excellent)
-                                                                                                  , (EquippedItem Legs (Nominative "легкие латные поножи"), Excellent)
-                                                                                                  , (EquippedItem Waist (Nominative "холщовый мешок"), Excellent)
-                                                                                                  , (EquippedItem Wield (Nominative "длинный бронзовый меч"), VeryGood)
-                                                                                                  , (EquippedItem Hold (Nominative "бронзовый топорик"), VeryGood)
+                                       log ~> serverInputParser `shouldParse` (ListEquipmentEvent [ (EquippedItem Body (ObjRef "легкий латный доспех"), Excellent)
+                                                                                                  , (EquippedItem Head (ObjRef "легкий латный шлем"), Excellent)
+                                                                                                  , (EquippedItem Legs (ObjRef "легкие латные поножи"), Excellent)
+                                                                                                  , (EquippedItem Waist (ObjRef "холщовый мешок"), Excellent)
+                                                                                                  , (EquippedItem Wield (ObjRef "длинный бронзовый меч"), VeryGood)
+                                                                                                  , (EquippedItem Hold (ObjRef "бронзовый топорик"), VeryGood)
                                                                                                   ])
         it "parse empty equipment list" $ do log <- C8.readFile "test/logs/listEquipmentEmpty.log"
                                              log ~> serverInputParser `shouldParse` (ListEquipmentEvent [])
         it "parse inventory" $ do log <- C8.readFile "test/logs/inventory.log"
-                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ (Nominative "холщовый мешок", Excellent)
-                                                                                             , (Nominative "бронзовый топорик", VeryGood)
-                                                                                             , (Nominative "длинный бронзовый меч", VeryGood)
+                                  log ~> serverInputParser `shouldParse` (ListInventoryEvent [ (ObjRef "холщовый мешок", Excellent)
+                                                                                             , (ObjRef "бронзовый топорик", VeryGood)
+                                                                                             , (ObjRef "длинный бронзовый меч", VeryGood)
                                                                                              ])
         it "parse cr after unknown server event" $ do let log = "test/logs/mobPortal.log"
                                                       serverEventList <- toListM $ parseServerEvents (loadServerEvents log)
@@ -155,18 +155,18 @@ spec = describe "Parser" $ do
         it "parse empty inventory" $ do log <- C8.readFile "test/logs/inventoryEmpty.log"
                                         log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
         it "parse weapon stats in shop" $ do log <- C8.readFile "test/logs/statsWeapon.log"
-                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (Nominative "длинный бронзовый меч") LongBlade [Wield, Hold, DualWield] 3.5)
+                                             log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ObjRef "длинный бронзовый меч") LongBlade [Wield, Hold, DualWield] 3.5)
         it "parse armor stats in shop" $ do log <- C8.readFile "test/logs/statsArmor.log"
-                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor (Nominative "легкий латный доспех") [Body] 3 4)
+                                            log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Armor (ObjRef "легкий латный доспех") [Body] 3 4)
         it "parse weapon stats" $ do log <- C8.readFile "test/logs/statsWeaponScroll.log"
-                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (Nominative "бронзовый топорик") Axe [Wield, Hold] 3.5)
+                                     log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ObjRef "бронзовый топорик") Axe [Wield, Hold] 3.5)
         it "parse shop items" $ do let log = "test/logs/shopList.log"
                                    serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter isShopListItemEvent
                                    length serverEventList `shouldBe` 43
         it "parse examine container event" $ do log <- C8.readFile "test/logs/examineContainer.log"
                                                 log ~> serverInputParser `shouldParse` ExamineContainer { _name = "холщовый мешок"
-                                                                                                        , _items = [ Single (Nominative "рыбья кость") Excellent
-                                                                                                                   , Multiple (Nominative "ломоть хлеба") 11
+                                                                                                        , _items = [ Single (ObjRef "рыбья кость") Excellent
+                                                                                                                   , Multiple (ObjRef "ломоть хлеба") 11
                                                                                                                    ]
                                                                                                         }
         it "parse shop list with prompt" $ do let log = "test/logs/shopListWithPrompt.log"
@@ -183,9 +183,9 @@ spec = describe "Parser" $ do
                                      serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
                                      (length $ filter isFightPromptEvent serverEventList) `shouldBe` 3
         it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
-                                                  objects = [ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!"]
-                                                  mobs = [ MobRoomDesc "Полянин Дорман стоит здесь."
-                                                         , MobRoomDesc "Хозяйка постоялого двора распоряжается здесь."
+                                                  objects = [ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"]
+                                                  mobs = [ ObjRef "Полянин Дорман стоит здесь."
+                                                         , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                          ]
                                                   exits = [OpenExit Down]
                                                in do log <- C8.readFile "test/logs/schoolEntrance.log"
@@ -193,11 +193,11 @@ spec = describe "Parser" $ do
         it "parse school entrance location misspelled" $ do
           log <- C8.readFile "test/logs/rentLocation.log"
           log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 4056) (LocationTitle "Гостиный двор")
-                                                               , _objects = [ ItemRoomDesc "Доска для различных заметок и объявлений прибита тут ..блестит!" ]
-                                                               , _mobs = [ MobRoomDesc "Велянка Ванесса летает здесь."
-                                                                         , MobRoomDesc "Шум и блеск экипировки выдает чье-то присутствие."
-                                                                         , MobRoomDesc "С орлиным клювом пересмешник Пересмех (пономарь Тайных знаний) летает здесь."
-                                                                         , MobRoomDesc "Хозяин постоялого двора с интересом рассматривает Вас."
+                                                               , _objects = [ ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!" ]
+                                                               , _mobs = [ ObjRef "Велянка Ванесса летает здесь."
+                                                                         , ObjRef "Шум и блеск экипировки выдает чье-то присутствие."
+                                                                         , ObjRef "С орлиным клювом пересмешник Пересмех (пономарь Тайных знаний) летает здесь."
+                                                                         , ObjRef "Хозяин постоялого двора с интересом рассматривает Вас."
                                                                          ]
                                                                , _exits = [ OpenExit East ]
                                                                }
@@ -210,37 +210,34 @@ spec = describe "Parser" $ do
         it "parse zone border exits" $ do log <- C8.readFile "test/logs/zoneBorderExit.log"
                                           log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5023) (LocationTitle "Заброшенный дом")
                                                                                                , _objects = []
-                                                                                               , _mobs = [ MobRoomDesc "Местная жительница идет по своим делам."
-                                                                                                         , MobRoomDesc "Местный житель идет здесь."
+                                                                                               , _mobs = [ ObjRef "Местная жительница идет по своим делам."
+                                                                                                         , ObjRef "Местный житель идет здесь."
                                                                                                          ]
                                                                                                , _exits = [OpenExit East, OpenExit West]
                                                                                                }
         it "parses my stats" $ do log <- C8.readFile "test/logs/myStats.log"
                                   log ~> serverInputParser `shouldParse` (MyStats 223 112)
         it "parses loot message" $ do log <- C8.readFile "test/logs/loot.log"
-                                      log ~> serverInputParser `shouldParse` (LootItem (Accusative "грабли") (Genitive "огородника"))
+                                      log ~> serverInputParser `shouldParse` (LootItem (ObjRef "грабли") (ObjRef "огородника"))
         it "parses one coin loot" $ do log <- C8.readFile "test/logs/oneCoinLoot.log"
-                                       log ~> serverInputParser `shouldParse` LootMoney (Genitive "чибиса")
+                                       log ~> serverInputParser `shouldParse` LootMoney (ObjRef "чибиса")
         it "parses one pile of coins loot" $ do log <- C8.readFile "test/logs/pileOfCoinsLoot.log"
-                                                log ~> serverInputParser `shouldParse` LootMoney (Genitive "огородника")
+                                                log ~> serverInputParser `shouldParse` LootMoney (ObjRef "огородника")
         it "parses i'm bashed" $ do log <- C8.readFile "test/logs/imBashed.log"
                                     log ~> serverInputParser `shouldParse` ImBashedEvent
         it "parses i'm bashed with colors drop" $ do log <- C8.readFile "test/logs/imBashed.2.log"
                                                      log ~> serverInputParser `shouldParse` ImBashedEvent
         it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
                                             log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
-                                              where objects = [ ItemRoomDesc "Лужица дождевой воды разлита у ваших ног." ]
+                                              where objects = [ ObjRef "Лужица дождевой воды разлита у ваших ног." ]
                                                     location = Location (LocationId 5026) (LocationTitle "Лесная улица")
-                                                    mobs = [MobRoomDesc "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."]
+                                                    mobs = [ObjRef "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."]
                                                     exits = [OpenExit North,OpenExit South]
 
 instance TextShow ServerEvent where
-  showt (LocationEvent loc items mobs _) = renderTitle <> "\n  Items: " <> renderItems <> "\n  Mobs: " <> renderMobs
+  showt (LocationEvent loc items mobs _) = renderTitle <> "\n  Items: " <> (renderObjs items) <> "\n  Mobs: " <> (renderObjs mobs)
     where renderTitle = showt loc
-          renderItems = T.intercalate "\n  " $ fmap renderItem items
-          renderItem (ItemRoomDesc text) = text
-          renderMobs = T.intercalate "\n  " $ fmap renderMob mobs
-          renderMob (MobRoomDesc text) = text
+          renderObjs = T.intercalate "\n  " . fmap unObjRef
   showt _ = ""
 
 moveOrLocation :: ServerEvent -> Bool

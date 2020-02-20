@@ -20,11 +20,11 @@ module Event ( Event(..)
              , ItemStats(..)
              , InventoryItem(..)
              , Mob(..)
+             , Item(..)
              , WeaponClass(..)
              , RoomDir(..)
              , RoomExit(..)
-             , MobRoomDesc(..)
-             , ItemRoomDesc(..)
+             , ObjRef(..)
              , Accusative(..)
              , Nominative(..)
              , Genitive(..)
@@ -101,14 +101,13 @@ instance Binary ItemState
 instance Binary ItemStats
 instance Binary WeaponClass
 instance Binary RoomDir
-instance Binary ItemRoomDesc
-instance Binary MobRoomDesc
 instance Binary RoomExit
-instance Binary (Accusative Item)
-instance Binary (Nominative Item)
-instance Binary (Genitive Mob)
-instance Binary (Genitive Item)
-instance Binary (Nominative Mob)
+instance Binary (ObjRef Item Nominative)
+instance Binary (ObjRef Item Accusative)
+instance Binary (ObjRef Item Genitive)
+instance Binary (ObjRef Mob Nominative)
+instance Binary (ObjRef Mob Accusative)
+instance Binary (ObjRef Mob Genitive)
 instance Binary InventoryItem
 
 data Event = ConsoleInput Text
@@ -131,29 +130,29 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [ItemRoomDesc], _mobs :: [MobRoomDesc], _exits :: [RoomExit] }
+                 | LocationEvent { _location :: Location, _objects :: [ObjRef Item Nominative], _mobs :: [ObjRef Mob Nominative], _exits :: [RoomExit] }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
                  | ListEquipmentEvent [(EquippedItem, ItemState)]
-                 | ListInventoryEvent [(Nominative Item, ItemState)]
+                 | ListInventoryEvent [(ObjRef Item Nominative, ItemState)]
                  | ItemStatsEvent ItemStats
-                 | ShopListItemEvent (Nominative Item) Price
+                 | ShopListItemEvent (ObjRef Item Nominative) Price
                  | PromptEvent Int Int
-                 | FightPromptEvent (Nominative Mob) (Nominative Mob)
+                 | FightPromptEvent (ObjRef Mob Nominative) (ObjRef Mob Nominative)
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
-                 | GlanceEvent RoomDir LocationTitle [MobRoomDesc]
-                 | PickItemEvent (Accusative Item)
-                 | ItemInTheRoom ItemRoomDesc
-                 | LootItem (Accusative Item) (Genitive Mob)
-                 | LootMoney (Genitive Mob)
-                 | TakeFromContainer (Accusative Item) (Genitive Item)
-                 | TakeInRightHand (Accusative Item)
-                 | TakeInLeftHand (Accusative Item)
-                 | TakeInBothHands (Accusative Item)
-                 | MobGaveYouItem (Nominative Mob) (Accusative Item)
+                 | GlanceEvent RoomDir LocationTitle [ObjRef Mob Nominative]
+                 | PickItemEvent (ObjRef Item Accusative)
+                 | ItemInTheRoom (ObjRef Item Nominative)
+                 | LootItem (ObjRef Item Accusative) (ObjRef Mob Genitive)
+                 | LootMoney (ObjRef Mob Genitive)
+                 | TakeFromContainer (ObjRef Item Accusative) (ObjRef Item Genitive)
+                 | TakeInRightHand (ObjRef Item Accusative)
+                 | TakeInLeftHand (ObjRef Item Accusative)
+                 | TakeInBothHands (ObjRef Item Accusative)
+                 | MobGaveYouItem (ObjRef Mob Nominative) (ObjRef Item Accusative)
                  | Drink Text Text
                  | Eat Text
                  | DrinkFromAbsentObject
@@ -170,11 +169,11 @@ data ServerEvent = CodepagePrompt
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders
   deriving (Eq, Generic, Ord, Show)
-data EquippedItem = EquippedItem Slot (Nominative Item)
+data EquippedItem = EquippedItem Slot (ObjRef Item Nominative)
   deriving (Eq, Generic, Ord, Show)
 data ItemState = Excellent | VeryGood | Good | Bad
   deriving (Eq, Generic, Ord, Show)
-data ItemStats = Weapon (Nominative Item) WeaponClass [Slot] AvgDamage | Armor (Nominative Item) [Slot] AC ArmorVal
+data ItemStats = Weapon (ObjRef Item Nominative) WeaponClass [Slot] AvgDamage | Armor (ObjRef Item Nominative) [Slot] AC ArmorVal
   deriving (Eq, Generic, Ord, Show)
 type AvgDamage = Double
 data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other
@@ -182,16 +181,15 @@ data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual |
 type AC = Int
 type ArmorVal = Int
 type Price = Int
-data MobStats = EmptyMobStats deriving (Eq, Generic)
 
-data InventoryItem = Single (Nominative Item) ItemState | Multiple (Nominative Item) Int
+data InventoryItem = Single (ObjRef Item Nominative) ItemState | Multiple (ObjRef Item Nominative) Int
   deriving (Eq, Ord, Generic, Show)
 
-newtype MobRoomDesc = MobRoomDesc { _text :: Text }
+newtype ObjRef a b = ObjRef { unObjRef :: Text }
   deriving (Eq, Ord, Generic, Show)
 
-instance TextShow MobRoomDesc where
-  showt (MobRoomDesc text) = text
+instance TextShow (ObjRef a b) where
+  showt = unObjRef
 
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
 data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)
@@ -199,33 +197,19 @@ data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord
 data Mob
 data Item
 
-newtype Nominative a = Nominative Text
-  deriving (Eq, Ord, Generic, Show)
-newtype MobAlias = MobAlias Text deriving (Eq)
-newtype Genitive a = Genitive Text
-  deriving (Eq, Ord, Generic, Show)
-data MobData = MobData { _roomDesc :: MobRoomDesc
-                       , _name :: (Nominative Mob)
-                       , _handleAlias :: MobAlias
-                       , _stats :: Maybe MobStats
-                       }
+data Nominative
+data Accusative
+data Genitive
 
-newtype ItemRoomDesc = ItemRoomDesc { _text :: Text }
-  deriving (Eq, Ord, Generic, Show)
-newtype Accusative a = Accusative Text
-  deriving (Eq, Generic, Ord, Show)
-newtype ItemAlias = ItemAlias Text deriving (Eq)
-data ItemData = ItemData { _roomDesc :: ItemRoomDesc
-                         , _nominative :: (Nominative Item)
-                         , _accusative :: (Accusative Item)
-                         , _alias :: ItemAlias
-                         , _stats :: ItemStats
-                         }
+newtype ObjAlias a = ObjAlias Text deriving (Eq)
 
-makeFieldsNoPrefix ''ItemData
+data ObjCases a = ObjCases { _nominative :: ObjRef a Nominative
+                           , _accusative :: ObjRef a Accusative
+                           , _genitive :: ObjRef a Genitive
+                           , _alias :: ObjAlias a
+                           }
 
-instance Eq MobData where
-  left == right = left^.roomDesc == right^.roomDesc
+data MobStats = MobStats { _nominative :: Text } deriving (Eq)
 
 class ShowVal a where
   showVal :: a -> Text
@@ -235,21 +219,6 @@ instance ShowVal LocationId where
 
 instance ShowVal LocationTitle where
   showVal (LocationTitle text) = text
-
-instance ShowVal ItemRoomDesc where
-  showVal (ItemRoomDesc text) = text
-
-instance ShowVal MobRoomDesc where
-  showVal (MobRoomDesc text) = text
-
-instance ShowVal (Nominative a) where
-  showVal (Nominative text) = text
-
-instance ShowVal (Accusative a) where
-  showVal (Accusative text) = text
-
-instance ShowVal (Genitive a) where
-  showVal (Genitive text) = text
 
 derive makeIs ''Location
 derive makeIs ''LocationId
@@ -274,4 +243,3 @@ makeFieldsNoPrefix ''WeaponClass
 makeFieldsNoPrefix ''RoomDir
 makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
-makeFieldsNoPrefix ''MobData

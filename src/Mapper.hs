@@ -58,20 +58,20 @@ printItems subName world = (render . filterEvents) (_itemsOnMap world)
         renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
         showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
         filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
-        filterEvent (ItemInTheRoom (ItemRoomDesc text)) = T.isInfixOf subName (T.toLower text)
-        filterEvent (LootItem (Accusative item) (Genitive mob)) = T.isInfixOf subName (T.toLower item)
-        filterEvent (TakeFromContainer (Accusative item) (Genitive container)) = T.isInfixOf subName (T.toLower item)
-        filterEvent (MobGaveYouItem (Nominative mob) (Accusative item)) = T.isInfixOf subName (T.toLower item)
-        renderEvent (ItemInTheRoom (ItemRoomDesc text)) = text
-        renderEvent (LootItem (Accusative item) (Genitive mob)) = "Вы взяли " <> item <> " из трупа " <> mob
-        renderEvent (TakeFromContainer (Accusative item) (Genitive container)) = "Вы взяли " <> item <> " из " <> container
-        renderEvent (MobGaveYouItem (Nominative mob) (Accusative item)) = mob <> " дал вам " <> item
+        filterEvent (ItemInTheRoom (ObjRef text)) = T.isInfixOf subName (T.toLower text)
+        filterEvent (LootItem (ObjRef item) (ObjRef mob)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (TakeFromContainer (ObjRef item) (ObjRef container)) = T.isInfixOf subName (T.toLower item)
+        filterEvent (MobGaveYouItem (ObjRef mob) (ObjRef item)) = T.isInfixOf subName (T.toLower item)
+        renderEvent (ItemInTheRoom (ObjRef text)) = text
+        renderEvent (LootItem (ObjRef item) (ObjRef mob)) = "Вы взяли " <> item <> " из трупа " <> mob
+        renderEvent (TakeFromContainer (ObjRef item) (ObjRef container)) = "Вы взяли " <> item <> " из " <> container
+        renderEvent (MobGaveYouItem (ObjRef mob) (ObjRef item)) = mob <> " дал вам " <> item
 
 printLocations :: Text -> World -> IO ()
 printLocations substr world = mapM_ printT $ locationsBy substr world
 
 printMobsByRegex :: World -> Text -> IO ()
-printMobsByRegex world regex = mapM_ printT $ L.filter (\(MobRoomDesc t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _mobsDiscovered world
+printMobsByRegex world regex = mapM_ printT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _mobsDiscovered world
 
 findLocationsBy :: Text -> World -> [LocationId]
 findLocationsBy substr world = _locationId <$> locationsBy substr world

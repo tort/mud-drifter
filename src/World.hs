@@ -57,7 +57,7 @@ data World = World { _worldMap :: WorldMap
                    , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
                    , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
                    , _itemStats :: [ItemStats]
-                   , _mobsDiscovered :: Map MobRoomDesc (Map LocationId Int)
+                   , _mobsDiscovered :: Map (ObjRef Mob Nominative) (Map LocationId Int)
                    , _mobStats :: [Mob]
                    , _questActions :: Map (LocationId, LocationId) [Event]
                    }
@@ -130,10 +130,10 @@ binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.fi
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
 
-extractItems :: Monad m => Pipe ServerEvent [ItemRoomDesc] m ()
-extractItems = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ objects _ _) -> objects)
+extractItems :: Monad m => Pipe ServerEvent [ObjRef Item Nominative] m ()
+extractItems = PP.filter isLocationEvent >-> PP.map _objects
 
-extractMobs :: Monad m => Pipe ServerEvent [MobRoomDesc] m ()
+extractMobs :: Monad m => Pipe ServerEvent [ObjRef Mob Nominative] m ()
 extractMobs = PP.filter isLocationEvent >-> PP.map (\(LocationEvent _ _ mobs _) -> mobs)
 
 extractDiscovered :: (Monad m, Ord a) => (ServerEvent -> [a]) -> Producer ServerEvent m () -> m (Map a (Map LocationId Int))
@@ -208,32 +208,31 @@ obstaclesOnMap = fmap M.fromList $ PP.toListM $ PP.map toMapItems <-< PP.filter 
 nubList :: Ord a => [a] -> [a]
 nubList = S.elems . S.fromList
 
-mobNominatives :: IO [Nominative Mob]
+mobNominatives :: IO [ObjRef Mob Nominative]
 mobNominatives = nubList <$> loadMobs
   where isFightPrompt FightPromptEvent{} = True
         isFightPrompt _ = False
         toPair (FightPromptEvent _ target) = target
         loadMobs = PP.toListM $ PP.map toPair <-< PP.filter isFightPrompt <-< serverLogEventsProducer
 
-mobRoomDescs :: IO [MobRoomDesc]
+mobRoomDescs :: IO [ObjRef Mob Nominative]
 mobRoomDescs = nubList <$> loadMobRoomDescs
   where loadMobRoomDescs = PP.toListM $ PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer
 
 type NominativeWords =  [Text]
 
-mobRoomDescToNominative :: IO (Map MobRoomDesc Text)
+mobRoomDescToNominative :: IO (Map (ObjRef Mob Nominative) Text)
 mobRoomDescToNominative = toMap <$> mobNominativesWords <*> mobRoomDescs
   where mobNominativesWords :: IO [NominativeWords]
-        mobNominativesWords = (fmap . fmap) (T.words . unNominative) mobNominatives
-        unNominative (Nominative text) = text
-        toNominative :: [NominativeWords] -> MobRoomDesc -> Maybe (MobRoomDesc, Text)
+        mobNominativesWords = (fmap . fmap) (T.words . unObjRef) mobNominatives
+        toNominative :: [NominativeWords] -> ObjRef Mob Nominative -> Maybe (ObjRef Mob Nominative, Text)
         toNominative noms mobDesc = (\alias -> (mobDesc, alias)) <$> findMobAlias noms mobDesc
         toMap noms roomDescs = M.fromList $ catMaybes $ toNominative noms <$> roomDescs
 
-findMobAlias :: [NominativeWords] -> MobRoomDesc -> Maybe Text
+findMobAlias :: [NominativeWords] -> ObjRef Mob Nominative -> Maybe Text
 findMobAlias mobNominativesWords roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
   where roomDescWords = T.words . unRoomDesc $ roomDesc
-        unRoomDesc (MobRoomDesc text) = T.toLower text
+        unRoomDesc (ObjRef text) = T.toLower text
         toResult [] = Nothing
         toResult res = Just . T.intercalate "." . maximum $ res
 
@@ -351,7 +350,7 @@ payYoungGipsy = move
 setupLadder :: Monad m => Pipe Event Event m ServerEvent
 setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
   where waitLocEvt = await >>= \evt -> yield evt >> checkItemRoomDescs evt
-        checkItemRoomDescs (ServerEvent locEvt@LocationEvent{}) = if elem (ItemRoomDesc "На полу лежит лестница.") (_objects locEvt)
+        checkItemRoomDescs (ServerEvent locEvt@LocationEvent{}) = if elem (ObjRef "На полу лежит лестница.") (_objects locEvt)
                                                                      then yield (SendToServer "приставить лестница") >> return locEvt
                                                                      else return locEvt
         checkItemRoomDescs _ = waitLocEvt
