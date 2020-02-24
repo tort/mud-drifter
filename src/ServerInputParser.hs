@@ -18,6 +18,7 @@ import Data.Attoparsec.ByteString
 import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
+import qualified Data.Foldable as F
 import qualified Data.ByteString.Char8 as C8
 import Event
 
@@ -56,7 +57,71 @@ serverInputParser = codepagePrompt
                     <|> ripMob
                     <|> myStats
                     <|> imBashed
+                    <|> iHitMob
+                    <|> checkNominative
+                    <|> checkGenitive
+                    <|> checkAccusative
+                    <|> checkDative
+                    <|> checkInstrumental
+                    <|> checkPrepositional
                     <|> unknownMessage
+
+checkNominative :: A.Parser ServerEvent
+checkNominative = do cs >> string "1;30m"
+                     string . encodeUtf8 $ "\"Храни тебя Господь, "
+                     mob <- C.takeTill (== '!')
+                     C.char '!'
+                     string . encodeUtf8 $ "\" - перекрестили вы "
+                     C.skipWhile (/= '.')
+                     C.char '.'
+                     clearColors
+                     C.endOfLine
+                     return . CheckNominative . ObjRef . decodeUtf8 $ mob
+
+checkGenitive :: A.Parser ServerEvent
+checkGenitive = do cs >> string "1;30m"
+                   string . encodeUtf8 $ "Вы задумались над дальнейшей судьбой "
+                   mob <- C.takeTill (== '.')
+                   C.char '.'
+                   clearColors
+                   C.endOfLine
+                   return . CheckGenitive . ObjRef . decodeUtf8 $ mob
+
+checkAccusative :: A.Parser ServerEvent
+checkAccusative = do cs >> string "1;30m"
+                     string . encodeUtf8 $ "\"Ужас-то какой!..\" - подумали вы, со страхом глядя на "
+                     mob <- C.takeTill (== '.')
+                     C.char '.'
+                     clearColors
+                     C.endOfLine
+                     return . CheckAccusative . ObjRef . decodeUtf8 $ mob
+
+checkDative :: A.Parser ServerEvent
+checkDative = do cs >> string "1;30m"
+                 string . encodeUtf8 $ "\"За здоровье?\" - то ли спросили, то ли предложили вы "
+                 mob <- C.takeTill (== '.')
+                 C.char '.'
+                 clearColors
+                 C.endOfLine
+                 return . CheckDative . ObjRef . decodeUtf8 $ mob
+
+checkInstrumental :: A.Parser ServerEvent
+checkInstrumental = do cs >> string "1;30m"
+                       string . encodeUtf8 $ "Вы прихвастнули перед "
+                       mob <- C.takeTill (== '.')
+                       C.char '.'
+                       clearColors
+                       C.endOfLine
+                       return . CheckInstrumental . ObjRef . decodeUtf8 $ mob
+
+checkPrepositional :: A.Parser ServerEvent
+checkPrepositional = do cs >> string "1;30m"
+                        string . encodeUtf8 $ "Вы решили сосредоточить внимание на "
+                        mob <- C.takeTill (== '.')
+                        C.char '.'
+                        clearColors
+                        C.endOfLine
+                        return . CheckPrepositional . ObjRef . decodeUtf8 $ mob
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -271,6 +336,34 @@ myStats = do -- header begin
                      nonColoredRightFrame
                      C.endOfLine
                      return mv
+
+iHitMob :: A.Parser ServerEvent
+iHitMob = do many' $ cs >> string "0;0m"
+             cs >> string "1;33m"
+             string . encodeUtf8 $ "Вы"
+             C.space
+             many' dmg
+             F.foldl1 (<|>) . fmap (string . encodeUtf8) $ hitTypes
+             C.space
+             mob <- C.takeTill (== '.')
+             C.char '.'
+             C.endOfLine
+             return . IHitMobEvent . ObjRef . decodeUtf8 $ mob
+               where hitTypes = [ "сокрушили"
+                        , "ударили"
+                        , "рубанули"
+                        , "резанули"
+                        , "пырнули"
+                        , "огрели"
+                        , "сокрушили"
+                        , "укололи"
+                        , "пронзили"
+                        , "хлестнули"
+                        ]
+                     dmg = tiny <|> small <|> strong
+                     tiny = string . encodeUtf8 $ "легонько"
+                     small = string . encodeUtf8 $ "слегка"
+                     strong = string . encodeUtf8 $ "сильно"
 
 imBashed :: A.Parser ServerEvent
 imBashed = do many' clearColors

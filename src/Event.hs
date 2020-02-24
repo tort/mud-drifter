@@ -33,11 +33,18 @@ module Event ( Event(..)
              , Result(..)
              , isServerEvent
              , isMoveEvent
+             , isCheckNominative
+             , isCheckGenitive
+             , isCheckAccusative
+             , isCheckDative
+             , isCheckInstrumental
+             , isCheckPrepositional
              , isConsoleInput
              , isShopListItemEvent
              , isLocationEvent
              , isItemStatsEvent
              , isPromptEvent
+             , isFightPromptEvent
              , location
              , locationId
              , locationTitle
@@ -106,11 +113,17 @@ instance Binary RoomExit
 instance Binary (ObjRef Item Nominative)
 instance Binary (ObjRef Item Accusative)
 instance Binary (ObjRef Item Genitive)
+instance Binary (ObjRef Item Dative)
+instance Binary (ObjRef Item Instrumental)
+instance Binary (ObjRef Item Prepositional)
 instance Binary (ObjRef Item InRoomDesc)
 instance Binary (ObjRef Item Alias)
 instance Binary (ObjRef Mob Nominative)
 instance Binary (ObjRef Mob Accusative)
 instance Binary (ObjRef Mob Genitive)
+instance Binary (ObjRef Mob Dative)
+instance Binary (ObjRef Mob Instrumental)
+instance Binary (ObjRef Mob Prepositional)
 instance Binary (ObjRef Mob InRoomDesc)
 instance Binary (ObjRef Mob Alias)
 instance Binary InventoryItem
@@ -170,6 +183,13 @@ data ServerEvent = CodepagePrompt
                  | ImBashedEvent
                  | MyStats Int Int
                  | ParseError ByteString
+                 | IHitMobEvent (ObjRef Mob Accusative)
+                 | CheckNominative (ObjRef Mob Nominative)
+                 | CheckGenitive (ObjRef Mob Genitive)
+                 | CheckAccusative (ObjRef Mob Accusative)
+                 | CheckDative (ObjRef Mob Dative)
+                 | CheckInstrumental (ObjRef Mob Instrumental)
+                 | CheckPrepositional (ObjRef Mob Prepositional)
                  deriving (Eq, Generic, Ord, Show)
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders
@@ -198,6 +218,7 @@ data ObjCase = Nominative
              | Prepositional
              | InRoomDesc
              | Alias
+             | Target
              deriving (Eq, Ord, Show)
 
 newtype ObjRef a (b :: ObjCase) = ObjRef { unObjRef :: Text }

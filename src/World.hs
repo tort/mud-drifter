@@ -14,7 +14,6 @@ module World ( locsByRegex
              , zoneMap
              , loadServerEvents
              , serverLogEventsProducer
-             , mobRoomDescToAlias
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -61,7 +60,7 @@ data World = World { _worldMap :: WorldMap
                    , _mobsDiscovered :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
                    , _mobStats :: [Mob]
                    , _questActions :: Map (LocationId, LocationId) [Event]
-                   , _roomDescToMob :: Map MobRoomDesc (ObjCases Mob)
+                   , _mobsData :: Map Text (ObjCases Mob)
                    }
 
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -220,23 +219,7 @@ mobRoomDescs = nubList <$> loadMobRoomDescs
 
 type NominativeWords =  [Text]
 
-mobRoomDescToAlias :: IO (Map MobRoomDesc (ObjCases Mob))
-mobRoomDescToAlias = toMap <$> mobNominatives <*> mobRoomDescs
-  where toAlias :: [ObjRef Mob Nominative] -> MobRoomDesc -> (MobRoomDesc, ObjCases Mob)
-        toAlias noms mobDesc = (\alias -> (mobDesc, alias)) $ findMobAlias noms mobDesc
-        toMap noms roomDescs = M.fromList . fmap (toAlias noms) $ roomDescs
-
-findMobAlias :: [ObjRef Mob Nominative] -> ObjRef Mob InRoomDesc -> ObjCases Mob
-findMobAlias mobNominatives roomDesc = toResult <$> L.filter (not . null) . fmap (L.intersect roomDescWords) $ mobNominativesWords
-  where roomDescWords = T.words . unRoomDesc $ roomDesc
-        unRoomDesc (ObjRef text) = T.toLower text
-        toResult [] = M.empty
-        toResult res = M.singleton Alias . T.intercalate "." . maximum $ res
-        mobNominativesWords :: [NominativeWords]
-        mobNominativesWords = fmap (T.words . unObjRef) mobNominatives
-
-
-loadWorld :: FilePath -> Map MobRoomDesc (ObjCases Mob) -> IO World
+loadWorld :: FilePath -> Map Text (ObjCases Mob) -> IO World
 loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
@@ -247,7 +230,7 @@ loadWorld currentDir customMobProperties = do
   mobsOnMap <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- obstaclesOnMap
-  roomDescToMob <- mobRoomDescToAlias
+  mobsData <- mobsData
   let worldMap = buildMap locations directions
    in return World { _worldMap = worldMap
                    , _locations = locations
@@ -258,8 +241,38 @@ loadWorld currentDir customMobProperties = do
                    , _mobsDiscovered = mobsOnMap
                    , _mobStats = []
                    , _questActions = questActions
-                   , _roomDescToMob = M.unionWith M.union customMobProperties roomDescToMob
+                   , _mobsData = M.unionWith M.union customMobProperties mobsData
                    }
+
+mobsData :: IO (Map Text (ObjCases Mob))
+mobsData = mobsWithTargetFlag
+  where mobsWithTargetFlag = M.unionWith (M.union) <$> mobs <*> (fmap (M.insert Target "true") <$> targetsByInRoomDescs)
+        targetsByInRoomDescs = mobsByNominatives >>= \mbn -> targets >>= \t -> (return . groupByCase InRoomDesc . catMaybes $ (\trg -> M.lookup trg mbn) <$> t)
+        mobsByNominatives = groupByCase Nominative . M.elems <$> mobs
+        mobs = (\mobCases allRoomDescs -> M.unionWith (M.union) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
+        targets = S.toList . S.fromList <$> PP.toListM (PP.map unObjRef <-< PP.map (\(FightPromptEvent _ target) -> target) <-< PP.filter isFightPromptEvent <-< serverLogEventsProducer)
+        allInRoomDescs = groupByCase InRoomDesc . fmap (M.singleton InRoomDesc) . S.toList . S.fromList <$> PP.toListM (PP.map unObjRef <-< PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer)
+        mobCasesByInRoomDesc = fmap (groupByCase InRoomDesc) $ PP.toListM $ PP.map windowToCases <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
+        groupByCase c = M.fromList . catMaybes . fmap (\mobCases -> M.lookup c mobCases >>= \cs -> return (cs, mobCases))
+        defaultAlias = T.intercalate "." . T.words
+        allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] = locWithOneMob locEvt
+                                                            && isCheckNominative nom
+                                                            && isCheckGenitive gen
+                                                            && isCheckAccusative acc
+                                                            && isCheckDative dat
+                                                            && isCheckInstrumental instr
+                                                            && isCheckPrepositional prep
+        allCasesWindow _ = False
+        locWithOneMob (LocationEvent _ _ [mob] _) = True
+        locWithOneMob _ = False
+        isCheckCaseEvt evt = isLocationEvent evt || isCaseEvt evt
+        isCaseEvt evt = isCheckNominative evt || isCheckGenitive evt || isCheckAccusative evt || isCheckDative evt || isCheckInstrumental evt || isCheckPrepositional evt
+        windowToCases :: [ServerEvent] -> Map ObjCase Text
+        windowToCases [CheckPrepositional prep, CheckInstrumental instr , CheckDative dat , CheckAccusative acc , CheckGenitive gen , CheckNominative nom , LocationEvent _ _ [mobInRoomDesc] _ ] = M.insert InRoomDesc (unObjRef mobInRoomDesc) . M.insert Nominative (unObjRef nom) . M.insert Genitive (unObjRef gen) . M.insert Accusative (unObjRef acc) . M.insert Dative (unObjRef dat) . M.insert Instrumental (unObjRef instr) . M.insert Prepositional (unObjRef prep) . M.insert Alias (defaultAlias . unObjRef $ nom) $ M.empty
+        scanWindow n = PP.scan toWindow [] identity
+          where toWindow acc event
+                  | length acc < n = event : acc
+                  | otherwise = event : take (n - 1) acc
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
