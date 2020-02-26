@@ -249,19 +249,16 @@ mobsData = mobsWithTargetFlag
   where mobsWithTargetFlag = M.unionWith (<>) <$> mobs <*> targetsByInRoomDescs
         targetsByInRoomDescs = mobsByNominatives >>= \mobsByNoms ->
                                  targets >>= \mbt ->
-                                   return . groupByCase _inRoomDesc . catMaybes . fmap (\t -> M.lookup t mobsByNoms) $ mbt
+                                   return . groupByCase _inRoomDesc . fmap (everAttacked ?~ EverAttacked True) . catMaybes . fmap (\t -> M.lookup t mobsByNoms) $ mbt
+        mobsByNominatives :: IO (Map (ObjRef Mob Nominative) MobStats)
         mobsByNominatives = groupByCase _nominative . M.elems <$> mobs
         mobs :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
         mobs = (\mobCases allRoomDescs -> M.unionWith (<>) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
+        targets :: IO [ObjRef Mob Nominative]
         targets = S.toList . S.fromList <$> PP.toListM (PP.map _target <-< PP.filter isFightPromptEvent <-< serverLogEventsProducer)
         allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc . S.toList . S.fromList <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer)
-        mobFromRoomDesc inRoomDesc = MobStats { _nameCases = NameCases { _inRoomDesc = Just inRoomDesc }
-                                              , _everAttacked = Nothing
-                                              }
-        mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (mobStatsFromCases . windowToCases) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
-        mobStatsFromCases cases = MobStats { _nameCases = cases
-                                           , _everAttacked = Nothing
-                                           }
+        mobFromRoomDesc desc = nameCases . inRoomDesc .~ Just desc $ mempty
+        mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
         groupByCase getter = M.fromList . catMaybes . fmap (\mobCases -> (getter . _nameCases) mobCases >>= \cs -> return (cs, mobCases))
         defaultAlias = T.intercalate "." . T.words
         allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] = locWithOneMob locEvt

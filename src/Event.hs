@@ -30,6 +30,7 @@ module Event ( Event(..)
              , MobRoomDesc(..)
              , MobInTheRoom(..)
              , MobStats(..)
+             , EverAttacked(..)
              , NameCases(..)
              , ShowVal(..)
              , Result(..)
@@ -54,6 +55,9 @@ module Event ( Event(..)
              , objects
              , mobs
              , serverEvent
+             , nameCases
+             , inRoomDesc
+             , everAttacked
              ) where
 
 import qualified Prelude as P
@@ -256,6 +260,17 @@ instance Semigroup (NameCases a) where
                             , _alias = _alias left <> _alias right
                             }
 
+instance Monoid (NameCases a) where
+  mempty = NameCases { _inRoomDesc = Nothing
+                     , _nominative = Nothing
+                     , _genitive = Nothing
+                     , _accusative = Nothing
+                     , _dative = Nothing
+                     , _instrumental = Nothing
+                     , _prepositional = Nothing
+                     , _alias = Nothing
+                     }
+
 newtype EverAttacked = EverAttacked Bool deriving (Eq, Ord, Show)
 
 instance Semigroup EverAttacked where
@@ -269,6 +284,11 @@ instance Semigroup MobStats where
   left <> right = MobStats { _nameCases = _nameCases left <> _nameCases right
                            , _everAttacked = _everAttacked left <> _everAttacked right
                            }
+
+instance Monoid MobStats where
+  mempty = MobStats { _nameCases = mempty NameCases
+                    , _everAttacked = Nothing
+                    }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
 
@@ -311,3 +331,6 @@ makeFieldsNoPrefix ''WeaponClass
 makeFieldsNoPrefix ''RoomDir
 makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
+
+makeLenses ''MobStats
+makeLenses ''NameCases
