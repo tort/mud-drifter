@@ -58,9 +58,9 @@ data World = World { _worldMap :: WorldMap
                    , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
                    , _itemStats :: [ItemStats]
                    , _mobsDiscovered :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
-                   , _mobStats :: [Mob]
+                   , _mobStats :: [MobStats]
                    , _questActions :: Map (LocationId, LocationId) [Event]
-                   , _mobsData :: Map Text (ObjCases Mob)
+                   , _inRoomDescToMob :: Map (ObjRef Mob InRoomDesc) MobStats
                    }
 
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -131,12 +131,12 @@ binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.fi
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
 
-extractObjects :: Monad m => (ServerEvent -> [ObjRef a InRoomDesc]) -> Pipe ServerEvent [ObjRef a InRoomDesc] m ()
+extractObjects :: Monad m => (ServerEvent -> a) -> Pipe ServerEvent a m ()
 extractObjects getter = PP.filter isLocationEvent >-> PP.map getter
 
-extractDiscovered :: (Monad m, Ord a) => (ServerEvent -> [a]) -> Producer ServerEvent m () -> m (Map a (Map LocationId Int))
-extractDiscovered entityExtractor producer = PP.fold toMap M.empty identity (producer >-> PP.filter isLocationEvent)
-  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _) = F.foldl (insertMob locId) acc (entityExtractor evt)
+extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map LocationId Int))
+extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter isLocationEvent <-< producer)
+  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _) = F.foldl (insertMob locId) acc (_mobs evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
         updateCount locId Nothing = Just (M.insert locId 1 M.empty)
         updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
@@ -213,13 +213,13 @@ mobNominatives = nubList <$> loadMobs
         toPair (FightPromptEvent _ target) = target
         loadMobs = PP.toListM $ PP.map toPair <-< PP.filter isFightPrompt <-< serverLogEventsProducer
 
-mobRoomDescs :: IO [MobRoomDesc]
+mobRoomDescs :: IO [ObjRef Mob InRoomDesc]
 mobRoomDescs = nubList <$> loadMobRoomDescs
   where loadMobRoomDescs = PP.toListM $ PP.concat <-< extractObjects _mobs <-< serverLogEventsProducer
 
 type NominativeWords =  [Text]
 
-loadWorld :: FilePath -> Map Text (ObjCases Mob) -> IO World
+loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
 loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
@@ -227,7 +227,7 @@ loadWorld currentDir customMobProperties = do
   locations <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
-  mobsOnMap <- ((extractDiscovered _mobs) . parseServerEvents . loadLogs) serverLogFiles
+  mobsOnMap <- (extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- obstaclesOnMap
   mobsData <- mobsData
@@ -241,19 +241,28 @@ loadWorld currentDir customMobProperties = do
                    , _mobsDiscovered = mobsOnMap
                    , _mobStats = []
                    , _questActions = questActions
-                   , _mobsData = M.unionWith M.union customMobProperties mobsData
+                   , _inRoomDescToMob = M.unionWith (<>) customMobProperties mobsData
                    }
 
-mobsData :: IO (Map Text (ObjCases Mob))
+mobsData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
 mobsData = mobsWithTargetFlag
-  where mobsWithTargetFlag = M.unionWith (M.union) <$> mobs <*> (fmap (M.insert Target "true") <$> targetsByInRoomDescs)
-        targetsByInRoomDescs = mobsByNominatives >>= \mbn -> targets >>= \t -> (return . groupByCase InRoomDesc . catMaybes $ (\trg -> M.lookup trg mbn) <$> t)
-        mobsByNominatives = groupByCase Nominative . M.elems <$> mobs
-        mobs = (\mobCases allRoomDescs -> M.unionWith (M.union) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
-        targets = S.toList . S.fromList <$> PP.toListM (PP.map unObjRef <-< PP.map (\(FightPromptEvent _ target) -> target) <-< PP.filter isFightPromptEvent <-< serverLogEventsProducer)
-        allInRoomDescs = groupByCase InRoomDesc . fmap (M.singleton InRoomDesc) . S.toList . S.fromList <$> PP.toListM (PP.map unObjRef <-< PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer)
-        mobCasesByInRoomDesc = fmap (groupByCase InRoomDesc) $ PP.toListM $ PP.map windowToCases <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
-        groupByCase c = M.fromList . catMaybes . fmap (\mobCases -> M.lookup c mobCases >>= \cs -> return (cs, mobCases))
+  where mobsWithTargetFlag = M.unionWith (<>) <$> mobs <*> targetsByInRoomDescs
+        targetsByInRoomDescs = mobsByNominatives >>= \mobsByNoms ->
+                                 targets >>= \mbt ->
+                                   return . groupByCase _inRoomDesc . catMaybes . fmap (\t -> M.lookup t mobsByNoms) $ mbt
+        mobsByNominatives = groupByCase _nominative . M.elems <$> mobs
+        mobs :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
+        mobs = (\mobCases allRoomDescs -> M.unionWith (<>) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
+        targets = S.toList . S.fromList <$> PP.toListM (PP.map _target <-< PP.filter isFightPromptEvent <-< serverLogEventsProducer)
+        allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc . S.toList . S.fromList <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer)
+        mobFromRoomDesc inRoomDesc = MobStats { _nameCases = NameCases { _inRoomDesc = Just inRoomDesc }
+                                              , _everAttacked = Nothing
+                                              }
+        mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (mobStatsFromCases . windowToCases) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
+        mobStatsFromCases cases = MobStats { _nameCases = cases
+                                           , _everAttacked = Nothing
+                                           }
+        groupByCase getter = M.fromList . catMaybes . fmap (\mobCases -> (getter . _nameCases) mobCases >>= \cs -> return (cs, mobCases))
         defaultAlias = T.intercalate "." . T.words
         allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] = locWithOneMob locEvt
                                                             && isCheckNominative nom
@@ -267,8 +276,23 @@ mobsData = mobsWithTargetFlag
         locWithOneMob _ = False
         isCheckCaseEvt evt = isLocationEvent evt || isCaseEvt evt
         isCaseEvt evt = isCheckNominative evt || isCheckGenitive evt || isCheckAccusative evt || isCheckDative evt || isCheckInstrumental evt || isCheckPrepositional evt
-        windowToCases :: [ServerEvent] -> Map ObjCase Text
-        windowToCases [CheckPrepositional prep, CheckInstrumental instr , CheckDative dat , CheckAccusative acc , CheckGenitive gen , CheckNominative nom , LocationEvent _ _ [mobInRoomDesc] _ ] = M.insert InRoomDesc (unObjRef mobInRoomDesc) . M.insert Nominative (unObjRef nom) . M.insert Genitive (unObjRef gen) . M.insert Accusative (unObjRef acc) . M.insert Dative (unObjRef dat) . M.insert Instrumental (unObjRef instr) . M.insert Prepositional (unObjRef prep) . M.insert Alias (defaultAlias . unObjRef $ nom) $ M.empty
+        windowToCases :: [ServerEvent] -> NameCases Mob
+        windowToCases [ CheckPrepositional prep
+                      , CheckInstrumental instr
+                      , CheckDative dat
+                      , CheckAccusative acc
+                      , CheckGenitive gen
+                      , CheckNominative nom
+                      , LocationEvent _ _ [mob] _
+                      ] = NameCases { _inRoomDesc = Just mob
+                                    , _nominative = Just nom
+                                    , _genitive = Just gen
+                                    , _accusative = Just acc
+                                    , _dative = Just dat
+                                    , _instrumental = Just instr
+                                    , _prepositional = Just prep
+                                    , _alias = Just . ObjRef . defaultAlias . unObjRef $ nom
+                                    }
         scanWindow n = PP.scan toWindow [] identity
           where toWindow acc event
                   | length acc < n = event : acc

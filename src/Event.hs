@@ -8,6 +8,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 
 module Event ( Event(..)
              , ServerEvent(..)
@@ -20,15 +21,16 @@ module Event ( Event(..)
              , ItemState(..)
              , ItemStats(..)
              , InventoryItem(..)
-             , Mob(..)
-             , Item(..)
+             , ObjType(..)
              , WeaponClass(..)
              , RoomDir(..)
              , RoomExit(..)
              , ObjRef(..)
              , ObjCase(..)
-             , ObjCases(..)
              , MobRoomDesc(..)
+             , MobInTheRoom(..)
+             , MobStats(..)
+             , NameCases(..)
              , ShowVal(..)
              , Result(..)
              , isServerEvent
@@ -45,6 +47,7 @@ module Event ( Event(..)
              , isItemStatsEvent
              , isPromptEvent
              , isFightPromptEvent
+             , isMobDescRef
              , location
              , locationId
              , locationTitle
@@ -110,6 +113,7 @@ instance Binary ItemStats
 instance Binary WeaponClass
 instance Binary RoomDir
 instance Binary RoomExit
+instance Binary MobInTheRoom
 instance Binary (ObjRef Item Nominative)
 instance Binary (ObjRef Item Accusative)
 instance Binary (ObjRef Item Genitive)
@@ -157,7 +161,7 @@ data ServerEvent = CodepagePrompt
                  | ItemStatsEvent ItemStats
                  | ShopListItemEvent (ObjRef Item Nominative) Price
                  | PromptEvent Int Int
-                 | FightPromptEvent (ObjRef Mob Nominative) (ObjRef Mob Nominative)
+                 | FightPromptEvent { _me :: ObjRef Mob Nominative, _target :: ObjRef Mob Nominative }
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
                  | DarkInDirection RoomDir
@@ -192,6 +196,9 @@ data ServerEvent = CodepagePrompt
                  | CheckPrepositional (ObjRef Mob Prepositional)
                  deriving (Eq, Generic, Ord, Show)
 
+data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobNomRef { _unMobNomRef :: ObjRef Mob Nominative }
+  deriving (Eq, Ord, Show, Generic)
+
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders
   deriving (Eq, Generic, Ord, Show)
 data EquippedItem = EquippedItem Slot (ObjRef Item Nominative)
@@ -218,13 +225,50 @@ data ObjCase = Nominative
              | Prepositional
              | InRoomDesc
              | Alias
-             | Target
              deriving (Eq, Ord, Show)
 
-newtype ObjRef a (b :: ObjCase) = ObjRef { unObjRef :: Text }
+data ObjType = Mob | Item deriving (Eq, Ord, Show)
+
+newtype ObjRef (a :: ObjType) (b :: ObjCase) = ObjRef { unObjRef :: Text }
   deriving (Eq, Ord, Generic, Show)
 
-type ObjCases a = Map ObjCase Text
+instance Semigroup (ObjRef a b) where
+  left <> right = left
+
+data NameCases (a :: ObjType) = NameCases { _inRoomDesc :: Maybe (ObjRef a InRoomDesc)
+                                          , _nominative :: Maybe (ObjRef a Nominative)
+                                          , _genitive :: Maybe (ObjRef a Genitive)
+                                          , _accusative :: Maybe (ObjRef a Accusative)
+                                          , _dative :: Maybe (ObjRef a Dative)
+                                          , _instrumental :: Maybe (ObjRef a Instrumental)
+                                          , _prepositional :: Maybe (ObjRef a Prepositional)
+                                          , _alias :: Maybe (ObjRef a Alias)
+                                          } deriving (Eq, Ord, Show, Generic)
+
+instance Semigroup (NameCases a) where
+  left <> right = NameCases { _inRoomDesc = _inRoomDesc left <> _inRoomDesc right
+                            , _nominative = _nominative left <> _nominative right
+                            , _genitive = _genitive left <> _genitive right
+                            , _accusative = _accusative left <> _accusative right
+                            , _dative = _dative left <> _dative right
+                            , _instrumental = _instrumental left <> _instrumental right
+                            , _prepositional = _prepositional left <> _prepositional right
+                            , _alias = _alias left <> _alias right
+                            }
+
+newtype EverAttacked = EverAttacked Bool deriving (Eq, Ord, Show)
+
+instance Semigroup EverAttacked where
+  left <> right = left
+
+data MobStats = MobStats { _nameCases :: NameCases Mob
+                         , _everAttacked :: Maybe (EverAttacked)
+                         } deriving (Eq, Ord, Generic, Show)
+
+instance Semigroup MobStats where
+  left <> right = MobStats { _nameCases = _nameCases left <> _nameCases right
+                           , _everAttacked = _everAttacked left <> _everAttacked right
+                           }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
 
@@ -233,9 +277,6 @@ instance TextShow (ObjRef a b) where
 
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
 data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)
-
-data Mob
-data Item
 
 class ShowVal a where
   showVal :: a -> Text
@@ -257,6 +298,7 @@ derive makeIs ''WeaponClass
 derive makeIs ''RoomDir
 derive makeIs ''ServerEvent
 derive makeIs ''Event
+derive makeIs ''MobInTheRoom
 
 makeFieldsNoPrefix ''Location
 makeFieldsNoPrefix ''LocationId

@@ -145,7 +145,7 @@ killEmAll world = (forever lootAll) >-> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (chooseTarget mobs)
                                        evt -> yield evt >> awaitTargets
         attack evt Nothing = yield evt >> awaitTargets
-        attack e (Just mobAlias) = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> mobAlias) >> awaitFightBegin 0
+        attack e (Just mobAlias) = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> (unObjRef mobAlias)) >> awaitFightBegin 0
                                                    evt -> yield evt >> attack e (Just mobAlias)
         awaitFightBegin pulsesCount = await >>= \case evt@(ServerEvent FightPromptEvent{}) -> yield evt >> awaitFightEnd
                                                       PulseEvent -> if pulsesCount < 2
@@ -157,9 +157,9 @@ killEmAll world = (forever lootAll) >-> awaitTargets
                                         evt -> yield evt >> awaitFightEnd
         watch = await >>= \case PulseEvent -> yield (SendToServer "смотреть") >> awaitTargets
                                 evt -> yield evt >> watch
-        findAlias :: MobRoomDesc -> Maybe Text
-        findAlias mobRef = M.lookup Alias =<< M.lookup (unObjRef mobRef) (_mobsData world)
-        chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe Text
+        findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Alias)
+        findAlias mobRef = _alias . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
+        chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
         chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
 travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
@@ -211,7 +211,7 @@ supplyTask = init
                                                   PulseEvent -> awaitFullHp maxHp maxMv
                                                   evt -> yield evt >> awaitFullHp maxHp maxMv
 
-runZone :: MonadIO m => World -> Map MobRoomDesc (ObjCases Mob) -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
+runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
   cover world >-> supplyTask >-> killEmAll world >-> travel path locEvt world
   where path = zonePath world startFrom
