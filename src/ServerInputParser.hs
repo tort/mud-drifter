@@ -64,6 +64,7 @@ serverInputParser = codepagePrompt
                     <|> checkDative
                     <|> checkInstrumental
                     <|> checkPrepositional
+                    <|> mobEnteredLocation
                     <|> unknownMessage
 
 checkNominative :: A.Parser ServerEvent
@@ -122,6 +123,32 @@ checkPrepositional = do cs >> string "1;30m"
                         clearColors
                         C.endOfLine
                         return . CheckPrepositional . ObjRef . decodeUtf8 $ mob
+
+mobEnteredLocation :: A.Parser ServerEvent
+mobEnteredLocation = do readWordsTillParser arrived
+                        C.space
+                        froms
+                        C.char '.'
+                        C.endOfLine
+                        return MobEnteredLocation
+  where froms = F.foldl1 (<|>) . fmap (string . encodeUtf8) $ ["с севера", "с юга", "с запада", "с востока", "снизу", "сверху"]
+        arrived = F.foldl1 (<|>) . fmap (string . encodeUtf8 ) $ [ "пришел"
+                                                                 , "пришла"
+                                                                 , "пришло"
+                                                                 , "пришли"
+                                                                 , "прилетел"
+                                                                 , "прилетела"
+                                                                 , "прилетело"
+                                                                 , "прилетели"
+                                                                 , "прибежал"
+                                                                 , "прибежала"
+                                                                 , "прибежало"
+                                                                 , "прибежали"
+                                                                 , "приполз"
+                                                                 , "приползла"
+                                                                 , "приползло"
+                                                                 , "приползли"
+                                                                 ]
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
@@ -338,8 +365,7 @@ myStats = do -- header begin
                      return mv
 
 iHitMob :: A.Parser ServerEvent
-iHitMob = do many' $ cs >> string "0;0m"
-             cs >> string "1;33m"
+iHitMob = do cs >> string "1;33m"
              string . encodeUtf8 $ "Вы"
              C.space
              many' dmg
@@ -348,6 +374,7 @@ iHitMob = do many' $ cs >> string "0;0m"
              mob <- C.takeTill (== '.')
              C.char '.'
              C.endOfLine
+             clearColors
              return . IHitMobEvent . ObjRef . decodeUtf8 $ mob
                where hitTypes = [ "сокрушили"
                         , "ударили"
@@ -632,6 +659,10 @@ readWordsTill :: Text -> A.Parser ByteString
 readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
                        return $ C8.unwords wrds
 
+readWordsTillParser :: A.Parser ByteString -> A.Parser ByteString
+readWordsTillParser parser = do wrds <- manyTill' readWord parser
+                                return $ C8.unwords wrds
+
 mobGaveYouItem :: A.Parser ServerEvent
 mobGaveYouItem = do mob <- readWordsTill "дал"
                     many' $ C.char 'а' <|> C.char 'о' <|> C.char 'и'
@@ -745,8 +776,7 @@ direction = north <|> south <|> east <|> west <|> up <|> down
                   return Down
 
 prompt :: A.Parser ServerEvent
-prompt = do many' C.endOfLine
-            many' clearColors
+prompt = do C.endOfLine
             ansiColor
             hp <- C.decimal
             C.char 'H'
@@ -771,8 +801,7 @@ prompt = do many' C.endOfLine
 
 fightPrompt :: A.Parser ServerEvent
 fightPrompt = do
-            many' C.endOfLine
-            many' clearColors
+            C.endOfLine
             ansiColor
             hp <- C.decimal
             C.char 'H'
