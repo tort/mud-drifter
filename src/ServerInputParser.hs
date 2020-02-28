@@ -371,7 +371,9 @@ hitEvent = do evt <- hit <|> miss
               return evt
   where miss = do cs
                   F.foldl1 (<|>) . fmap string $ ["0;33m", "0;31m"]
-                  choice [missHit1, missHit3]
+                  evt <- choice [missHit1, missHit3]
+                  C.char '.'
+                  return evt
         missHit1 = do attacker <- readWordsTillParser (standardCasesParser "промазал")
                       string . encodeUtf8 $ ", когда"
                       standardCasesParser "хотел"
@@ -379,16 +381,14 @@ hitEvent = do evt <- hit <|> miss
                       dmgTypeU
                       C.space
                       target <- C.takeTill (== '.')
-                      C.char '.'
                       return $ HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
         missHit3 = do attacker <- readWordsTillParser (nonStandardCasesParser [ "попытался", "попыталась", "попыталось", "попытались" ])
                       C.space
                       dmgTypeU
                       C.space
-                      target <- takeTill (\c -> c == _comma || (not . C.isEndOfLine $ c))
+                      target <- takeTill (\c -> c == _comma || C.isEndOfLine c)
                       C.char ','
                       m1 <|> m2 <|> m3
-                      C.char '.'
                       return $ HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
                         where m1 = do string . encodeUtf8 $ " но не "
                                       standardCasesParser "рассчитал"
