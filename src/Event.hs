@@ -50,6 +50,7 @@ module Event ( Event(..)
              , isFightPromptEvent
              , isMobDescRef
              , isMobEnteredLocation
+             , isHitEvent
              , isUnknownServerEvent
              , location
              , locationId
@@ -201,6 +202,7 @@ data ServerEvent = CodepagePrompt
                  | CheckInstrumental (ObjRef Mob Instrumental)
                  | CheckPrepositional (ObjRef Mob Prepositional)
                  | MobEnteredLocation
+                 | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
                  deriving (Eq, Generic, Ord, Show)
 
 data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobNomRef { _unMobNomRef :: ObjRef Mob Nominative }
