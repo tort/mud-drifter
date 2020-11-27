@@ -50,7 +50,6 @@ library:
                 , pipes-attoparsec
                 , pipes-bytestring
                 , pipes-concurrency 
-                , derive
                 , time
                 , regex-tdfa
                 , mtl
