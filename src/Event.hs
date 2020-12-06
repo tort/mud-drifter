@@ -9,6 +9,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Event ( Event(..)
              , ServerEvent(..)
@@ -34,24 +35,6 @@ module Event ( Event(..)
              , NameCases(..)
              , ShowVal(..)
              , Result(..)
-             , isServerEvent
-             , isMoveEvent
-             , isCheckNominative
-             , isCheckGenitive
-             , isCheckAccusative
-             , isCheckDative
-             , isCheckInstrumental
-             , isCheckPrepositional
-             , isConsoleInput
-             , isShopListItemEvent
-             , isLocationEvent
-             , isItemStatsEvent
-             , isPromptEvent
-             , isFightPromptEvent
-             , isMobDescRef
-             , isMobEnteredLocation
-             , isHitEvent
-             , isUnknownServerEvent
              , location
              , locationId
              , locationTitle
@@ -61,6 +44,18 @@ module Event ( Event(..)
              , nameCases
              , inRoomDesc
              , everAttacked
+             , _CheckNominative
+             , _CheckGenitive
+             , _CheckAccusative
+             , _CheckDative
+             , _CheckInstrumental
+             , _CheckPrepositional 
+             , _LocationEvent
+             , _MoveEvent
+             , _ItemStatsEvent
+             , _FightPromptEvent
+             , _ShopListItemEvent
+             , _PromptEvent
              ) where
 
 import qualified Prelude as P
@@ -72,7 +67,6 @@ import Data.ByteString
 import Data.Binary
 import GHC.Generics (Generic)
 
-import Data.DeriveTH
 import Control.Lens hiding ((&))
 
 import TextShow
@@ -151,6 +145,8 @@ data Event = ConsoleInput Text
            | TravelRequest [LocationId]
            | TravelFailure
            deriving (Eq, Generic, Show)
+
+
 
 type EventBus = (Output Event, Input Event)
 
@@ -312,18 +308,6 @@ instance ShowVal LocationId where
 instance ShowVal LocationTitle where
   showVal (LocationTitle text) = text
 
-derive makeIs ''Location
-derive makeIs ''LocationId
-derive makeIs ''LocationTitle
-derive makeIs ''Slot
-derive makeIs ''EquippedItem
-derive makeIs ''ItemState
-derive makeIs ''ItemStats
-derive makeIs ''WeaponClass
-derive makeIs ''RoomDir
-derive makeIs ''ServerEvent
-derive makeIs ''Event
-derive makeIs ''MobInTheRoom
 
 makeFieldsNoPrefix ''Location
 makeFieldsNoPrefix ''LocationId
@@ -339,3 +323,5 @@ makeFieldsNoPrefix ''Event
 
 makeLenses ''MobStats
 makeLenses ''NameCases
+
+makePrisms ''ServerEvent

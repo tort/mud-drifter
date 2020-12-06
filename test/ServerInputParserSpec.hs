@@ -19,6 +19,7 @@ import TextShow
 import Data.Text.Encoding
 import Data.String
 import Control.Monad
+import Control.Lens
 import qualified Data.List as L
 
 import Person
@@ -150,8 +151,8 @@ spec = describe "Parser" $ do
                                                                                              ])
         it "parse cr after unknown server event" $ do let log = "test/logs/mobPortal.log"
                                                       serverEventList <- toListM $ parseServerEvents (loadServerEvents log)
-                                                      (length $ filter isLocationEvent serverEventList) `shouldBe` 3
-                                                      (length $ filter isMoveEvent serverEventList) `shouldBe` 1
+                                                      (length $ filter (has _LocationEvent) serverEventList) `shouldBe` 3
+                                                      (length $ filter (has _MoveEvent) serverEventList) `shouldBe` 1
         it "parse empty inventory" $ do log <- C8.readFile "test/logs/inventoryEmpty.log"
                                         log ~> serverInputParser `shouldParse` (ListInventoryEvent [])
         it "parse weapon stats in shop" $ do log <- C8.readFile "test/logs/statsWeapon.log"
@@ -161,7 +162,7 @@ spec = describe "Parser" $ do
         it "parse weapon stats" $ do log <- C8.readFile "test/logs/statsWeaponScroll.log"
                                      log ~> serverInputParser `shouldParse` (ItemStatsEvent $ Weapon (ObjRef "бронзовый топорик") Axe [Wield, Hold] 3.5)
         it "parse shop items" $ do let log = "test/logs/shopList.log"
-                                   serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter isShopListItemEvent
+                                   serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter (has _ShopListItemEvent)
                                    length serverEventList `shouldBe` 43
         it "parse examine container event" $ do log <- C8.readFile "test/logs/examineContainer.log"
                                                 log ~> serverInputParser `shouldParse` ExamineContainer { _name = "холщовый мешок"
@@ -171,17 +172,15 @@ spec = describe "Parser" $ do
                                                                                                         }
         it "parse shop list with prompt" $ do let log = "test/logs/shopListWithPrompt.log"
                                               serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                                              (length $ filter isShopListItemEvent serverEventList) `shouldBe` 27
-                                              (length $ filter isPrompt serverEventList) `shouldBe` 1
+                                              (length $ filter (has _ShopListItemEvent) serverEventList) `shouldBe` 27
+                                              (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
         it "parse single line prompt event" $ do log <- C8.readFile "test/logs/prompt.1.log"
                                                  log ~> serverInputParser `shouldParse` PromptEvent 712 185
         it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent 143 101
         it "parse fight prompt" $ do let log = "test/logs/enterRoomWithFight.log"
-                                         isFightPromptEvent FightPromptEvent{} = True
-                                         isFightPromptEvent _ = False
                                      serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                                     (length $ filter isFightPromptEvent serverEventList) `shouldBe` 3
+                                     (length $ filter (has _FightPromptEvent) serverEventList) `shouldBe` 3
         it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
                                                   objects = [ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                   mobs = [ ObjRef "Полянин Дорман стоит здесь."
@@ -241,21 +240,17 @@ instance TextShow ServerEvent where
   showt _ = ""
 
 moveOrLocation :: ServerEvent -> Bool
-moveOrLocation e = isMoveEvent e || isLocationEvent e
+moveOrLocation e = has _MoveEvent e || has _LocationEvent e
 
 nonEmptyUnknown :: ServerEvent -> Bool
 nonEmptyUnknown (UnknownServerEvent "") = False
 nonEmptyUnknown _ = True
 
-isPrompt :: ServerEvent -> Bool
-isPrompt PromptEvent{} = True
-isPrompt _ = False
-
 locationsAndCounts :: FilePath -> IO (Int, Int)
 locationsAndCounts file = do
   serverEventList <- PP.toListM $ parseServerEvents $ loadServerEvents file
-  let locationEventsCount = length (filter isLocationEvent serverEventList)
-  let moveEventsCount = length (filter isMoveEvent serverEventList)
+  let locationEventsCount = length (filter (has _LocationEvent) serverEventList)
+  let moveEventsCount = length (filter (has _MoveEvent) serverEventList)
   return (locationEventsCount, moveEventsCount)
 
 expectedLocsAndMovesCounts :: String -> IO (Int, Int)

@@ -132,10 +132,10 @@ loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
 
 extractObjects :: Monad m => (ServerEvent -> a) -> Pipe ServerEvent a m ()
-extractObjects getter = PP.filter isLocationEvent >-> PP.map getter
+extractObjects getter = PP.filter (has _LocationEvent) >-> PP.map getter
 
 extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map LocationId Int))
-extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter isLocationEvent <-< producer)
+extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _LocationEvent) <-< producer)
   where toMap acc evt@(LocationEvent (Location locId _) _ mobs _) = F.foldl (insertMob locId) acc (_mobs evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
         updateCount locId Nothing = Just (M.insert locId 1 M.empty)
@@ -166,14 +166,14 @@ discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEv
 extractLocs :: Monad m => Producer ServerEvent m () -> m (Set Location)
 extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ locations
   where toSet acc item = S.insert item acc
-        locations = serverEvtProducer >-> PP.filter isLocationEvent >-> PP.map _location
+        locations = serverEvtProducer >-> PP.filter (has _LocationEvent) >-> PP.map _location
 
 extractItemStats :: Monad m => Producer ServerEvent m () -> Producer ItemStats m ()
-extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter isItemStatsEvent >-> PP.map (\(ItemStatsEvent item) -> item)
+extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter (has _ItemStatsEvent) >-> PP.map (\(ItemStatsEvent item) -> item)
 
 extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId, LocationId) RoomDir)
 extractDirections serverEvents = PP.fold accDirections M.empty identity locationsAndMovesTriples
-  where locationsAndMoves = serverEvents >-> PP.filter (\evt -> isLocationEvent evt || isMoveEvent evt)
+  where locationsAndMoves = serverEvents >-> PP.filter (\evt -> has _LocationEvent evt || has _MoveEvent evt)
         locationsAndMovesTriples = (locationsAndMoves >-> PP.scan toTriples [] identity
                                                       >-> PP.filter mappableMove)
                                                                                       where toTriples acc event
@@ -187,10 +187,7 @@ serverLogEventsProducer :: Producer ServerEvent IO ()
 serverLogEventsProducer = combineStreams =<< liftIO logFiles
   where logFiles = getCurrentDirectory >>= \currentDir -> listFilesIn (currentDir ++ "/" ++ serverLogDir)
         combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file) (return ())
-        logfileEvtStream file = PP.dropWhile notLocation <-< (parseServerEvents . loadServerEvents $ file)
-        isLocation LocationEvent{} = True
-        isLocation _ = False
-        notLocation = not . isLocation
+        logfileEvtStream file = PP.dropWhile (hasn't _LocationEvent ) <-< (parseServerEvents . loadServerEvents $ file)
 
 obstaclesOnMap :: IO (Map (LocationId, RoomDir) Text)
 obstaclesOnMap = fmap M.fromList $ PP.toListM $ PP.map toMapItems <-< PP.filter isLocationThenObstacle <-< PP.zip obstacleEvents (PP.drop 1 <-< obstacleEvents)
@@ -208,10 +205,8 @@ nubList = S.elems . S.fromList
 
 mobNominatives :: IO [ObjRef Mob Nominative]
 mobNominatives = nubList <$> loadMobs
-  where isFightPrompt FightPromptEvent{} = True
-        isFightPrompt _ = False
-        toPair (FightPromptEvent _ target) = target
-        loadMobs = PP.toListM $ PP.map toPair <-< PP.filter isFightPrompt <-< serverLogEventsProducer
+  where toPair (FightPromptEvent _ target) = target
+        loadMobs = PP.toListM $ PP.map toPair <-< PP.filter (has _FightPromptEvent) <-< serverLogEventsProducer
 
 mobRoomDescs :: IO [ObjRef Mob InRoomDesc]
 mobRoomDescs = nubList <$> loadMobRoomDescs
@@ -255,24 +250,24 @@ mobsData = mobsWithTargetFlag
         mobs :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
         mobs = (\mobCases allRoomDescs -> M.unionWith (<>) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
         targets :: IO [ObjRef Mob Nominative]
-        targets = S.toList . S.fromList <$> PP.toListM (PP.map _target <-< PP.filter isFightPromptEvent <-< serverLogEventsProducer)
-        allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc . S.toList . S.fromList <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter isLocationEvent <-< serverLogEventsProducer)
+        targets = S.toList . S.fromList <$> PP.toListM (PP.map _target <-< PP.filter (has _FightPromptEvent) <-< serverLogEventsProducer)
+        allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc . S.toList . S.fromList <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter (has _LocationEvent) <-< serverLogEventsProducer)
         mobFromRoomDesc desc = nameCases . inRoomDesc .~ Just desc $ mempty
         mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
         groupByCase getter = M.fromList . catMaybes . fmap (\mobCases -> (getter . _nameCases) mobCases >>= \cs -> return (cs, mobCases))
         defaultAlias = T.intercalate "." . T.words
         allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] = locWithOneMob locEvt
-                                                            && isCheckNominative nom
-                                                            && isCheckGenitive gen
-                                                            && isCheckAccusative acc
-                                                            && isCheckDative dat
-                                                            && isCheckInstrumental instr
-                                                            && isCheckPrepositional prep
+                                                            && has _CheckNominative nom
+                                                            && has _CheckGenitive gen
+                                                            && has _CheckAccusative acc
+                                                            && has _CheckDative dat
+                                                            && has _CheckInstrumental instr
+                                                            && has _CheckPrepositional prep
         allCasesWindow _ = False
         locWithOneMob (LocationEvent _ _ [mob] _) = True
         locWithOneMob _ = False
-        isCheckCaseEvt evt = isLocationEvent evt || isCaseEvt evt
-        isCaseEvt evt = isCheckNominative evt || isCheckGenitive evt || isCheckAccusative evt || isCheckDative evt || isCheckInstrumental evt || isCheckPrepositional evt
+        isCheckCaseEvt evt = has _LocationEvent evt || isCaseEvt evt
+        isCaseEvt evt = has _CheckNominative evt || has _CheckGenitive evt || has _CheckAccusative evt || has _CheckDative evt || has _CheckInstrumental evt || has _CheckPrepositional evt
         windowToCases :: [ServerEvent] -> NameCases Mob
         windowToCases [ CheckPrepositional prep
                       , CheckInstrumental instr
