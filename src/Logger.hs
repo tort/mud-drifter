@@ -15,7 +15,7 @@ module Logger ( runEvtLogger
               , archive
               ) where
 
-import Protolude hiding ((<>), toStrict, Location)
+import Protolude hiding ((<>), toStrict, Location, yield)
 import Pipes
 import Pipes.Concurrent
 import qualified Pipes.Prelude as PP

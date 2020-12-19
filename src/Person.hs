@@ -18,7 +18,7 @@ module Person ( travel
               , MudServer(..)
               ) where
 
-import Protolude hiding (Location)
+import Protolude hiding (Location, yield)
 import Pipes
 import Mapper
 import Event

@@ -4,7 +4,7 @@
 
 module CommandExecutor where
 
-import Protolude
+import Protolude hiding (yield)
 import Pipes
 import qualified Pipes.Prelude as PP
 import qualified Pipes.Concurrent as PC

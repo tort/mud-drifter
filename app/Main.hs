@@ -25,7 +25,7 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
-{-
+  {-
 runDrifter :: IO ()
 runDrifter = do currentDir <- getCurrentDirectory
                 world <- liftIO $ loadWorld currentDir
@@ -53,4 +53,5 @@ runDrifter = do currentDir <- getCurrentDirectory
                 async $ runRemoteConsole (fst toDrifterBox, snd toRemoteConsoleBox)
                 repeatedTimer emitPulseEvery (sDelay 1)
                 readConsoleInput
+
 -}

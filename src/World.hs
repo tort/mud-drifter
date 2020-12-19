@@ -20,7 +20,7 @@ module World ( locsByRegex
              , WorldMap
              ) where
 
-import Protolude hiding (Location, runStateT, Down)
+import Protolude hiding (Location, runStateT, Down, yield)
 import qualified Data.ByteString.Char8 as C8
 import ServerInputParser
 import Data.Graph.Inductive.Tree
