@@ -48,7 +48,7 @@ showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nod
         toJust (Just left, Just right) = (left, right)
         lookupDir p = M.lookup p $ _directions world
 
-findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe [LocationId]
+findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe Path
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (SP.sp fromId toId worldMap)
 
 printItems :: Text -> World -> Text
