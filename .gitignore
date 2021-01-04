@@ -1,6 +1,6 @@
 .stack-work
 .emacs.d
 codex.tags
-\.dyn_hi
-\.dyn_o
+.dyn_hi
+.dyn_o
 TAGS
