@@ -84,12 +84,13 @@ parseEventLogProducer input = parse input
                                           (Left (_, _, err)) -> yield $ ConsoleOutput $ "error: " <> C8.pack err <> "\n"
         decodeEvent input = decodeOrFail input :: Either (LC8.ByteString, ByteOffset, String) (LC8.ByteString, ByteOffset, Event)
 
-printEvents :: Consumer Event IO ()
+printEvents :: Consumer Event IO a
 printEvents = forever $ await >>= lift . printEvent
   where printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerEvent: " <> txt <> "\ESC[0m")
         printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
         printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
         printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
+        printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
         printEvent event = printT . T.pack . show $ event
 
 {-printMove :: [LocToLocActions] -> IO ()

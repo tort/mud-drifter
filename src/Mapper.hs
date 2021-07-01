@@ -51,8 +51,8 @@ showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nod
 findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe Path
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (SP.sp fromId toId worldMap)
 
-printItems :: Text -> World -> Text
-printItems subName world = (render . filterEvents) (_itemsOnMap world)
+printItems :: Text -> Map ServerEvent (Map LocationId Int) -> Text
+printItems subName itemsOnMap = (render . filterEvents) itemsOnMap
   where render mobs = M.foldMapWithKey renderMob mobs
         renderMob evt locToCountMap = renderEvent evt <> "\n" <> (renderLocs locToCountMap)
         renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)

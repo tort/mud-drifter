@@ -228,11 +228,6 @@ spec = describe "Parser" $ do
                                                     mobs = [ObjRef "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."]
                                                     exits = [OpenExit North,OpenExit South]
 
-instance TextShow ServerEvent where
-  showt (LocationEvent loc items mobs _) = renderTitle <> "\n  Items: " <> (renderObjs items) <> "\n  Mobs: " <> (renderObjs mobs)
-    where renderTitle = showt loc
-          renderObjs = T.intercalate "\n  " . fmap unObjRef
-  showt _ = ""
 
 moveOrLocation :: ServerEvent -> Bool
 moveOrLocation e = has _MoveEvent e || has _LocationEvent e

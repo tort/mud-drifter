@@ -3,7 +3,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DataKinds #-}
 
 module World ( locsByRegex
@@ -14,6 +13,13 @@ module World ( locsByRegex
              , zoneMap
              , loadServerEvents
              , serverLogEventsProducer
+             , discoverItems
+             , binarizeServerLog
+             , binarizeOneLog
+             , binarizeLogTest
+             , parseServerLogTest
+             , parseEvtLog
+             , parseCraftedServerLogTest
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -22,16 +28,19 @@ module World ( locsByRegex
 
 import Protolude hiding (Location, runStateT, Down, yield)
 import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy.Char8 as LC8
 import ServerInputParser
 import Data.Graph.Inductive.Tree
 import Data.Graph.Inductive.Graph
-import System.IO (hClose)
+import System.IO (hClose, hFlush)
 import Pipes
 import Pipes.Parse
 import qualified Pipes.Prelude as PP
 import Pipes.Attoparsec
 import qualified Pipes.Attoparsec as PA
 import qualified Pipes.ByteString as PBS
+import qualified Pipes.Binary as PB
+import Pipes.Binary (DecodingError)
 import qualified Data.Text as T
 import Data.Text.Encoding()
 import Data.Either
@@ -50,6 +59,8 @@ import TextShow
 import TextShow.Generic
 import Text.Regex.TDFA
 import qualified Data.List as L
+import Data.Binary
+import Data.Binary.Get
 
 data World = World { _worldMap :: WorldMap
                    , _locations :: Set Location
@@ -186,7 +197,7 @@ listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir
 serverLogEventsProducer :: Producer ServerEvent IO ()
 serverLogEventsProducer = combineStreams =<< liftIO logFiles
   where logFiles = getCurrentDirectory >>= \currentDir -> listFilesIn (currentDir ++ "/" ++ serverLogDir)
-        combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file) (return ())
+        combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file >> yield EndOfLogEvent) (return ())
         logfileEvtStream file = PP.dropWhile (hasn't _LocationEvent ) <-< (parseServerEvents . loadServerEvents $ file)
 
 obstaclesOnMap :: IO (Map (LocationId, RoomDir) Text)
@@ -385,3 +396,48 @@ setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
                                                                      then yield (SendToServer "приставить лестница") >> return locEvt
                                                                      else return locEvt
         checkItemRoomDescs _ = waitLocEvt
+
+binarizeServerLog :: IO ()
+binarizeServerLog =
+  runEffect $
+  serverLogEventsProducer >-> PP.map ServerEvent >-> Pipes.for cat PB.encode >->
+  toEvtLog
+  where
+    toEvtLog =
+      (liftIO $ openFile "evt.log" WriteMode) >>= \h ->
+        PBS.toHandle h >> (liftIO $ hFlush h) >> (liftIO $ hClose h)
+
+binarizeOneLog :: FilePath -> IO ()
+binarizeOneLog filename =
+  runEffect $
+  (parseServerEvents . loadServerEvents $ filename) >->
+  PP.map ServerEvent >->
+  Pipes.for cat PB.encode >->
+  consumer
+  where
+    consumer =
+      (liftIO $ openFile "evt.log" WriteMode) >>= \h ->
+        PBS.toHandle h >> (liftIO $ hFlush h) >> (liftIO $ hClose h)
+
+binarizeLogTest :: FilePath -> IO (Either (DecodingError, Producer ByteString IO ()) ())
+binarizeLogTest filename = runEffect $ binaryEvents ^. PB.decoded >-> printEvents
+  where binaryEvents = serverEvents >-> PP.take 5 >-> PP.map ServerEvent >-> encodeAll
+        serverEvents = parseServerEvents . loadServerEvents $ filename
+        encodeAll = Pipes.for cat PB.encode
+
+parseServerLogTest :: FilePath -> IO ()
+parseServerLogTest filename = runEffect $ binaryEvents >-> PP.map ServerEvent >-> printEvents
+  where binaryEvents = serverEvents >-> PP.take 5
+        serverEvents = parseServerEvents . loadServerEvents $ filename
+
+parseCraftedServerLogTest :: IO (Either (DecodingError, Producer ByteString IO ()) ())
+parseCraftedServerLogTest = runEffect $ binaryEvents ^. PB.decoded >-> printEvents
+  where binaryEvents = Pipes.each [CodepagePrompt, LoginPrompt, PostWelcome] >-> PP.map ServerEvent >-> Pipes.for cat PB.encode
+
+parseEvtLog :: IO (Either (DecodingError, Producer ByteString IO ()) ())
+parseEvtLog = runEffect $ producer ^. PB.decoded >-> printEvents
+  where
+    producer =
+      (lift $ openFile "evt.log" ReadMode) >>= \h ->
+        PBS.fromHandle h >>
+        (lift $ hClose h)

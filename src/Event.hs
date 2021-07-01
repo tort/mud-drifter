@@ -56,12 +56,14 @@ module Event ( Event(..)
              , _FightPromptEvent
              , _ShopListItemEvent
              , _PromptEvent
+             , _TakeFromContainer
              ) where
 
 import qualified Prelude as P
 import Protolude hiding (Location, Down, Up, Left, Right, Dual)
 import Pipes.Concurrent
 import Data.Text
+import qualified Data.Text as T
 import Data.ByteString
 
 import Data.Binary
@@ -90,6 +92,11 @@ data Location = Location { _locationId :: LocationId
 
 instance TextShow Location where
   showt (Location (LocationId locId) (LocationTitle title)) = showt locId <> ": " <> title
+
+instance TextShow ServerEvent where
+  showt (MobGaveYouItem from to) = "MobGaveYouItem [" <> showt from <> "] [" <> showt to <> "]"
+  showt (TakeFromContainer from to) = "TakeFromContainer [" <> showt from <> "] [" <> showt to <> "]"
+  showt x = T.pack . show $ x
 
 instance Eq Location where
   left == right = _locationId left == _locationId right
@@ -146,8 +153,6 @@ data Event = ConsoleInput Text
            | TravelFailure
            deriving (Eq, Generic, Show)
 
-
-
 type EventBus = (Output Event, Input Event)
 
 data ServerEvent = CodepagePrompt
@@ -199,6 +204,7 @@ data ServerEvent = CodepagePrompt
                  | CheckPrepositional (ObjRef Mob Prepositional)
                  | MobEnteredLocation
                  | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
+                 | EndOfLogEvent
                  deriving (Eq, Generic, Ord, Show)
 
 data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobNomRef { _unMobNomRef :: ObjRef Mob Nominative }
