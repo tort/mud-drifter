@@ -15,11 +15,8 @@ module World ( locsByRegex
              , serverLogEventsProducer
              , discoverItems
              , binarizeServerLog
-             , binarizeOneLog
-             , binarizeLogTest
-             , parseServerLogTest
              , parseEvtLog
-             , parseCraftedServerLogTest
+             , scanFromTargetEvent
              , World(..)
              , Direction(..)
              , Trigger(..)
@@ -399,40 +396,13 @@ setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
 
 binarizeServerLog :: IO ()
 binarizeServerLog =
-  runEffect $
-  serverLogEventsProducer >-> PP.map ServerEvent >-> Pipes.for cat PB.encode >->
-  toEvtLog
+  PP.toListM (serverLogEventsProducer >-> PP.map ServerEvent) >>= \events ->
+    runEffect
+      ((Pipes.each $ L.reverse events) >-> Pipes.for cat PB.encode >-> toEvtLog)
   where
     toEvtLog =
       (liftIO $ openFile "evt.log" WriteMode) >>= \h ->
         PBS.toHandle h >> (liftIO $ hFlush h) >> (liftIO $ hClose h)
-
-binarizeOneLog :: FilePath -> IO ()
-binarizeOneLog filename =
-  runEffect $
-  (parseServerEvents . loadServerEvents $ filename) >->
-  PP.map ServerEvent >->
-  Pipes.for cat PB.encode >->
-  consumer
-  where
-    consumer =
-      (liftIO $ openFile "evt.log" WriteMode) >>= \h ->
-        PBS.toHandle h >> (liftIO $ hFlush h) >> (liftIO $ hClose h)
-
-binarizeLogTest :: FilePath -> IO (Either (DecodingError, Producer ByteString IO ()) ())
-binarizeLogTest filename = runEffect $ binaryEvents ^. PB.decoded >-> printEvents
-  where binaryEvents = serverEvents >-> PP.take 5 >-> PP.map ServerEvent >-> encodeAll
-        serverEvents = parseServerEvents . loadServerEvents $ filename
-        encodeAll = Pipes.for cat PB.encode
-
-parseServerLogTest :: FilePath -> IO ()
-parseServerLogTest filename = runEffect $ binaryEvents >-> PP.map ServerEvent >-> printEvents
-  where binaryEvents = serverEvents >-> PP.take 5
-        serverEvents = parseServerEvents . loadServerEvents $ filename
-
-parseCraftedServerLogTest :: IO (Either (DecodingError, Producer ByteString IO ()) ())
-parseCraftedServerLogTest = runEffect $ binaryEvents ^. PB.decoded >-> printEvents
-  where binaryEvents = Pipes.each [CodepagePrompt, LoginPrompt, PostWelcome] >-> PP.map ServerEvent >-> Pipes.for cat PB.encode
 
 parseEvtLog :: IO (Either (DecodingError, Producer ByteString IO ()) ())
 parseEvtLog = runEffect $ producer ^. PB.decoded >-> printEvents
@@ -441,3 +411,19 @@ parseEvtLog = runEffect $ producer ^. PB.decoded >-> printEvents
       (lift $ openFile "evt.log" ReadMode) >>= \h ->
         PBS.fromHandle h >>
         (lift $ hClose h)
+
+scanFromTargetEvent :: IO ()
+scanFromTargetEvent =
+  runEffect $
+  (producer ^. PB.decoded >> pure ()) >-> PP.scan onEvent Nothing identity >->
+  PP.filter (\v -> fmap fst v == Just True) >->
+  PP.map (snd . fromJust) >->
+  PP.take 700 >->
+  printEvents
+  where
+    onEvent _ item@(ServerEvent (LocationEvent (Location (LocationId 5119) _) _ _ _)) = Just (True, item)
+    onEvent _ item@(ServerEvent EndOfLogEvent) = Just (False, item)
+    onEvent acc item = fmap (\(flag, _) -> (flag, item)) acc
+    producer =
+      (lift $ openFile "evt.log" ReadMode) >>= \h ->
+        PBS.fromHandle h >> (lift $ hClose h)
