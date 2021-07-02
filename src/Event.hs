@@ -57,6 +57,7 @@ module Event ( Event(..)
              , _ShopListItemEvent
              , _PromptEvent
              , _TakeFromContainer
+             , _ServerEvent
              ) where
 
 import qualified Prelude as P
@@ -331,3 +332,4 @@ makeLenses ''MobStats
 makeLenses ''NameCases
 
 makePrisms ''ServerEvent
+makePrisms ''Event

@@ -21,6 +21,7 @@ module World ( locsByRegex
              , Direction(..)
              , Trigger(..)
              , WorldMap
+             , dropLoopsFromPath
              ) where
 
 import Protolude hiding (Location, runStateT, Down, yield)
@@ -60,7 +61,7 @@ import Data.Binary
 import Data.Binary.Get
 
 data World = World { _worldMap :: WorldMap
-                   , _locations :: Set Location
+                   , _locationEvents :: Set Location
                    , _directions :: Directions
                    , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
                    , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
@@ -126,7 +127,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
 
 locsByRegex :: World -> Text -> [Location]
 locsByRegex world regex = S.toList $ S.filter (T.isInfixOf regex . T.toLower . (\l -> showVal $ l^.locationTitle)) locs
-  where locs = _locations world
+  where locs = _locationEvents world
 
 loadServerEvents :: FilePath -> Producer ByteString IO ()
 loadServerEvents file = openfile >>= \h -> PBS.fromHandle h >> closefile h
@@ -172,17 +173,17 @@ discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEv
 
 
 extractLocs :: Monad m => Producer ServerEvent m () -> m (Set Location)
-extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ locations
+extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ locationEvents
   where toSet acc item = S.insert item acc
-        locations = serverEvtProducer >-> PP.filter (has _LocationEvent) >-> PP.map _location
+        locationEvents = serverEvtProducer >-> PP.filter (has _LocationEvent) >-> PP.map _location
 
 extractItemStats :: Monad m => Producer ServerEvent m () -> Producer ItemStats m ()
 extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter (has _ItemStatsEvent) >-> PP.map (\(ItemStatsEvent item) -> item)
 
 extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId, LocationId) RoomDir)
-extractDirections serverEvents = PP.fold accDirections M.empty identity locationsAndMovesTriples
-  where locationsAndMoves = serverEvents >-> PP.filter (\evt -> has _LocationEvent evt || has _MoveEvent evt)
-        locationsAndMovesTriples = (locationsAndMoves >-> PP.scan toTriples [] identity
+extractDirections serverEvents = PP.fold accDirections M.empty identity locationEventsAndMovesTriples
+  where locationEventsAndMoves = serverEvents >-> PP.filter (\evt -> has _LocationEvent evt || has _MoveEvent evt)
+        locationEventsAndMovesTriples = (locationEventsAndMoves >-> PP.scan toTriples [] identity
                                                       >-> PP.filter mappableMove)
                                                                                       where toTriples acc event
                                                                                               | length acc < 3 = event : acc
@@ -227,16 +228,16 @@ loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
   directions <- extractDirections serverLogEventsProducer
-  locations <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
+  locationEvents <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
   mobsOnMap <- (extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
   questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- obstaclesOnMap
   mobsData <- mobsData
-  let worldMap = buildMap locations directions
+  let worldMap = buildMap locationEvents directions
    in return World { _worldMap = worldMap
-                   , _locations = locations
+                   , _locationEvents = locationEvents
                    , _directions = directions
                    , _itemsOnMap = itemsOnMap
                    , _obstaclesOnMap = obstaclesOnMap
@@ -300,8 +301,8 @@ mobsData = mobsWithTargetFlag
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
-  where worldStats = encodeUtf8 $ locationsStats <> directionsStats <> items <> itemsStats <> mobs
-        locationsStats = (show . length . _locations) world <> " локаций найдено\n"
+  where worldStats = encodeUtf8 $ locationEventsStats <> directionsStats <> items <> itemsStats <> mobs
+        locationEventsStats = (show . length . _locationEvents) world <> " локаций найдено\n"
         directionsStats = (show . length . _directions) world <> " переходов между локациями\n"
         items = (show . length . _itemsOnMap) world <> " предметов найдено\n"
         itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
@@ -314,9 +315,9 @@ parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
 buildMap :: Set Location -> Directions -> Gr () Int
-buildMap locations directions = mkGraph nodes edges
+buildMap locationEvents directions = mkGraph nodes edges
   where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . fmap (\(LocationId l, LocationId r) -> (l, r)) $ M.keys directions
-        nodes = (\(Location (LocationId locId) _) -> (locId, ())) <$> (S.toList locations)
+        nodes = (\(Location (LocationId locId) _) -> (locId, ())) <$> (S.toList locationEvents)
         aheadEdge (fromId, toId) = (fromId, toId, 1)
         reverseEdge (fromId, toId) = (toId, fromId, 1)
 
@@ -418,12 +419,22 @@ scanFromTargetEvent =
   (producer ^. PB.decoded >> pure ()) >-> PP.scan onEvent Nothing identity >->
   PP.filter (\v -> fmap fst v == Just True) >->
   PP.map (snd . fromJust) >->
-  PP.take 700 >->
   printEvents
   where
     onEvent _ item@(ServerEvent (LocationEvent (Location (LocationId 5119) _) _ _ _)) = Just (True, item)
     onEvent _ item@(ServerEvent EndOfLogEvent) = Just (False, item)
     onEvent acc item = fmap (\(flag, _) -> (flag, item)) acc
+    producer =
+      (lift $ openFile "evt.log" ReadMode) >>= \h ->
+        PBS.fromHandle h >> (lift $ hClose h)
+
+dropLoopsFromPath :: IO (Map LocationId Int)
+dropLoopsFromPath = PP.fold onEvent M.empty identity indexedLocations
+  where
+    indexedLocations = PP.zip (Pipes.each [1..]) locationEvents
+    locationEvents = logEvents >-> PP.filter (has (_ServerEvent . _LocationEvent))
+    onEvent acc item@(i, ServerEvent (LocationEvent (Location locId _) _ _ _)) = M.insert locId i acc
+    logEvents = producer ^. PB.decoded >> pure ()
     producer =
       (lift $ openFile "evt.log" ReadMode) >>= \h ->
         PBS.fromHandle h >> (lift $ hClose h)

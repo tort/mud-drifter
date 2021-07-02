@@ -77,7 +77,7 @@ findLocationsBy :: Text -> World -> [LocationId]
 findLocationsBy substr world = _locationId <$> locationsBy substr world
 
 locationsBy :: Text -> World -> [Location]
-locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . showt) (_locations world ^.. folded)
+locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . showt) (_locationEvents world ^.. folded)
 
 sharePrefix :: Eq a => [a] -> [a] -> ([a], [a], [a])
 sharePrefix l1 l2 = let prefix = map fst $ takeWhile (uncurry (==)) $ zip l1 l2
