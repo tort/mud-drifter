@@ -199,8 +199,6 @@ telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny >> re
 
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do
-    string "    "
-    C.endOfLine
     string " --------"
     _ <- manyTill' (skip (const True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
     return LoginPrompt
