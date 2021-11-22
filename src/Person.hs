@@ -54,18 +54,19 @@ data Person = Person { personName :: Name
                      , residence :: MudServer
                      } deriving (Eq, Show)
 
-run :: (MonadIO m, Show a) => (Output ByteString, Input Event) -> Pipe Event Event m a -> m ()
+run :: (MonadIO m, Show a) => (Output Event, Input Event) -> Pipe Event Event m a -> m ()
 run person task =
   runEffect $
-  fromInput (snd person) >-> (task >>= print) >-> commandExecutor >->
+  fromInput (snd person) >-> (task >>= print) >-> 
   toOutput (fst person)
 
-runE :: (MonadIO m, Show a) => (Output ByteString, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
+runE :: (MonadIO m, Show a) => (Output Event, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
 runE person task = run person $ (runExceptP task)
 
-initPerson :: Person -> IO (Output ByteString, Input Event)
+initPerson :: Person -> IO (Output Event, Input Event)
 initPerson person = do
-  (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 100
+  (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 5
+  (outToExecutorBox, inToExecutorBox) <- spawn $ newest 5
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
   async $ connect mudHost mudPort $ \(sock, _) -> do
@@ -73,9 +74,10 @@ initPerson person = do
     print "connected"
     toRemoteConsoleBox <- spawn $ newest 100
     let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toServerInputParserBox) `mappend` outToLoggerBox
-        emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
+        emitPulseEvery = atomically $ PC.send outToExecutorBox PulseEvent >> return ()
     async $ runRemoteConsole (outToServerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (inToServerBox) >-> toSocket sock
+    async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox
     async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox) >>= liftIO . print
     async $ runServerInputLogger inToLoggerBox
     repeatedTimer emitPulseEvery (sDelay 1)
@@ -84,7 +86,7 @@ initPerson person = do
     atomically sealToLoggerBox
     atomically sealToServerBox
     print "disconnected"
-  return (outToServerBox, snd toDrifterBox)
+  return (outToExecutorBox, snd toDrifterBox)
     where mudHost = T.unpack . host . residence $ person
           mudPort = show . port . residence $ person
 
@@ -110,17 +112,16 @@ travel path locationEvent world = go path locationEvent
                                                  evt -> yield evt >> waitMove remainingPath
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
-travelToLoc substr world =
-  findLocation $ \case
-    [] -> lift $ throwError "no matching locations found"
-    [locTo] ->
-      (liftIO $ putStrLn ("travelling to " <> showt locTo)) >>
-      travelAction locTo
-    _ ->
-      (liftIO $ printLocations substr world) >>
-      (lift $ throwError "multiple locations found")
+travelToLoc substr world = action findLocation
   where
     findLocation = findLocationsBy substr world
+    action [] = lift $ throwError "no matching locations found"
+    action [locTo] =
+      (liftIO $ putStrLn ("travelling to " <> showt locTo)) >>
+      travelAction locTo
+    action _ =
+      (liftIO $ printLocations substr world) >>
+      (lift $ throwError "multiple locations found")
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
         case findTravelPath from to (_worldMap world) of

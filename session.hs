@@ -156,7 +156,7 @@ waitLocation locIdToWait (outChan, inChan) = runEffect $ fromInput inChan >-> aw
             else awaitLoc
         _ -> awaitLoc
     sendOutput text = do
-      atomically $ PC.send outChan (encodeUtf8 . T.snoc text $ '\n')
+      atomically $ PC.send outChan (SendToServer text)
       pure ()
     jump = "говорить помогу"
 :}
