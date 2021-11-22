@@ -7,6 +7,7 @@ module Person ( travel
               , travelToLoc
               , travelToMob
               , travelAndKill
+              , findCurrentLoc
               , login
               , cover
               , initPerson
@@ -54,7 +55,10 @@ data Person = Person { personName :: Name
                      } deriving (Eq, Show)
 
 run :: (MonadIO m, Show a) => (Output ByteString, Input Event) -> Pipe Event Event m a -> m ()
-run person task = runEffect $ fromInput (snd person) >-> (task >>= print) >-> commandExecutor >-> toOutput (fst person)
+run person task =
+  runEffect $
+  fromInput (snd person) >-> (task >>= print) >-> commandExecutor >->
+  toOutput (fst person)
 
 runE :: (MonadIO m, Show a) => (Output ByteString, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
 runE person task = run person $ (runExceptP task)
@@ -106,16 +110,23 @@ travel path locationEvent world = go path locationEvent
                                                  evt -> yield evt >> waitMove remainingPath
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
-travelToLoc substr world = action findLocation
-  where findLocation = findLocationsBy substr world
-        action [] = lift $ throwError "no matching locations found"
-        action [locTo] = (liftIO $ putStrLn ("travelling to " <> showt locTo)) >> travelAction locTo
-        action _ = (liftIO $ printLocations substr world) >> (lift $ throwError  "multiple locations found")
-        travelAction to = findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
-          case findTravelPath from to (_worldMap world)
-            of (Just path) -> travelPath path currLocEvt
-               Nothing -> lift $ throwError "no path found"
-        travelPath path currLocEvt = travel path currLocEvt world
+travelToLoc substr world =
+  findLocation $ \case
+    [] -> lift $ throwError "no matching locations found"
+    [locTo] ->
+      (liftIO $ putStrLn ("travelling to " <> showt locTo)) >>
+      travelAction locTo
+    _ ->
+      (liftIO $ printLocations substr world) >>
+      (lift $ throwError "multiple locations found")
+  where
+    findLocation = findLocationsBy substr world
+    travelAction to =
+      findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
+        case findTravelPath from to (_worldMap world) of
+          (Just path) -> travelPath path currLocEvt
+          Nothing -> lift $ throwError "no path found"
+    travelPath path currLocEvt = travel path currLocEvt world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin
