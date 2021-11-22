@@ -66,7 +66,7 @@ runE person task = run person $ (runExceptP task)
 initPerson :: Person -> IO (Output Event, Input Event)
 initPerson person = do
   (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 5
-  (outToExecutorBox, inToExecutorBox) <- spawn $ newest 5
+  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 5
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
   async $ connect mudHost mudPort $ \(sock, _) -> do
@@ -85,6 +85,7 @@ initPerson person = do
     performGC
     atomically sealToLoggerBox
     atomically sealToServerBox
+    atomically sealToExecutorBox
     print "disconnected"
   return (outToExecutorBox, snd toDrifterBox)
     where mudHost = T.unpack . host . residence $ person
