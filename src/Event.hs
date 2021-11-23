@@ -144,7 +144,7 @@ instance Binary InventoryItem
 data Event = ConsoleInput Text
            | ConsoleOutput ByteString
            | SendToServer Text
-           | SendOnPulse Text
+           | SendOnPulse Int Text
            | ServerInput ByteString
            | ServerEvent { _serverEvent :: ServerEvent }
            | ServerClosedChannel

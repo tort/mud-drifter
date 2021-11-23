@@ -5,26 +5,19 @@
 :}
 
 :set -XLambdaCase
-
 :set -XDataKinds
-
 import TextShow
-
 import Pipes.Lift
-
 import Data.Map.Strict ((!))
-
 import qualified Data.Map.Strict as M
-
 import qualified Data.List as L
-
 import qualified Data.Set as S
-
 import qualified Data.Text as T
-
 import qualified Pipes.Prelude as PP
-
 import Control.Lens
+import Person
+import World
+import Event
 
 :{
 let rentLocation = "5000"
@@ -91,10 +84,6 @@ runEffect $ PP.mapM_ putStrLn <-< PP.map renderHitEvents <-< PP.filter isWhiteSp
 
 world <- loadWorld "/home/tort/mud-drifter/" hardcodedProperties
 
-import Person
-
-import World
-
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
@@ -127,17 +116,17 @@ run g $ testParTasks world g
 g & runE $ travelToLoc bankLocation world
 
 :{
-runTwo :: (Output ByteString, Input Event) -> IO ()
+runTwo :: (Output Event, Input Event) -> IO ()
 runTwo person@(personOut, personIn) =
   spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
     spawn' (newest 100) >>= \(subtaskOut2, subtaskIn2, seal2) ->
       (async $
-       waitLocation (LocationId 5000) (personOut, subtaskIn1) >>
+       waitLocation 3 (LocationId 5000) (personOut, subtaskIn1) >>
        print "subtask1 finished" >>
        (atomically seal1) >>
        (atomically seal2)) >>
       (async $
-       waitLocation (LocationId 5032) (personOut, subtaskIn2) >>
+       waitLocation 2 (LocationId 5000) (personOut, subtaskIn2) >>
        print "subtask2 finished" >>
        (atomically seal1) >>
        (atomically seal2)) >>
@@ -145,8 +134,8 @@ runTwo person@(personOut, personIn) =
        fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
        print "read finished") >>
       pure ()
-waitLocation :: LocationId -> (Output ByteString, Input Event) -> IO ()
-waitLocation locIdToWait (outChan, inChan) = runEffect $ fromInput inChan >-> awaitLoc
+waitLocation :: Int -> LocationId -> (Output Event, Input Event) -> IO ()
+waitLocation taskId locIdToWait (outChan, inChan) = runEffect $ fromInput inChan >-> awaitLoc
   where
     awaitLoc =
       await >>= \case
@@ -156,9 +145,9 @@ waitLocation locIdToWait (outChan, inChan) = runEffect $ fromInput inChan >-> aw
             else awaitLoc
         _ -> awaitLoc
     sendOutput text = do
-      atomically $ PC.send outChan (SendToServer text)
+      atomically $ PC.send outChan (SendOnPulse taskId text)
       pure ()
-    jump = "говорить помогу"
+    jump = "говорить помогу" <> showt taskId
 :}
 
 putStrLn $ showPath world $ findTravelPath (LocationId 5000) (LocationId 5032) (_worldMap world)

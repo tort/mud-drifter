@@ -12,30 +12,26 @@ import Pipes.Concurrent hiding (send)
 import Pipes.Network.TCP
 import Network.Simple.TCP
 import Data.Text
+import Data.Heap
+import qualified Data.Heap as H
 import Event
 
 commandExecutor :: MonadIO m => Pipe Event ByteString m ()
-commandExecutor = exec Nothing
+commandExecutor = exec H.empty
   where
-    exec acc@Nothing =
+    exec :: MonadIO m => MaxPrioHeap Int Text -> Pipe Event ByteString m ()
+    exec heap =
       await >>= \case
         (SendToServer text) ->
-          (yield . renderCommand $ text) >>
-          (liftIO $ putStrLn text) >>
-          exec acc
-        event@SendOnPulse {} -> exec (Just event)
-        _ -> exec acc
-    exec acc@(Just (SendOnPulse textOnPulse)) =
-      await >>= \case
-        (SendToServer text) ->
-          (yield . renderCommand $ text) >>
-          (liftIO $ putStrLn text) >>
-          exec acc
-        event@SendOnPulse {} -> exec (Just event)
+          (yield . renderCommand $ text) >> (liftIO $ putStrLn text) >>
+          exec heap
+        event@(SendOnPulse prio text)  -> exec (insert (prio, text) heap)
         PulseEvent ->
-          (liftIO $ putStrLn textOnPulse) >>
-          (yield . renderCommand $ textOnPulse) >>
-          exec Nothing
+          case view heap of
+            Nothing -> exec heap
+            (Just ((_, text), rest)) ->
+              (liftIO $ putStrLn text) >> (yield . renderCommand $ text) >>
+              exec rest
 {-
   forever $
   await >>= \case
