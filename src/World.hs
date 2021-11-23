@@ -363,15 +363,10 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
         removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> showt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
 
-travelAction :: MonadIO m => World -> ServerEvent -> LocationId -> Pipe Event Event m ServerEvent
-travelAction world fromLocEvt to = case M.lookup (from, to) (_directions world) of
-                                          Nothing -> return fromLocEvt
-                                          (Just dir) -> openObstacle world fromLocEvt dir >> movePipe dir
-  where from = _locationId $ _location fromLocEvt
-        movePipe dir = await >>= \case PulseEvent -> yield (SendToServer . showt $ dir) >> waitLocation
-                                       evt -> yield evt >> movePipe dir
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
-                                                                  _ -> waitLocation
+travelAction :: MonadIO m => World -> LocationId -> LocationId -> Pipe Event Event m ()
+travelAction world from to = case M.lookup (from, to) (_directions world) of
+                                          Nothing -> return ()
+                                          (Just dir) -> yield (SendToServer . showt $ dir)
 
 payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
 payOldGipsy = move

@@ -110,16 +110,19 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
-travel path world = go path
+travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
+travel path locationEvent world = go path locationEvent
   where
-    go [] = lift $ throwError "path lost"
-    go [_] = return ()
-    go remainingPath@(from:to:xs) =
+    go [] _ = lift $ throwError "path lost"
+    go [_] locEvt = return locEvt
+    go remainingPath@(from:to:xs) locEvt =
       await >>= \case
         (ServerEvent locEvt@LocationEvent {}) ->
-          go (dropWhile (/= (_locationId $ _location locEvt)) remainingPath)
-        _ -> go remainingPath
+          travelAction world from to >>
+          go
+            (dropWhile (/= (_locationId $ _location locEvt)) remainingPath)
+            locEvt
+        _ -> go remainingPath locEvt
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelToLoc substr world = action findLocation
@@ -135,9 +138,9 @@ travelToLoc substr world = action findLocation
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
         case findTravelPath from to (_worldMap world) of
-          (Just path) -> travelPath path
+          (Just path) -> travelPath path currLocEvt
           Nothing -> lift $ throwError "no path found"
-    travelPath path = travel path world
+    travelPath path currLocEvt = travel path currLocEvt world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin
@@ -235,5 +238,5 @@ supplyTask = init
 
 runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
-  cover world >-> supplyTask >-> killEmAll world >-> travel path world
+  cover world >-> supplyTask >-> killEmAll world >-> travel path locEvt world
   where path = zonePath world startFrom
