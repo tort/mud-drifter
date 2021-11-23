@@ -110,20 +110,16 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
-travel path locationEvent world = go path locationEvent
+travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
+travel path world = go path
   where
-    go [] _ = lift $ throwError "path lost"
-    go [_] locEvt = return locEvt
-    go remainingPath@(from:to:xs) locEvtFrom =
-      (waitMove remainingPath >-> travelAction world locEvtFrom to) >>= \locEvt@LocationEvent {} ->
-        go
-          (dropWhile (/= (_locationId $ _location locEvt)) remainingPath)
-          locEvt
-    waitMove remainingPath =
+    go [] = lift $ throwError "path lost"
+    go [_] = return ()
+    go remainingPath@(from:to:xs) =
       await >>= \case
-        (ServerEvent l@LocationEvent {}) -> return l
-        evt -> yield evt >> waitMove remainingPath
+        (ServerEvent locEvt@LocationEvent {}) ->
+          go (dropWhile (/= (_locationId $ _location locEvt)) remainingPath)
+        _ -> go remainingPath
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelToLoc substr world = action findLocation
@@ -139,9 +135,9 @@ travelToLoc substr world = action findLocation
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
         case findTravelPath from to (_worldMap world) of
-          (Just path) -> travelPath path currLocEvt
+          (Just path) -> travelPath path
           Nothing -> lift $ throwError "no path found"
-    travelPath path currLocEvt = travel path currLocEvt world
+    travelPath path = travel path world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin
@@ -239,5 +235,5 @@ supplyTask = init
 
 runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
-  cover world >-> supplyTask >-> killEmAll world >-> travel path locEvt world
+  cover world >-> supplyTask >-> killEmAll world >-> travel path world
   where path = zonePath world startFrom
