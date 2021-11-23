@@ -32,13 +32,6 @@ commandExecutor = exec H.empty
             (Just ((_, text), rest)) ->
               (liftIO $ putStrLn text) >> (yield . renderCommand $ text) >>
               exec rest
-{-
-  forever $
-  await >>= \case
-    (SendToServer text) ->
-      (liftIO $ putStrLn text) >> (yield $ encodeUtf8 $ snoc text '\n')
-    _ -> return ()
--}
 
 renderCommand text = encodeUtf8 $ snoc text '\n'
 
