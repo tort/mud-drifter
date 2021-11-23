@@ -59,7 +59,10 @@ run (outChan, inChan) task =
   runEffect $ fromInput inChan >-> (task >>= print) >-> sendOutput
   where
     sendOutput =
+      forever $
       await >>= \case
+        evt@SendToServer {} ->
+          (liftIO . atomically . PC.send outChan $ evt) >> pure ()
         evt@SendOnPulse {} ->
           (liftIO . atomically . PC.send outChan $ evt) >> pure ()
         _ -> pure ()
