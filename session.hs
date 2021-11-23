@@ -121,12 +121,12 @@ runTwo person@(personOut, personIn) =
   spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
     spawn' (newest 100) >>= \(subtaskOut2, subtaskIn2, seal2) ->
       (async $
-       waitLocation 3 (LocationId 5000) (personOut, subtaskIn1) >>
+       run (personOut, subtaskIn1) (awaitLoc 3 (LocationId 5000)) >>
        print "subtask1 finished" >>
        (atomically seal1) >>
        (atomically seal2)) >>
       (async $
-       waitLocation 2 (LocationId 5000) (personOut, subtaskIn2) >>
+       run (personOut, subtaskIn2) (awaitLoc 2 (LocationId 5000)) >>
        print "subtask2 finished" >>
        (atomically seal1) >>
        (atomically seal2)) >>
@@ -134,19 +134,16 @@ runTwo person@(personOut, personIn) =
        fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
        print "read finished") >>
       pure ()
-waitLocation :: Int -> LocationId -> (Output Event, Input Event) -> IO ()
-waitLocation taskId locIdToWait (outChan, inChan) = runEffect $ fromInput inChan >-> awaitLoc
+awaitLoc :: Int -> LocationId -> Pipe Event Event IO ()
+awaitLoc taskId locIdToWait = inner
   where
-    awaitLoc =
+    inner =
       await >>= \case
         (ServerEvent (LocationEvent (Event.Location (locId) _) _ _ _)) ->
           if locId == locIdToWait
-            then liftIO $ sendOutput jump
-            else awaitLoc
-        _ -> awaitLoc
-    sendOutput text = do
-      atomically $ PC.send outChan (SendOnPulse taskId text)
-      pure ()
+            then yield $ SendOnPulse taskId jump
+            else inner
+        _ -> inner
     jump = "говорить помогу" <> showt taskId
 :}
 

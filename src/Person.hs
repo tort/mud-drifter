@@ -55,10 +55,14 @@ data Person = Person { personName :: Name
                      } deriving (Eq, Show)
 
 run :: (MonadIO m, Show a) => (Output Event, Input Event) -> Pipe Event Event m a -> m ()
-run person task =
-  runEffect $
-  fromInput (snd person) >-> (task >>= print) >-> 
-  toOutput (fst person)
+run (outChan, inChan) task =
+  runEffect $ fromInput inChan >-> (task >>= print) >-> sendOutput
+  where
+    sendOutput =
+      await >>= \case
+        evt@SendOnPulse {} ->
+          (liftIO . atomically . PC.send outChan $ evt) >> pure ()
+        _ -> pure ()
 
 runE :: (MonadIO m, Show a) => (Output Event, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
 runE person task = run person $ (runExceptP task)
@@ -105,12 +109,18 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
 
 travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
 travel path locationEvent world = go path locationEvent
-  where go [] _ = lift $ throwError "path lost"
-        go [_] locEvt = return locEvt
-        go remainingPath@(from:to:xs) locEvtFrom = (waitMove remainingPath >-> travelAction world locEvtFrom to) >>= \locEvt@LocationEvent{} ->
-                                                                              go (dropWhile (/= (_locationId $ _location locEvt)) remainingPath) locEvt
-        waitMove remainingPath = await >>= \case (ServerEvent l@LocationEvent{}) -> return l
-                                                 evt -> yield evt >> waitMove remainingPath
+  where
+    go [] _ = lift $ throwError "path lost"
+    go [_] locEvt = return locEvt
+    go remainingPath@(from:to:xs) locEvtFrom =
+      (waitMove remainingPath >-> travelAction world locEvtFrom to) >>= \locEvt@LocationEvent {} ->
+        go
+          (dropWhile (/= (_locationId $ _location locEvt)) remainingPath)
+          locEvt
+    waitMove remainingPath =
+      await >>= \case
+        (ServerEvent l@LocationEvent {}) -> return l
+        evt -> yield evt >> waitMove remainingPath
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelToLoc substr world = action findLocation
