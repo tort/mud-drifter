@@ -16,22 +16,27 @@ import Data.Heap
 import qualified Data.Heap as H
 import Event
 
+data Command = Command Int Text deriving (Eq, Show)
+
+instance Ord Command where
+  compare (Command l _) (Command r _) = compare l r
+
 commandExecutor :: MonadIO m => Pipe Event ByteString m ()
 commandExecutor = exec H.empty
   where
-    exec :: MonadIO m => MaxPrioHeap Int Text -> Pipe Event ByteString m ()
+    exec :: MonadIO m => MaxHeap Command -> Pipe Event ByteString m ()
     exec heap =
       await >>= \case
         (SendToServer text) ->
           (yield . renderCommand $ text) >> (liftIO $ putStrLn text) >>
           exec heap
-        event@(SendOnPulse prio text)  -> exec (insert (prio, text) heap)
+        event@(SendOnPulse prio text)  -> exec (insert (Command prio text) heap)
         PulseEvent ->
           case view heap of
             Nothing -> exec heap
-            (Just ((_, text), rest)) ->
+            (Just (item@(Command prio text), rest)) ->
               (liftIO $ putStrLn text) >> (yield . renderCommand $ text) >>
-              exec rest
+              exec (H.dropWhile (== item) rest)
 
 renderCommand text = encodeUtf8 $ snoc text '\n'
 

@@ -1,9 +1,3 @@
-:{
-  task :: Producer () IO ()
-  task = liftIO $ threadDelay $ 1*1000*1000
-  --in replicateM_ 5 task
-:}
-
 :set -XLambdaCase
 :set -XDataKinds
 import TextShow
@@ -113,7 +107,9 @@ g & runE $ travelToLoc rentLocation world
 
 run g $ testParTasks world g
 
-g & runE $ travelToLoc bankLocation world
+run g PP.drain
+
+g & runE $ travelToLoc rentLocation world
 
 :{
 runTwo :: (Output Event, Input Event) -> IO ()
@@ -146,6 +142,9 @@ awaitLoc taskId locIdToWait = inner
         _ -> inner
     jump = "говорить помогу" <> showt taskId
 :}
+
+--find connections of a location
+(listFilesIn "/home/tort/mud-drifter/archive/server-input-log/" ) >>= (extractDirections . parseServerEvents . loadLogs) >>= traverse_ print . L.filter (\k -> (LocationId 5011 == fst k) || (LocationId 5011 == snd k)) . M.keys
 
 putStrLn $ showPath world $ findTravelPath (LocationId 5000) (LocationId 5032) (_worldMap world)
 

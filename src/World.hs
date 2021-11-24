@@ -6,6 +6,10 @@
 {-# LANGUAGE DataKinds #-}
 
 module World ( locsByRegex
+             , loadLogs
+             , listFilesIn
+             , extractLocs
+             , extractDirections
              , showLocs
              , loadWorld
              , parseServerEvents
@@ -182,7 +186,7 @@ extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter (has _ItemS
 
 extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId, LocationId) RoomDir)
 extractDirections serverEvents = PP.fold accDirections M.empty identity locationEventsAndMovesTriples
-  where locationEventsAndMoves = serverEvents >-> PP.filter (\evt -> has _LocationEvent evt || has _MoveEvent evt)
+  where locationEventsAndMoves = serverEvents >-> PP.filter (\evt -> has _LocationEvent evt || has _MoveEvent evt || has _CodepagePrompt evt)
         locationEventsAndMovesTriples = (locationEventsAndMoves >-> PP.scan toTriples [] identity
                                                       >-> PP.filter mappableMove)
                                                                                       where toTriples acc event
@@ -227,14 +231,14 @@ loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
 loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
-  directions <- extractDirections serverLogEventsProducer
+  directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
   locationEvents <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
-  itemsStats <- PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
-  itemsOnMap <- (discoverItems . parseServerEvents . loadLogs) serverLogFiles
-  mobsOnMap <- (extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
-  questActions <- (obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
-  obstaclesOnMap <- obstaclesOnMap
-  mobsData <- mobsData
+  itemsStats <- pure []--PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
+  itemsOnMap <- pure M.empty--(discoverItems . parseServerEvents . loadLogs) serverLogFiles
+  mobsOnMap <- pure M.empty--(extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
+  questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
+  obstaclesOnMap <- pure M.empty--obstaclesOnMap
+  mobsData <- pure M.empty --mobsData
   let worldMap = buildMap locationEvents directions
    in return World { _worldMap = worldMap
                    , _locationEvents = locationEvents
@@ -366,7 +370,7 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
 travelAction :: MonadIO m => World -> LocationId -> LocationId -> Pipe Event Event m ()
 travelAction world from to = case M.lookup (from, to) (_directions world) of
                                           Nothing -> return ()
-                                          (Just dir) -> yield (SendToServer . showt $ dir)
+                                          (Just dir) -> yield (SendOnPulse 5 . showt $ dir)
 
 payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
 payOldGipsy = move

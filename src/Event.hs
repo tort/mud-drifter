@@ -44,6 +44,7 @@ module Event ( Event(..)
              , nameCases
              , inRoomDesc
              , everAttacked
+             , _CodepagePrompt
              , _CheckNominative
              , _CheckGenitive
              , _CheckAccusative
