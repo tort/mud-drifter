@@ -113,16 +113,14 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
 travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ()
 travel path locationEvent world = doStep path
   where
-    doStep [] = lift $ throwError "path is empty"
+    doStep [] = lift $ throwError "path lost"
     doStep [_] = pure ()
-    doStep p@(from:to:xs) = travelAction world from to >> go p locationEvent
-    go [] _ = lift $ throwError "path lost"
-    go [_] locEvt = return ()
-    go remainingPath@(from:to:xs) locEvt =
+    doStep p@(from:to:xs) = travelAction world from to >> waitMove p
+    waitMove remainingPath =
       await >>= \case
         (ServerEvent newLoc@LocationEvent {}) ->
            doStep $ dropWhile (/= (_locationId $ _location newLoc)) remainingPath
-        _ -> go remainingPath locEvt
+        _ -> waitMove remainingPath
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ()
 travelToLoc substr world = action findLocation
