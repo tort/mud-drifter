@@ -111,19 +111,17 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
                              evt -> yield evt >> go
 
 travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
-travel path locationEvent world = travelPath path
+travel path locationEvent world = doStep path
   where
-    travelPath [] = lift $ throwError "path is empty"
-    travelPath [_] = lift $ throwError "already there!"
-    travelPath p@(from:to:xs) = travelAction world from to >> go p locationEvent
+    doStep [] = lift $ throwError "path is empty"
+    doStep [_] = pure ()
+    doStep p@(from:to:xs) = travelAction world from to >> go p locationEvent
     go [] _ = lift $ throwError "path lost"
     go [_] locEvt = return locEvt
     go remainingPath@(from:to:xs) locEvt =
       await >>= \case
         (ServerEvent newLoc@LocationEvent {}) ->
-          let newPath =
-                dropWhile (/= (_locationId $ _location newLoc)) remainingPath
-           in travelPath newPath >> go newPath newLoc
+           doStep $ dropWhile (/= (_locationId $ _location newLoc)) remainingPath
         _ -> go remainingPath locEvt
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
@@ -140,9 +138,9 @@ travelToLoc substr world = action findLocation
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
         case findTravelPath from to (_worldMap world) of
-          (Just path) -> travelPath path currLocEvt
+          (Just path) -> doStep path currLocEvt
           Nothing -> lift $ throwError "no path found"
-    travelPath path currLocEvt = travel path currLocEvt world
+    doStep path currLocEvt = travel path currLocEvt world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin

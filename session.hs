@@ -103,6 +103,8 @@ g & runE $ cover world
 
 g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
+g & runE $ travelToLoc bankLocation world
+
 g & runE $ travelToLoc rentLocation world
 
 run g $ testParTasks world g
