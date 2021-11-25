@@ -5,8 +5,8 @@
 
 module Person ( travel
               , travelToLoc
-              , travelToMob
-              , travelAndKill
+              --, travelToMob
+              --, travelAndKill
               , findCurrentLoc
               , login
               , cover
@@ -14,7 +14,7 @@ module Person ( travel
               , run
               , runE
               , killEmAll
-              , runZone
+              --, runZone
               , Person(..)
               , MudServer(..)
               ) where
@@ -110,21 +110,21 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
+travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ()
 travel path locationEvent world = doStep path
   where
     doStep [] = lift $ throwError "path is empty"
     doStep [_] = pure ()
     doStep p@(from:to:xs) = travelAction world from to >> go p locationEvent
     go [] _ = lift $ throwError "path lost"
-    go [_] locEvt = return locEvt
+    go [_] locEvt = return ()
     go remainingPath@(from:to:xs) locEvt =
       await >>= \case
         (ServerEvent newLoc@LocationEvent {}) ->
            doStep $ dropWhile (/= (_locationId $ _location newLoc)) remainingPath
         _ -> go remainingPath locEvt
 
-travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ServerEvent
+travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ()
 travelToLoc substr world = action findLocation
   where
     findLocation = findLocationsBy substr world
@@ -187,6 +187,7 @@ killEmAll world = (forever lootAll) >-> awaitTargets
         chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
         chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
+{-
 travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelToMob world mob = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)
@@ -217,6 +218,7 @@ travelAndKill world targets mob = pipe $ mobArea
                                         PulseEvent -> awaitFightEnd
                                         evt -> yield evt >> awaitFightEnd
         target = fromJust . join . find isJust . fmap (flip M.lookup targets)
+-}
 
 supplyTask :: Monad m => Pipe Event Event m ServerEvent
 supplyTask = init
@@ -236,7 +238,9 @@ supplyTask = init
                                                   PulseEvent -> awaitFullHp maxHp maxMv
                                                   evt -> yield evt >> awaitFullHp maxHp maxMv
 
+{-
 runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
   cover world >-> supplyTask >-> killEmAll world >-> travel path locEvt world
   where path = zonePath world startFrom
+-}
