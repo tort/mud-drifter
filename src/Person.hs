@@ -72,8 +72,8 @@ runE person task = run person $ (runExceptP task)
 
 initPerson :: Person -> IO (Output Event, Input Event)
 initPerson person = do
-  (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 5
-  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 5
+  (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 6
+  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 6
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
   async $ connect mudHost mudPort $ \(sock, _) -> do
@@ -160,26 +160,18 @@ killEmAll world = (forever lootAll) >-> awaitTargets
   where lootAll = await >>= \case evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
                                                                       yield (SendToServer "взять все труп")
                                                                       yield (SendToServer "брос труп")
-                                                                      yield evt
                                   evt@(ServerEvent (LootItem _ _)) -> do yield (SendToServer "полож все мешок")
-                                                                         yield evt
                                   evt -> yield evt
-        awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> yield evt >> awaitTargets
+        awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (chooseTarget mobs)
-                                       evt -> yield evt >> awaitTargets
-        attack evt Nothing = yield evt >> awaitTargets
-        attack e (Just mobAlias) = await >>= \case PulseEvent -> yield (SendToServer $ "убить " <> (unObjRef mobAlias)) >> awaitFightBegin 0
-                                                   evt -> yield evt >> attack e (Just mobAlias)
-        awaitFightBegin pulsesCount = await >>= \case evt@(ServerEvent FightPromptEvent{}) -> yield evt >> awaitFightEnd
-                                                      PulseEvent -> if pulsesCount < 2
-                                                                       then awaitFightBegin (pulsesCount + 1)
-                                                                       else yield (SendToServer "смотреть") >> awaitTargets
-                                                      evt -> yield evt >> awaitFightBegin pulsesCount
-        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> yield evt >> watch
-                                        PulseEvent -> awaitFightEnd
-                                        evt -> yield evt >> awaitFightEnd
-        watch = await >>= \case PulseEvent -> yield (SendToServer "смотреть") >> awaitTargets
-                                evt -> yield evt >> watch
+                                       evt -> awaitTargets
+        attack evt Nothing = awaitTargets
+        attack e (Just mobAlias) = yield (SendToServer $ "убить " <> (unObjRef mobAlias)) >> awaitFightBegin 0
+        awaitFightBegin pulsesCount = await >>= \case evt@(ServerEvent FightPromptEvent{}) -> awaitFightEnd
+                                                      evt -> awaitFightBegin pulsesCount
+        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> watch
+                                        evt -> awaitFightEnd
+        watch = yield (SendOnPulse 1 "смотреть") >> awaitTargets
         findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Alias)
         findAlias mobRef = _alias . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
         chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)

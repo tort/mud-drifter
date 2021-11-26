@@ -6,6 +6,7 @@
 {-# LANGUAGE DataKinds #-}
 
 module World ( locsByRegex
+             , mobsData
              , loadLogs
              , listFilesIn
              , extractLocs
@@ -253,7 +254,7 @@ loadWorld currentDir customMobProperties = do
                    }
 
 mobsData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobsData = mobsWithTargetFlag
+mobsData = mobCasesByInRoomDesc
   where mobsWithTargetFlag = M.unionWith (<>) <$> mobs <*> targetsByInRoomDescs
         targetsByInRoomDescs = mobsByNominatives >>= \mobsByNoms ->
                                  targets >>= \mbt ->
@@ -266,7 +267,9 @@ mobsData = mobsWithTargetFlag
         targets = S.toList . S.fromList <$> PP.toListM (PP.map _target <-< PP.filter (has _FightPromptEvent) <-< serverLogEventsProducer)
         allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc . S.toList . S.fromList <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter (has _LocationEvent) <-< serverLogEventsProducer)
         mobFromRoomDesc desc = nameCases . inRoomDesc .~ Just desc $ mempty
-        mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< serverLogEventsProducer
+        mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< archiveToServerEvents
+        archiveToServerEvents :: Producer ServerEvent IO ()
+        archiveToServerEvents = (liftIO $ listFilesIn ("." ++ "/" ++ serverLogDir)) >>= (parseServerEvents . loadLogs)
         groupByCase getter = M.fromList . catMaybes . fmap (\mobCases -> (getter . _nameCases) mobCases >>= \cs -> return (cs, mobCases))
         defaultAlias = T.intercalate "." . T.words
         allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] = locWithOneMob locEvt

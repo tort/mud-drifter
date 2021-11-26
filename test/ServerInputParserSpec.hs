@@ -34,7 +34,7 @@ spec = describe "Parser" $ do
                                          shouldSucceedOn serverInputParser log
         it "parse codepage prompt" $ do log <- C8.readFile "test/logs/codepagePrompt.log"
                                         log ~> serverInputParser `shouldParse` CodepagePrompt
-        it "parse login prompt" $ do log <- C8.readFile "test/logs/loginPrompt.log"
+	it "parse login prompt" $ do log <- C8.readFile "test/logs/loginPrompt.log"
                                      log ~> serverInputParser `shouldParse` LoginPrompt
         it "parse password prompt" $ do log <- C8.readFile "test/logs/passwordPrompt.log"
                                         log ~> serverInputParser `shouldParse` PasswordPrompt

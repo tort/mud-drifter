@@ -290,6 +290,22 @@ data MobStats = MobStats { _nameCases :: NameCases Mob
                          , _everAttacked :: Maybe (EverAttacked)
                          } deriving (Eq, Ord, Generic, Show)
 
+instance TextShow MobStats where
+  showt = showt . _nameCases
+
+instance TextShow (NameCases Mob) where
+  showt v = 
+    T.intercalate "\n" $
+     [ maybe "" unObjRef $ _inRoomDesc v
+     , maybe "" unObjRef $ _nominative v
+     , maybe "" unObjRef $ _genitive v
+     , maybe "" unObjRef $ _accusative v
+     , maybe "" unObjRef $ _dative v
+     , maybe "" unObjRef $ _instrumental v
+     , maybe "" unObjRef $ _prepositional v
+     ]
+  --showt v = T.intercalate "\n" . ((\f -> (maybe "" showt . unObjRef . f) v) <$> [_inRoomDesc, _nominative, _genitive, _accusative, _dative, _instrumental, _prepositional])
+
 instance Semigroup MobStats where
   left <> right = MobStats { _nameCases = _nameCases left <> _nameCases right
                            , _everAttacked = _everAttacked left <> _everAttacked right

@@ -70,11 +70,21 @@ let rentLocation = "5000"
 
 stack test --file-watch
 
+:{
+isCheckCaseEvt evt = isCaseEvt evt
+isCaseEvt evt = has _CheckNominative evt || has _CheckGenitive evt || has _CheckAccusative evt || has _CheckDative evt || has _CheckInstrumental evt || has _CheckPrepositional evt
+:}
+
+(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter isCheckCaseEvt >-> PP.mapM_ (putStrLn . showt))
+
 mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats) <-< PP.filter attackLonelyMob <-< scanWindow 4 <-< serverLogEventsProducer )
 
 mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats2) <-< PP.filter lonelyMobAttacksMe <-< scanWindow 3 <-< serverLogEventsProducer )
 
 runEffect $ PP.mapM_ putStrLn <-< PP.map renderHitEvents <-< PP.filter isWhiteSpiderEvent <-< serverLogEventsProducer
+
+--load known mobs
+mobsData >>= pure . M.keys >>= traverse_ (putStrLn . showt)
 
 world <- loadWorld "/home/tort/mud-drifter/" hardcodedProperties
 
@@ -83,6 +93,7 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
+  
 g <- initPerson genod
 
 g & run $ login
@@ -103,9 +114,11 @@ g & runE $ cover world
 
 g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
+g & runE $ travelToLoc "5023" world
+
 g & runE $ travelToLoc bankLocation world
 
-g & runE $ travelToLoc rentLocation world
+g & runE $ travelToLoc rentLocation world >> yield (SendToServer "постой") >> yield (SendToServer "0")
 
 run g $ testParTasks world g
 
