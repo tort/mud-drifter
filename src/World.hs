@@ -7,9 +7,9 @@
 
 module World ( locsByRegex
              , mobsData
-             , targetStats
-             , mobCasesByInRoomDesc
-             , groupByCase2
+             , nominativeToEverAttacked
+             , inRoomDescToMobCase
+             , groupByCase
              , loadLogs
              , listFilesIn
              , extractLocs
@@ -259,14 +259,18 @@ loadWorld currentDir customMobProperties = do
 archiveToServerEvents :: Producer ServerEvent IO ()
 archiveToServerEvents = (liftIO $ listFilesIn ("." ++ "/" ++ serverLogDir)) >>= (parseServerEvents . loadLogs)
 
-groupByCase2 getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCases $ stats, stats)) . L.filter (isJust . getter . _nameCases)
-  
-targetStats :: IO (Map (ObjRef Mob Nominative) MobStats)
-targetStats = groupByCase2 _nominative . fmap (\ref -> mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~ ref) <$> (PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
+groupByCase :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> [MobStats] -> Map (ObjRef Mob b) MobStats
+groupByCase getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCases $ stats, stats)) . L.filter (isJust . getter . _nameCases)
 
-mobCasesByInRoomDesc :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobCasesByInRoomDesc =
-  groupByCase2 _inRoomDesc <$>
+regroupTo :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> Map (ObjRef Mob a) MobStats -> Map (ObjRef Mob b) MobStats
+regroupTo getter = groupByCase getter . fmap snd . M.toList
+  
+nominativeToEverAttacked :: IO (Map (ObjRef Mob Nominative) MobStats)
+nominativeToEverAttacked = groupByCase _nominative . fmap (\ref -> mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~ ref) <$> (PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
+
+inRoomDescToMobCase :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
+inRoomDescToMobCase =
+  groupByCase _inRoomDesc <$>
   (PP.toListM $
    PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-<
    PP.filter allCasesWindow <-<
@@ -306,22 +310,10 @@ mobCasesByInRoomDesc =
 
 mobsData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
 mobsData =
-  (groupByCase2 _inRoomDesc . fmap snd . M.toList) <$> (M.unionWith (<>) <$> (groupByCase2 _nominative . fmap snd . M.toList <$> mobCasesByInRoomDesc) <*> targetStats)
-  where mobsWithTargetFlag = M.unionWith (<>) <$> mobs <*> targetsByInRoomDescs
-        targetsByInRoomDescs = mobsByNominatives >>= \mobsByNoms ->
-                                 targets >>= \mbt ->
-                                   return . groupByCase _inRoomDesc . fmap (everAttacked ?~ EverAttacked True) . catMaybes . fmap (\t -> M.lookup t mobsByNoms) $ mbt
-        mobsByNominatives :: IO (Map (ObjRef Mob Nominative) MobStats)
-        mobsByNominatives = groupByCase _nominative . M.elems <$> mobs
-        mobs :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-        mobs = (\mobCases allRoomDescs -> M.unionWith (<>) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
-        targets :: IO [ObjRef Mob Nominative]
-        targets = PP.toListM (PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
-        allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter (has _LocationEvent) <-< serverLogEventsProducer)
-        mobFromRoomDesc desc = nameCases . inRoomDesc .~ Just desc $ mempty
-        foldToStatsMap :: Producer MobStats IO () -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
-        foldToStatsMap = fmap fst . PP.fold' (\acc item -> M.insert (fromJust . _inRoomDesc . _nameCases $ item) item acc) M.empty identity
-        groupByCase getter = M.fromList . catMaybes . fmap (\mobCases -> (getter . _nameCases) mobCases >>= \cs -> return (cs, mobCases))
+  regroupTo _inRoomDesc <$>
+  (M.unionWith (<>) <$> nominativeToMobCase <*> nominativeToEverAttacked)
+  where
+    nominativeToMobCase = regroupTo _nominative <$> inRoomDescToMobCase
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
