@@ -110,8 +110,8 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId] -> ServerEvent -> World -> Pipe Event Event (ExceptT Text m) ()
-travel path locationEvent world = doStep path
+travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event (ExceptT Text m) ()
+travel path world = doStep path
   where
     doStep [] = lift $ throwError "path lost"
     doStep [_] = pure ()
@@ -138,7 +138,7 @@ travelToLoc substr world = action findLocation
         case findTravelPath from to (_worldMap world) of
           (Just path) -> doStep path currLocEvt
           Nothing -> lift $ throwError "no path found"
-    doStep path currLocEvt = travel path currLocEvt world
+    doStep path currLocEvt = travel path world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin
@@ -229,8 +229,8 @@ supplyTask = init
                                                   evt -> yield evt >> awaitFullHp maxHp maxMv
 
 {-
-runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ServerEvent
+runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ()
 runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
-  cover world >-> supplyTask >-> killEmAll world >-> travel path locEvt world
+  cover world >-> supplyTask >-> killEmAll world >-> travel path world
   where path = zonePath world startFrom
 -}

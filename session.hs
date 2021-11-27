@@ -12,6 +12,7 @@ import Control.Lens
 import Person
 import World
 import Event
+import Mapper
 
 :{
 let rentLocation = "5000"
@@ -84,11 +85,13 @@ mobsData >>= traverse_ (putStrLn . showt)
 mobsData >>= pure . M.toList >>= traverse_ (putStrLn . showt . snd)
 
 world <- loadWorld "/home/tort/mud-drifter/" hardcodedProperties
+
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
                }
 g <- initPerson genod
+
 g & run $ login
 
 g & run $ PP.print
@@ -107,7 +110,7 @@ g & runE $ cover world
 
 g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
-g & runE $ travelToLoc "5023" world
+g & runE $ travelToLoc "5100" world >> travel (zonePath world 5100) world
 
 g & runE $ travelToLoc bankLocation world
 
