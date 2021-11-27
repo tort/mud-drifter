@@ -7,6 +7,9 @@
 
 module World ( locsByRegex
              , mobsData
+             , targetStats
+             , mobCasesByInRoomDesc
+             , groupByCase2
              , loadLogs
              , listFilesIn
              , extractLocs
@@ -29,12 +32,12 @@ module World ( locsByRegex
              , dropLoopsFromPath
              ) where
 
-import Protolude hiding (Location, runStateT, Down, yield)
+import Protolude hiding (Location, runStateT, Down, yield, to)
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy.Char8 as LC8
 import ServerInputParser
 import Data.Graph.Inductive.Tree
-import Data.Graph.Inductive.Graph
+import Data.Graph.Inductive.Graph hiding ((&))
 import System.IO (hClose, hFlush)
 import Pipes
 import Pipes.Parse
@@ -239,7 +242,7 @@ loadWorld currentDir customMobProperties = do
   mobsOnMap <- pure M.empty--(extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
   questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- pure M.empty--obstaclesOnMap
-  mobsData <- pure M.empty --mobsData
+  mobsData <- mobsData
   let worldMap = buildMap locationEvents directions
    in return World { _worldMap = worldMap
                    , _locationEvents = locationEvents
@@ -253,8 +256,57 @@ loadWorld currentDir customMobProperties = do
                    , _inRoomDescToMob = M.unionWith (<>) customMobProperties mobsData
                    }
 
+archiveToServerEvents :: Producer ServerEvent IO ()
+archiveToServerEvents = (liftIO $ listFilesIn ("." ++ "/" ++ serverLogDir)) >>= (parseServerEvents . loadLogs)
+
+groupByCase2 getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCases $ stats, stats)) . L.filter (isJust . getter . _nameCases)
+  
+targetStats :: IO (Map (ObjRef Mob Nominative) MobStats)
+targetStats = groupByCase2 _nominative . fmap (\ref -> mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~ ref) <$> (PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
+
+mobCasesByInRoomDesc :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
+mobCasesByInRoomDesc =
+  groupByCase2 _inRoomDesc <$>
+  (PP.toListM $
+   PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-<
+   PP.filter allCasesWindow <-<
+   scanWindow 7 <-<
+   PP.filter isCheckCaseEvt <-<
+   archiveToServerEvents)
+  where
+    windowToCases :: [ServerEvent] -> NameCases Mob
+    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _] =
+      NameCases
+        { _inRoomDesc = Just mob
+        , _nominative = Just nom
+        , _genitive = Just gen
+        , _accusative = Just acc
+        , _dative = Just dat
+        , _instrumental = Just instr
+        , _prepositional = Just prep
+        , _alias = Just . ObjRef . defaultAlias . unObjRef $ nom
+        }
+    allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] =
+      locWithOneMob locEvt &&
+      has _CheckNominative nom &&
+      has _CheckGenitive gen &&
+      has _CheckAccusative acc &&
+      has _CheckDative dat &&
+      has _CheckInstrumental instr && has _CheckPrepositional prep
+    allCasesWindow _ = False
+    scanWindow n = PP.scan toWindow [] identity
+          where toWindow acc event
+                  | length acc < n = event : acc
+                  | otherwise = event : take (n - 1) acc
+    isCheckCaseEvt evt = has _LocationEvent evt || isCaseEvt evt
+    isCaseEvt evt = has _CheckNominative evt || has _CheckGenitive evt || has _CheckAccusative evt || has _CheckDative evt || has _CheckInstrumental evt || has _CheckPrepositional evt
+    defaultAlias = T.intercalate "." . T.words
+    locWithOneMob (LocationEvent _ _ [mob] _) = True
+    locWithOneMob _ = False
+
 mobsData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobsData = mobCasesByInRoomDesc
+mobsData =
+  (groupByCase2 _inRoomDesc . fmap snd . M.toList) <$> (M.unionWith (<>) <$> (groupByCase2 _nominative . fmap snd . M.toList <$> mobCasesByInRoomDesc) <*> targetStats)
   where mobsWithTargetFlag = M.unionWith (<>) <$> mobs <*> targetsByInRoomDescs
         targetsByInRoomDescs = mobsByNominatives >>= \mobsByNoms ->
                                  targets >>= \mbt ->
@@ -264,47 +316,12 @@ mobsData = mobCasesByInRoomDesc
         mobs :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
         mobs = (\mobCases allRoomDescs -> M.unionWith (<>) allRoomDescs mobCases) <$> mobCasesByInRoomDesc <*> allInRoomDescs
         targets :: IO [ObjRef Mob Nominative]
-        targets = S.toList . S.fromList <$> PP.toListM (PP.map _target <-< PP.filter (has _FightPromptEvent) <-< serverLogEventsProducer)
-        allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc . S.toList . S.fromList <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter (has _LocationEvent) <-< serverLogEventsProducer)
+        targets = PP.toListM (PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
+        allInRoomDescs = groupByCase _inRoomDesc . fmap mobFromRoomDesc <$> PP.toListM (PP.concat <-< PP.map _mobs <-< PP.filter (has _LocationEvent) <-< serverLogEventsProducer)
         mobFromRoomDesc desc = nameCases . inRoomDesc .~ Just desc $ mempty
-        mobCasesByInRoomDesc = fmap (groupByCase _inRoomDesc) $ PP.toListM $ PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-< PP.filter allCasesWindow <-< scanWindow 7 <-< PP.filter isCheckCaseEvt <-< archiveToServerEvents
-        archiveToServerEvents :: Producer ServerEvent IO ()
-        archiveToServerEvents = (liftIO $ listFilesIn ("." ++ "/" ++ serverLogDir)) >>= (parseServerEvents . loadLogs)
+        foldToStatsMap :: Producer MobStats IO () -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
+        foldToStatsMap = fmap fst . PP.fold' (\acc item -> M.insert (fromJust . _inRoomDesc . _nameCases $ item) item acc) M.empty identity
         groupByCase getter = M.fromList . catMaybes . fmap (\mobCases -> (getter . _nameCases) mobCases >>= \cs -> return (cs, mobCases))
-        defaultAlias = T.intercalate "." . T.words
-        allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] = locWithOneMob locEvt
-                                                            && has _CheckNominative nom
-                                                            && has _CheckGenitive gen
-                                                            && has _CheckAccusative acc
-                                                            && has _CheckDative dat
-                                                            && has _CheckInstrumental instr
-                                                            && has _CheckPrepositional prep
-        allCasesWindow _ = False
-        locWithOneMob (LocationEvent _ _ [mob] _) = True
-        locWithOneMob _ = False
-        isCheckCaseEvt evt = has _LocationEvent evt || isCaseEvt evt
-        isCaseEvt evt = has _CheckNominative evt || has _CheckGenitive evt || has _CheckAccusative evt || has _CheckDative evt || has _CheckInstrumental evt || has _CheckPrepositional evt
-        windowToCases :: [ServerEvent] -> NameCases Mob
-        windowToCases [ CheckPrepositional prep
-                      , CheckInstrumental instr
-                      , CheckDative dat
-                      , CheckAccusative acc
-                      , CheckGenitive gen
-                      , CheckNominative nom
-                      , LocationEvent _ _ [mob] _
-                      ] = NameCases { _inRoomDesc = Just mob
-                                    , _nominative = Just nom
-                                    , _genitive = Just gen
-                                    , _accusative = Just acc
-                                    , _dative = Just dat
-                                    , _instrumental = Just instr
-                                    , _prepositional = Just prep
-                                    , _alias = Just . ObjRef . defaultAlias . unObjRef $ nom
-                                    }
-        scanWindow n = PP.scan toWindow [] identity
-          where toWindow acc event
-                  | length acc < n = event : acc
-                  | otherwise = event : take (n - 1) acc
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats

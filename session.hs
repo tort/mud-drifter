@@ -25,7 +25,7 @@ let rentLocation = "5000"
     takeAllFromChest = "взять все ящик"
     ddo :: Monad m => Text -> Pipe Event Event m ()
     ddo = yield . SendToServer
-    checkCases mob = mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"]
+    checkCases mob = yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
     mobStats :: Text -> Text -> (ObjRef Mob InRoomDesc, MobStats)
     mobStats desc alias = (ObjRef desc, nameCases .~ cases $ mempty)
       where cases = inRoomDesc ?~ (ObjRef desc) $ mempty
@@ -70,11 +70,6 @@ let rentLocation = "5000"
 
 stack test --file-watch
 
-:{
-isCheckCaseEvt evt = isCaseEvt evt
-isCaseEvt evt = has _CheckNominative evt || has _CheckGenitive evt || has _CheckAccusative evt || has _CheckDative evt || has _CheckInstrumental evt || has _CheckPrepositional evt
-:}
-
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter isCheckCaseEvt >-> PP.mapM_ (putStrLn . showt))
 
 mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats) <-< PP.filter attackLonelyMob <-< scanWindow 4 <-< serverLogEventsProducer )
@@ -84,7 +79,9 @@ mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStat
 runEffect $ PP.mapM_ putStrLn <-< PP.map renderHitEvents <-< PP.filter isWhiteSpiderEvent <-< serverLogEventsProducer
 
 --load known mobs
-mobsData >>= pure . M.keys >>= traverse_ (putStrLn . showt)
+mobsData >>= traverse_ (putStrLn . showt)
+
+mobsData >>= pure . M.toList >>= traverse_ (putStrLn . showt . snd)
 
 world <- loadWorld "/home/tort/mud-drifter/" hardcodedProperties
 
@@ -93,7 +90,6 @@ genod = Person { personName = "генод"
                , residence = MudServer "bylins.su" 4000
                }
 
-  
 g <- initPerson genod
 
 g & run $ login

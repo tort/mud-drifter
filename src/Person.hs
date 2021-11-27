@@ -72,8 +72,8 @@ runE person task = run person $ (runExceptP task)
 
 initPerson :: Person -> IO (Output Event, Input Event)
 initPerson person = do
-  (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 6
-  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 6
+  (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 7
+  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 7
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
   async $ connect mudHost mudPort $ \(sock, _) -> do
@@ -166,15 +166,15 @@ killEmAll world = (forever lootAll) >-> awaitTargets
                                        evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (chooseTarget mobs)
                                        evt -> awaitTargets
         attack evt Nothing = awaitTargets
-        attack e (Just mobAlias) = yield (SendToServer $ "убить " <> (unObjRef mobAlias)) >> awaitFightBegin 0
+        attack e (Just mobAlias) = yield (SendToServer $ "убить " <> (L.head . T.words . unObjRef $ mobAlias)) >> awaitFightBegin 0
         awaitFightBegin pulsesCount = await >>= \case evt@(ServerEvent FightPromptEvent{}) -> awaitFightEnd
                                                       evt -> awaitFightBegin pulsesCount
         awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> watch
                                         evt -> awaitFightEnd
         watch = yield (SendOnPulse 1 "смотреть") >> awaitTargets
-        findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Alias)
-        findAlias mobRef = _alias . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
-        chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
+        findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative)
+        findAlias mobRef = _nominative . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
+        chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
         chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
 {-

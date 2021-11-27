@@ -43,6 +43,12 @@ module Event ( Event(..)
              , serverEvent
              , nameCases
              , inRoomDesc
+             , nominative
+             , genitive
+             , accusative
+             , dative
+             , instrumental
+             , prepositional
              , everAttacked
              , _CodepagePrompt
              , _CheckNominative
@@ -249,6 +255,7 @@ newtype ObjRef (a :: ObjType) (b :: ObjCase) = ObjRef { unObjRef :: Text }
 instance Semigroup (ObjRef a b) where
   left <> right = left
 
+
 data NameCases (a :: ObjType) = NameCases { _inRoomDesc :: Maybe (ObjRef a InRoomDesc)
                                           , _nominative :: Maybe (ObjRef a Nominative)
                                           , _genitive :: Maybe (ObjRef a Genitive)
@@ -284,7 +291,7 @@ instance Monoid (NameCases a) where
 newtype EverAttacked = EverAttacked Bool deriving (Eq, Ord, Show)
 
 instance Semigroup EverAttacked where
-  left <> right = left
+  (EverAttacked left) <> (EverAttacked right) = EverAttacked $ left || right
 
 data MobStats = MobStats { _nameCases :: NameCases Mob
                          , _everAttacked :: Maybe (EverAttacked)
@@ -312,8 +319,8 @@ instance Semigroup MobStats where
                            }
 
 instance Monoid MobStats where
-  mempty = MobStats { _nameCases = mempty NameCases
-                    , _everAttacked = Nothing
+  mempty = MobStats { _nameCases = mempty
+                    , _everAttacked = mempty
                     }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
