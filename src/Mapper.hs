@@ -91,7 +91,7 @@ listToPairs list = fmap unwrap . filterDirs . scanToPairs $ list
         scanToPairs = scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing)
 
 zonePath :: World -> Int -> [LocationId]
-zonePath world anyZoneLocId = fmap LocationId $ concat $  mergeTree $ listToPairs (reverse . fmap fst . unLPath <$> MST.msTree zone)
+zonePath world anyZoneLocId = fmap LocationId $ concat $  mergeTree $ listToPairs (reverse . fmap fst . unLPath <$> MST.msTreeAt anyZoneLocId zone)
   where zone = zoneMap world anyZoneLocId
         mergeTree = foldr (\(l, r) acc -> mergePathPair l r : acc) []
         mergePathPair l r = let (commonPath, lPrivatePath, rPrivatePath) = sharePrefix l r

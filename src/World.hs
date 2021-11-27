@@ -339,14 +339,15 @@ buildMap locationEvents directions = mkGraph nodes edges
 
 zoneMap :: World -> Int -> Gr () Int
 zoneMap world anyZoneLocId = mkGraph nodes edges
-  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . filterDirInZone . fmap (\(LocationId l, LocationId r) -> (l, r)) $ M.keys directions
-        nodes = fmap (\n -> (n, ())) . concat . fmap (\(l, r, _) -> l : r : []) $ edges
-        questActionVertexes ((LocationId fromId), (LocationId toId)) = (fromId, toId)
-        aheadEdge (fromId, toId) = (fromId, toId, 1)
-        reverseEdge (fromId, toId) = (toId, fromId, 1)
-        filterDirInZone = filter (\(l, r) -> isInZone l && isInZone r)
-        isInZone v = v - (mod v 100) == anyZoneLocId
-        directions = _directions world
+  where
+    edges =
+      L.nub . mconcat . fmap (\(LocationId fromId, LocationId toId) -> [(fromId, toId, 1), (toId, fromId, 1)]) .
+      L.filter dirInZone . M.keys . _directions $
+      world
+    nodes =
+      fmap (\n -> (n, ())) . L.nub . mconcat . fmap (\(l, r, _) -> [l, r]) $ edges
+    dirInZone (LocationId lid, LocationId rid) = isInZone lid && isInZone rid
+    isInZone locId = (div locId 100) == (div anyZoneLocId 100)
 
 travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
 travelActions = M.fromList [ ((LocationId 5104, LocationId 5117), setupLadder)
