@@ -16,10 +16,17 @@ import Data.Heap
 import qualified Data.Heap as H
 import Event
 
-data Command = Command Int Text deriving (Eq, Show)
+data Command = Command Int Text | Lock Int | Release Int deriving (Eq, Show)
 
 instance Ord Command where
   compare (Command l _) (Command r _) = compare l r
+  compare (Lock l) (Command r _) = compare l r
+  compare (Command l _) (Lock r) = compare l r
+  compare (Lock l) (Lock r) = compare l r
+  compare (Release l) (Lock r) = compare l r
+  compare (Lock l) (Release r) = compare l r
+  compare (Release l) (Command r _) = compare l r
+  compare (Command l _) (Release r) = compare l r
 
 commandExecutor :: MonadIO m => Pipe Event ByteString m ()
 commandExecutor = exec H.empty
@@ -31,9 +38,15 @@ commandExecutor = exec H.empty
           (yield . renderCommand $ text) >> (liftIO $ putStrLn text) >>
           exec heap
         event@(SendOnPulse prio text)  -> exec (insert (Command prio text) heap)
+        event@(LockPulse prio)  -> exec (insert (Lock prio) heap)
+        event@(ReleasePulse prio)  -> exec (insert (Release prio) heap)
         PulseEvent ->
           case view heap of
             Nothing -> exec heap
+            (Just (item@(Lock prio), rest)) ->
+              exec heap
+            (Just (item@(Release prio), rest)) ->
+              exec (H.dropWhile (== item) rest)
             (Just (item@(Command prio text), rest)) ->
               (liftIO $ putStrLn text) >> (yield . renderCommand $ text) >>
               exec (H.dropWhile (== item) rest)

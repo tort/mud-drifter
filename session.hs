@@ -112,6 +112,8 @@ g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
 g & runE $ travelToLoc "5100" world >> travel (zonePath world 5100) world
 
+g & runE $ travelToLoc "5100" world 
+
 g & runE $ travelToLoc bankLocation world
 
 g & runE $ travelToLoc rentLocation world >> yield (SendToServer "постой") >> yield (SendToServer "0")
@@ -122,18 +124,23 @@ run g PP.drain
 
 g & runE $ travelToLoc rentLocation world
 
+runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
+
+(awaitLoc 3 (LocationId 5000))
+(awaitLoc 2 (LocationId 5000))
+
 :{
-runTwo :: (Output Event, Input Event) -> IO ()
-runTwo person@(personOut, personIn) =
+runTwo :: (Output Event, Input Event) -> Pipe Event Event IO () -> Pipe Event Event IO () -> IO ()
+runTwo person@(personOut, personIn) task1 task2 =
   spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
     spawn' (newest 100) >>= \(subtaskOut2, subtaskIn2, seal2) ->
       (async $
-       run (personOut, subtaskIn1) (awaitLoc 3 (LocationId 5000)) >>
+       run (personOut, subtaskIn1) task1 >>
        print "subtask1 finished" >>
        (atomically seal1) >>
        (atomically seal2)) >>
       (async $
-       run (personOut, subtaskIn2) (awaitLoc 2 (LocationId 5000)) >>
+       run (personOut, subtaskIn2) task2 >>
        print "subtask2 finished" >>
        (atomically seal1) >>
        (atomically seal2)) >>

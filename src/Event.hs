@@ -152,6 +152,8 @@ data Event = ConsoleInput Text
            | ConsoleOutput ByteString
            | SendToServer Text
            | SendOnPulse Int Text
+           | LockPulse Int
+           | ReleasePulse Int
            | ServerInput ByteString
            | ServerEvent { _serverEvent :: ServerEvent }
            | ServerClosedChannel

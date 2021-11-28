@@ -157,25 +157,45 @@ trackBash = forever awaitBash
 
 killEmAll :: MonadIO m => World -> Pipe Event Event m ServerEvent
 killEmAll world = (forever lootAll) >-> awaitTargets
-  where lootAll = await >>= \case evt@(ServerEvent MobRipEvent) -> do yield (SendToServer "взять труп")
-                                                                      yield (SendToServer "взять все труп")
-                                                                      yield (SendToServer "брос труп")
-                                  evt@(ServerEvent (LootItem _ _)) -> do yield (SendToServer "полож все мешок")
-                                  evt -> yield evt
-        awaitTargets = await >>= \case evt@(ServerEvent (LocationEvent _ _ [] _)) -> awaitTargets
-                                       evt@(ServerEvent (LocationEvent _ _ mobs _)) -> attack evt (chooseTarget mobs)
-                                       evt -> awaitTargets
-        attack evt Nothing = awaitTargets
-        attack e (Just mobAlias) = yield (SendToServer $ "убить " <> (L.head . T.words . unObjRef $ mobAlias)) >> awaitFightBegin 0
-        awaitFightBegin pulsesCount = await >>= \case evt@(ServerEvent FightPromptEvent{}) -> awaitFightEnd
-                                                      evt -> awaitFightBegin pulsesCount
-        awaitFightEnd = await >>= \case evt@(ServerEvent PromptEvent{}) -> watch
-                                        evt -> awaitFightEnd
-        watch = yield (SendOnPulse 1 "смотреть") >> awaitTargets
-        findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative)
-        findAlias mobRef = _nominative . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
-        chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
-        chooseTarget targets = join . find isJust . fmap findAlias $ targets
+  where
+    prio = 10
+    lootAll =
+      await >>= \case
+        evt@(ServerEvent MobRipEvent) -> do
+          yield (SendToServer "взять труп")
+          yield (SendToServer "взять все труп")
+          yield (SendToServer "брос труп")
+        evt@(ServerEvent (LootItem _ _)) -> do
+          yield (SendToServer "полож все мешок")
+        evt -> yield evt
+    awaitTargets =
+      await >>= \case
+        evt@(ServerEvent (LocationEvent _ _ [] _)) ->
+          yield (ReleasePulse prio) >>
+          awaitTargets
+        evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
+          attack evt (chooseTarget mobs)
+        evt -> awaitTargets
+    attack evt Nothing = awaitTargets
+    attack e (Just mobAlias) =
+      yield (LockPulse prio) >>
+      yield
+        (SendToServer $ "убить " <> (L.head . T.words . unObjRef $ mobAlias)) >>
+      awaitFightBegin 0
+    awaitFightBegin pulsesCount =
+      await >>= \case
+        evt@(ServerEvent FightPromptEvent {}) -> awaitFightEnd
+        evt -> awaitFightBegin pulsesCount
+    awaitFightEnd =
+      await >>= \case
+        evt@(ServerEvent PromptEvent {}) -> watch
+        evt -> awaitFightEnd
+    watch = yield (SendOnPulse prio "смотреть") >> awaitTargets
+    findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative)
+    findAlias mobRef =
+      _nominative . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
+    chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
+    chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
 {-
 travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
@@ -229,8 +249,8 @@ supplyTask = init
                                                   evt -> yield evt >> awaitFullHp maxHp maxMv
 
 {-
-runZone :: MonadIO m => World -> Map MobRoomDesc MobStats -> Text -> Int -> Pipe Event Event (ExceptT Text m) ()
-runZone world allKillableMobs goTo startFrom = travelToLoc goTo world >>= \locEvt ->
+runZone :: MonadIO m => World -> Int -> Pipe Event Event (ExceptT Text m) ()
+runZone world startFrom = travelToLoc startFrom world *>
   cover world >-> supplyTask >-> killEmAll world >-> travel path world
   where path = zonePath world startFrom
 -}
