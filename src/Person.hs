@@ -111,16 +111,21 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
                              evt -> yield evt >> go
 
 travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event (ExceptT Text m) ()
-travel path world = waitMove path
+travel path world = waitMove path False
   where
-    waitMove [] = lift $ throwError "path lost"
-    waitMove [_] = pure ()
-    waitMove remainingPath@(from:to:xs) =
+    waitMove [] _ = lift $ throwError "path lost"
+    waitMove [_] _ = pure ()
+    waitMove remainingPath@(from:to:xs) inAction =
       await >>= \case
         (ServerEvent newLoc@LocationEvent {}) ->
-          waitMove $ dropWhile (/= (_locationId $ _location newLoc)) remainingPath
-        PulseEvent -> travelAction world from to >> waitMove remainingPath
-        _ -> waitMove remainingPath
+          waitMove
+            (dropWhile (/= (_locationId $ _location newLoc)) remainingPath)
+            False
+        PulseEvent ->
+          if not inAction
+            then travelAction world from to >> waitMove remainingPath True
+            else waitMove remainingPath inAction
+        _ -> waitMove remainingPath inAction
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ()
 travelToLoc substr world = action findLocation
@@ -154,42 +159,40 @@ trackBash = forever awaitBash
         stand = await >>= \case PulseEvent -> yield (SendToServer "встать")
                                 evt -> yield evt >> stand
 
-killEmAll :: MonadIO m => World -> Pipe Event Event m ServerEvent
-killEmAll world = (forever lootAll) >-> awaitTargets
+killEmAll :: MonadIO m => World -> Pipe Event Event m ()
+killEmAll world = (forever lootAll) >-> awaitTargets [] False
   where
-    prio = 10
     lootAll =
-      await >>= \case
-        evt@(ServerEvent MobRipEvent) -> do
-          yield (SendToServer "взять труп")
-          yield (SendToServer "взять все труп")
-          yield (SendToServer "брос труп")
-        evt@(ServerEvent (LootItem _ _)) -> do
-          yield (SendToServer "полож все мешок")
-        evt -> yield evt
-    awaitTargets =
-      await >>= \case
-        evt@(ServerEvent (LocationEvent _ _ [] _)) ->
-          yield (ReleasePulse prio) >>
-          awaitTargets
-        evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
-          attack evt (chooseTarget mobs)
-        evt -> awaitTargets
-    attack evt Nothing = awaitTargets
-    attack e (Just mobAlias) =
-      yield (LockPulse prio) >>
-      yield
-        (SendToServer $ "убить " <> (L.head . T.words . unObjRef $ mobAlias)) >>
-      awaitFightBegin 0
-    awaitFightBegin pulsesCount =
-      await >>= \case
-        evt@(ServerEvent FightPromptEvent {}) -> awaitFightEnd
-        evt -> awaitFightBegin pulsesCount
-    awaitFightEnd =
-      await >>= \case
-        evt@(ServerEvent PromptEvent {}) -> watch
-        evt -> awaitFightEnd
-    watch = yield (SendOnPulse prio "смотреть") >> awaitTargets
+      await >>= \evt -> do
+        yield evt
+        case evt of
+          evt@(ServerEvent MobRipEvent) -> do
+            yield (SendToServer "взять труп")
+            yield (SendToServer "взять все труп")
+            yield (SendToServer "брос труп")
+          evt@(ServerEvent (LootItem _ _)) -> do
+            yield (SendToServer "полож все мешок")
+          evt -> pure ()
+    awaitTargets mobs inFight =
+      await >>= \evt -> do
+        yield evt
+        case evt of
+          evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
+          evt@(ServerEvent PromptEvent {}) ->
+            if inFight
+              then yield (SendToServer "смотреть") *> awaitTargets [] False
+              else awaitTargets mobs False
+          evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
+            awaitTargets mobs inFight
+          PulseEvent ->
+            case (chooseTarget mobs, inFight) of
+              (Just mobAlias, False) -> do
+                yield
+                  (SendToServer $
+                   "убить " <> (L.head . T.words . unObjRef $ mobAlias))
+                awaitTargets mobs True
+              _ -> awaitTargets mobs inFight
+          evt -> awaitTargets mobs inFight
     findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative)
     findAlias mobRef =
       _nominative . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
