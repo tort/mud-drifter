@@ -383,7 +383,7 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
 travelAction :: MonadIO m => World -> LocationId -> LocationId -> Pipe Event Event m ()
 travelAction world from to = case M.lookup (from, to) (_directions world) of
                                           Nothing -> return ()
-                                          (Just dir) -> yield (SendOnPulse 5 . showt $ dir)
+                                          (Just dir) -> yield (SendToServer . showt $ dir)
 
 payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
 payOldGipsy = move

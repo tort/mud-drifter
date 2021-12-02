@@ -85,13 +85,11 @@ mobsData >>= traverse_ (putStrLn . showt)
 mobsData >>= pure . M.toList >>= traverse_ (putStrLn . showt . snd)
 
 world <- loadWorld "/home/tort/mud-drifter/" hardcodedProperties
-
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
                }
 g <- initPerson genod
-
 g & run $ login
 
 g & run $ PP.print

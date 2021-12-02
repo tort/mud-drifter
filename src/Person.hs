@@ -81,7 +81,7 @@ initPerson person = do
     print "connected"
     toRemoteConsoleBox <- spawn $ newest 100
     let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toServerInputParserBox) `mappend` outToLoggerBox
-        emitPulseEvery = atomically $ PC.send outToExecutorBox PulseEvent >> return ()
+        emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
     async $ runRemoteConsole (outToServerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (inToServerBox) >-> toSocket sock
     async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox
@@ -111,15 +111,15 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
                              evt -> yield evt >> go
 
 travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event (ExceptT Text m) ()
-travel path world = doStep path
+travel path world = waitMove path
   where
-    doStep [] = lift $ throwError "path lost"
-    doStep [_] = pure ()
-    doStep p@(from:to:xs) = travelAction world from to >> waitMove p
-    waitMove remainingPath =
+    waitMove [] = lift $ throwError "path lost"
+    waitMove [_] = pure ()
+    waitMove remainingPath@(from:to:xs) =
       await >>= \case
         (ServerEvent newLoc@LocationEvent {}) ->
-           doStep $ dropWhile (/= (_locationId $ _location newLoc)) remainingPath
+          waitMove $ dropWhile (/= (_locationId $ _location newLoc)) remainingPath
+        PulseEvent -> travelAction world from to >> waitMove remainingPath
         _ -> waitMove remainingPath
 
 travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ()
@@ -136,9 +136,8 @@ travelToLoc substr world = action findLocation
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
         case findTravelPath from to (_worldMap world) of
-          (Just path) -> doStep path currLocEvt
+          (Just path) -> travel path world
           Nothing -> lift $ throwError "no path found"
-    doStep path currLocEvt = travel path world
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin

@@ -29,6 +29,11 @@ instance Ord Command where
   compare (Command l _) (Release r) = compare l r
 
 commandExecutor :: MonadIO m => Pipe Event ByteString m ()
+commandExecutor = forever $ await >>= \case (SendToServer text) -> (liftIO $ putStrLn text) >> (yield $ encodeUtf8 $ snoc text '\n')
+                                            (ServerEvent (ParseError err)) -> liftIO $ print err
+                                            _ -> return ()
+
+{-
 commandExecutor = exec H.empty
   where
     exec :: MonadIO m => MaxHeap Command -> Pipe Event ByteString m ()
@@ -50,6 +55,7 @@ commandExecutor = exec H.empty
             (Just (item@(Command prio text), rest)) ->
               (liftIO $ putStrLn text) >> (yield . renderCommand $ text) >>
               exec (H.dropWhile (== item) rest)
+-} 
 
 renderCommand text = encodeUtf8 $ snoc text '\n'
 
