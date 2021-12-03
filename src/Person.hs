@@ -182,16 +182,18 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
           _ -> yield evt
         case evt of
           evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
+          evt@(ServerEvent (MobWentOut mobNom)) -> do
+            let newMobs =
+                  case (_inRoomDesc . _nameCases =<< ((M.!?) (_nominativeToMob world) mobNom)) of
+                    Nothing -> mobs
+                    Just deadMob -> L.delete deadMob mobs
+            awaitTargets newMobs inFight
           evt@(ServerEvent (MobRipEvent mr)) -> do
-            liftIO (putStrLn . ("mobrip nominative: " <>) . showt $ mr)
             let newMobs =
                   case (_inRoomDesc . _nameCases =<< ((M.!?) (_nominativeToMob world) mr)) of
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
-             in if inFight
-                  then yield (SendToServer "смотреть") *>
-                       awaitTargets newMobs False
-                  else awaitTargets newMobs False
+             in awaitTargets newMobs False
           evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
             awaitTargets mobs inFight
           PulseEvent ->

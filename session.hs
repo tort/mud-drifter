@@ -75,7 +75,7 @@ stack test --file-watch
 
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _MobRipEvent) >-> PP.mapM_ (putStrLn . showt . (\(MobRipEvent bs) -> bs)))
 
-(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_082941__20211203_083323.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
+(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
 
 mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats) <-< PP.filter attackLonelyMob <-< scanWindow 4 <-< serverLogEventsProducer )
 

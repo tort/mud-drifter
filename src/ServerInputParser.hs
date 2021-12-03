@@ -729,6 +729,7 @@ move = do
     C.endOfLine
     return $ MoveEvent (decodeUtf8 direction)
 
+
 clearColors :: A.Parser ()
 clearColors = cs >> string "0;0m" >> return ()
 
@@ -1159,8 +1160,14 @@ stateParser stateTxt stateVal = do cs
 
 unknownMessage :: A.Parser ServerEvent
 unknownMessage = do
-  txt <- takeTillEndOfLineOrGA
-  return $ UnknownServerEvent txt
+  takeTillEndOfLineOrGA >>= \bs -> pure (parseLine bs $ decodeUtf8 bs)
+  where
+    parseLine :: C8.ByteString -> Text -> ServerEvent
+    parseLine bs txt
+      | wentOut txt && direction txt = (MobWentOut . ObjRef . T.toLower . L.head . T.splitOn " уш") txt
+      | otherwise = UnknownServerEvent bs
+    wentOut txt = T.isInfixOf " ушла " txt || T.isInfixOf " ушел " txt || T.isInfixOf " ушли " txt || T.isInfixOf " ушло " txt
+    direction txt = T.isInfixOf "на север" txt || T.isInfixOf "на юг" txt || T.isInfixOf "на запад" txt || T.isInfixOf "на восток" txt || T.isInfixOf "вверх" txt || T.isInfixOf "вниз" txt
 
 iacGA :: A.Parser Word8
 iacGA = do iac

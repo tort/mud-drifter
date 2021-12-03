@@ -196,6 +196,7 @@ data ServerEvent = CodepagePrompt
                  | TakeInLeftHand (ObjRef Item Accusative)
                  | TakeInBothHands (ObjRef Item Accusative)
                  | MobGaveYouItem (ObjRef Mob Nominative) (ObjRef Item Accusative)
+                 | MobWentOut (ObjRef Mob Nominative)
                  | Drink Text Text
                  | Eat Text
                  | DrinkFromAbsentObject
