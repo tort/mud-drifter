@@ -65,6 +65,8 @@ module Event ( Event(..)
              , _PromptEvent
              , _TakeFromContainer
              , _ServerEvent
+             , _UnknownServerEvent
+             , _MobRipEvent
              ) where
 
 import qualified Prelude as P
@@ -202,7 +204,8 @@ data ServerEvent = CodepagePrompt
                  | NotThirsty
                  | LiquidContainerIsEmpty
                  | ExamineContainer { _name :: Text, _items :: [InventoryItem] }
-                 | MobRipEvent
+                 | MobRipEvent (ObjRef Mob Nominative)
+                 | ExpUpEvent
                  | ImBashedEvent
                  | MyStats Int Int
                  | ParseError ByteString

@@ -19,6 +19,7 @@ import Data.Text.Encoding
 import qualified Data.ByteString as B
 import Data.Word8
 import qualified Data.Foldable as F
+import qualified Data.List as L
 import qualified Data.ByteString.Char8 as C8
 import Event
 
@@ -54,10 +55,11 @@ serverInputParser = codepagePrompt
                     <|> isNotHungry
                     <|> isNotThirsty
                     <|> examineContainer
-                    <|> ripMob
+                    <|> expUp
                     <|> myStats
                     <|> imBashed
                     <|> hitEvent
+                    <|> ripMob
                     <|> checkNominative
                     <|> checkGenitive
                     <|> checkAccusative
@@ -506,12 +508,28 @@ imBashed = do many' clearColors
         variant2 = do readWordsTill "вас на землю. Поднимайтесь!"
                       return ()
 
+expUp :: A.Parser ServerEvent
+expUp = do
+  string $ encodeUtf8 "Ваш опыт повысился на "
+  C.decimal
+  skipWhile (not . C.isEndOfLine)
+  C.endOfLine
+  pure ExpUpEvent
+
 ripMob :: A.Parser ServerEvent
-ripMob = do string $ encodeUtf8 "Ваш опыт повысился на "
-            C.decimal
-            skipWhile (not . C.isEndOfLine)
-            C.endOfLine
-            return MobRipEvent
+ripMob = do
+  many' clearColors
+  cs >> string "1;33m"
+  choice [hit1, hit2]
+  skipWhile (not . C.isEndOfLine)
+  C.endOfLine
+  clearColors
+  partial <- manyTill' C.anyChar (string $ encodeUtf8 "душа медленно подымается в небеса.")
+  C.endOfLine
+  pure . MobRipEvent . ObjRef . T.toLower . L.head . T.splitOn " мертв" . fst . T.breakOnEnd "мертв" . decodeUtf8 . C8.pack $ partial
+  where 
+    hit1 = string . encodeUtf8 $ "Вы выбили остатки жизни из"-- блохи своим мощным ударом."
+    hit2 = string . encodeUtf8 $ "Вы нанесли "--"клопу прекрасный удар - после этого ему уже не встать."
 
 isNotThirsty :: A.Parser ServerEvent
 isNotThirsty = isFull <|> isOverFull >> return NotThirsty

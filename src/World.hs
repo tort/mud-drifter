@@ -78,6 +78,7 @@ data World = World { _worldMap :: WorldMap
                    , _mobStats :: [MobStats]
                    , _questActions :: Map (LocationId, LocationId) [Event]
                    , _inRoomDescToMob :: Map (ObjRef Mob InRoomDesc) MobStats
+                   , _nominativeToMob :: Map (ObjRef Mob Nominative) MobStats
                    }
 
 data Direction = Direction { locIdFrom :: LocIdFrom
@@ -253,7 +254,8 @@ loadWorld currentDir customMobProperties = do
                    , _mobsDiscovered = mobsOnMap
                    , _mobStats = []
                    , _questActions = questActions
-                   , _inRoomDescToMob = M.unionWith (<>) customMobProperties mobsData
+                   , _inRoomDescToMob = mobsData
+                   , _nominativeToMob = regroupTo _nominative mobsData
                    }
 
 archiveToServerEvents :: Producer ServerEvent IO ()

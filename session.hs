@@ -73,6 +73,10 @@ stack test --file-watch
 
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter isCheckCaseEvt >-> PP.mapM_ (putStrLn . showt))
 
+(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _MobRipEvent) >-> PP.mapM_ (putStrLn . showt . (\(MobRipEvent bs) -> bs)))
+
+(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_082941__20211203_083323.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
+
 mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats) <-< PP.filter attackLonelyMob <-< scanWindow 4 <-< serverLogEventsProducer )
 
 mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats2) <-< PP.filter lonelyMobAttacksMe <-< scanWindow 3 <-< serverLogEventsProducer )
@@ -84,7 +88,7 @@ mobsData >>= traverse_ (putStrLn . showt)
 
 mobsData >>= pure . M.toList >>= traverse_ (putStrLn . showt . snd)
 
-world <- loadWorld "/home/tort/mud-drifter/" hardcodedProperties
+world <- loadWorld "/home/tort/mud-drifter/" M.empty
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
@@ -108,9 +112,11 @@ g & runE $ cover world
 
 g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
-g & runE $ travelToLoc "5100" world >> (killEmAll world >-> travel (zonePath world 5100) world)
+g & runE $ travelToLoc "5100" world >> travel (zonePath world 5100) world
 
 g & runE $ travelToLoc "5100" world 
+
+runE g $ travelToLoc "5100" world >> (killEmAll world >-> travel (zonePath world 5100) world)
 
 g & runE $ travelToLoc bankLocation world
 
@@ -121,8 +127,6 @@ run g $ testParTasks world g
 run g PP.drain
 
 g & runE $ travelToLoc rentLocation world
-
-runE g (killEmAll world >-> travel (zonePath world 5100) world)
 
 runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
 
