@@ -116,7 +116,9 @@ travel path world = waitMove path False
     waitMove [] _ = lift $ throwError "path lost"
     waitMove [_] _ = pure ()
     waitMove remainingPath@(from:to:xs) inAction =
-      await >>= \case
+      await >>= \evt -> do
+      yield evt
+      case evt of
         (ServerEvent newLoc@LocationEvent {}) ->
           waitMove
             (dropWhile (/= (_locationId $ _location newLoc)) remainingPath)
@@ -175,12 +177,14 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
           evt -> pure ()
     awaitTargets mobs inFight =
       await >>= \evt -> do
-        yield evt
+        case evt of
+          PulseEvent -> pure ()
+          _ -> yield evt
         case evt of
           evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
           evt@(ServerEvent PromptEvent {}) ->
             if inFight
-              then yield (SendToServer "смотреть") *> awaitTargets [] False
+              then yield (SendToServer "смотреть") *> awaitTargets mobs False
               else awaitTargets mobs False
           evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
             awaitTargets mobs inFight
@@ -191,7 +195,8 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
                   (SendToServer $
                    "убить " <> (L.head . T.words . unObjRef $ mobAlias))
                 awaitTargets mobs True
-              _ -> awaitTargets mobs inFight
+              (_, True) -> awaitTargets mobs inFight
+              _ -> yield PulseEvent *> awaitTargets mobs inFight
           evt -> awaitTargets mobs inFight
     findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative)
     findAlias mobRef =

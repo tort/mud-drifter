@@ -108,7 +108,7 @@ g & runE $ cover world
 
 g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
-g & runE $ travelToLoc "5100" world >> travel (zonePath world 5100) world
+g & runE $ travelToLoc "5100" world >> (killEmAll world >-> travel (zonePath world 5100) world)
 
 g & runE $ travelToLoc "5100" world 
 
@@ -121,6 +121,8 @@ run g $ testParTasks world g
 run g PP.drain
 
 g & runE $ travelToLoc rentLocation world
+
+runE g (killEmAll world >-> travel (zonePath world 5100) world)
 
 runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
 
