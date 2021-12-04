@@ -46,7 +46,16 @@ serverLogDir = archiveDir ++ "/server-input-log/"
 evtLogDir = archiveDir ++ "/evt-log/"
 archiveDir = "archive"
 
-runEvtLogger evtBusInput h = runLogger evtBusInput h serverInteractions
+runEvtLogger :: Input Event -> IO ()
+runEvtLogger input = do
+  startTimestamp <- timestamp
+  withFile eventLogFilename WriteMode writeLog
+  stopTimestamp <- timestamp
+  archive eventLogFilename $ archivedLogFilename startTimestamp stopTimestamp
+  where writeLog h = runEffect $ fromInput input >-> serverInteractions >-> PBS.toHandle h >> liftIO (C8.putStr "logger input stream ceased\n")
+        archivedLogFilename startTs stopTs = evtLogDir ++ "evt-" ++ startTs ++ "__" ++ stopTs ++ ".log"
+        timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" <$> getCurrentTime
+        eventLogFilename = "evt.log"
 
 runServerInputLogger :: Input ByteString -> IO ()
 runServerInputLogger input = do
@@ -64,9 +73,6 @@ archive fromFileName toFilename =
   withFile fromFileName ReadMode $ \from ->
     withFile toFilename WriteMode $ \to -> do
       runEffect $ PBS.fromHandle from >-> PBS.toHandle to
-
-runLogger :: Input Event -> Handle -> Pipe Event ByteString IO () -> IO ()
-runLogger evtBusInput h msgFilter = runEffect $ fromInput evtBusInput >-> msgFilter >-> PBS.toHandle h >> liftIO (C8.putStr "logger input stream ceased\n")
 
 serverInteractions :: Pipe Event ByteString IO ()
 serverInteractions = forever $ await >>= \evt -> case evt of (SendToServer x) -> yield $ LC8.toStrict $ encode evt

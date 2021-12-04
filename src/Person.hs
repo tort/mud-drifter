@@ -76,6 +76,7 @@ initPerson person = do
   (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 7
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
+  (outToBinaryLoggerBox, inToBinaryLoggerBox, sealToBinaryLoggerBox) <- spawn' $ newest 100
   async $ connect mudHost mudPort $ \(sock, _) -> do
     toServerInputParserBox <- spawn $ newest 100
     print "connected"
@@ -85,16 +86,19 @@ initPerson person = do
     async $ runRemoteConsole (outToServerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (inToServerBox) >-> toSocket sock
     async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox
-    async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox) >>= liftIO . print
+    async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox <> outToBinaryLoggerBox) >>= liftIO . print
     async $ runServerInputLogger inToLoggerBox
+    async $ runEvtLogger inToBinaryLoggerBox
     repeatedTimer emitPulseEvery (sDelay 1)
     runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
     performGC
     atomically sealToLoggerBox
+    atomically sealToBinaryLoggerBox
     atomically sealToServerBox
     atomically sealToExecutorBox
+    performGC
     print "disconnected"
-  return (outToExecutorBox, snd toDrifterBox)
+  return (outToExecutorBox <> outToBinaryLoggerBox, snd toDrifterBox)
     where mudHost = T.unpack . host . residence $ person
           mudPort = show . port . residence $ person
 
