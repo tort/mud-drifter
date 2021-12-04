@@ -71,12 +71,11 @@ import Data.Binary.Get
 data World = World { _worldMap :: WorldMap
                    , _locationEvents :: Set Location
                    , _directions :: Directions
-                   , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
                    , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
-                   , _itemStats :: [ItemStats]
-                   , _mobsDiscovered :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
-                   , _mobStats :: [MobStats]
                    , _questActions :: Map (LocationId, LocationId) [Event]
+                   , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
+                   , _itemStats :: [ItemStats]
+                   , _inRoomDescToMobOnMap :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
                    , _inRoomDescToMob :: Map (ObjRef Mob InRoomDesc) MobStats
                    , _nominativeToMob :: Map (ObjRef Mob Nominative) MobStats
                    }
@@ -240,7 +239,7 @@ loadWorld currentDir customMobProperties = do
   locationEvents <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
   itemsStats <- pure []--PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- pure M.empty--(discoverItems . parseServerEvents . loadLogs) serverLogFiles
-  mobsOnMap <- pure M.empty--(extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
+  mobsOnMap <- (extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
   questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- pure M.empty--obstaclesOnMap
   mobsData <- mobsData
@@ -251,8 +250,7 @@ loadWorld currentDir customMobProperties = do
                    , _itemsOnMap = itemsOnMap
                    , _obstaclesOnMap = obstaclesOnMap
                    , _itemStats = itemsStats
-                   , _mobsDiscovered = mobsOnMap
-                   , _mobStats = []
+                   , _inRoomDescToMobOnMap = mobsOnMap
                    , _questActions = questActions
                    , _inRoomDescToMob = mobsData
                    , _nominativeToMob = regroupTo _nominative mobsData
@@ -324,7 +322,7 @@ printWorldStats world = yield $ ConsoleOutput worldStats
         directionsStats = (show . length . _directions) world <> " переходов между локациями\n"
         items = (show . length . _itemsOnMap) world <> " предметов найдено\n"
         itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
-        mobs = (show . length . _mobsDiscovered) world <> " мобов найдено\n"
+        mobs = (show . length . _inRoomDescToMobOnMap) world <> " мобов найдено\n"
 
 parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
 parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError

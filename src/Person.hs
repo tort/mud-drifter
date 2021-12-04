@@ -5,7 +5,7 @@
 
 module Person ( travel
               , travelToLoc
-              --, travelToMob
+              , travelToMob
               --, travelAndKill
               , findCurrentLoc
               , login
@@ -212,18 +212,18 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
     chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
-{-
-travelToMob :: MonadIO m => World -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
-travelToMob world mob = pipe $ mobArea
+travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (LocationId)
+travelToMob world mobNom = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)
-        mobArea = M.lookup mob . _mobsDiscovered $ world
+        mobArea = ((_inRoomDescToMobOnMap world) M.!?) =<< _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
         pipe (Just area)
           | M.size area < 1 = lift $ throwError "no habitation found"
           | M.size area > 1 = lift $ throwError "multiple habitation locations found"
-          | M.size area == 1 = travelToLoc loc world
+          | M.size area == 1 = travelToLoc loc world >> pure (L.head . M.keys $ area)
         pipe Nothing = lift $ throwError "no habitation found"
         loc = showt . L.head . M.keys . fromJust $ mobArea
 
+{-
 travelAndKill :: MonadIO m => World -> Map MobRoomDesc Text -> MobRoomDesc -> Pipe Event Event (ExceptT Text m) ServerEvent
 travelAndKill world targets mob = pipe $ mobArea
   where mobArea :: Maybe (Map LocationId Int)

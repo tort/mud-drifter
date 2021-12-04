@@ -71,7 +71,7 @@ printLocations :: Text -> World -> IO ()
 printLocations substr world = mapM_ printT $ locationsBy substr world
 
 printMobsByRegex :: World -> Text -> IO ()
-printMobsByRegex world regex = mapM_ printT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _mobsDiscovered world
+printMobsByRegex world regex = mapM_ printT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _inRoomDescToMobOnMap world
 
 findLocationsBy :: Text -> World -> [LocationId]
 findLocationsBy substr world = _locationId <$> locationsBy substr world

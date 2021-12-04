@@ -44,31 +44,6 @@ let rentLocation = "5000"
                                      ]
 :}
 
-:{
-  isWhiteSpiderEvent LocationEvent{} = True
-  isWhiteSpiderEvent (HitEvent (ObjRef "Белый паук") _)  = True
-  isWhiteSpiderEvent (HitEvent _ (ObjRef "белого паука"))  = True
-  isWhiteSpiderEvent (FightPromptEvent _ _) = True
-  isWhiteSpiderEvent _ = False
-  renderHitEvents (HitEvent from to) = showt from <> " : " <> showt to
-  renderHitEvents (LocationEvent loc _ _ _) = showt loc
-  renderHitEvents FightPromptEvent{} = "FIGHT PROMPT"
-:}
-
-:{
-  render (l, r) = showt l <> " : " <> showt r
-  toStats [FightPromptEvent _ target, IHitMobEvent _, PromptEvent _ _, loc@(LocationEvent _ _ [mob] _)] = (mob, target)
-  toStats2 [FightPromptEvent _ target, HitEvent _ (ObjRef "вас"), loc@(LocationEvent _ _ [mob] _)] = (mob, target)
-  attackLonelyMob [FightPromptEvent _ target, IHitMobEvent _, PromptEvent _ _, loc@(LocationEvent _ _ [mob] _)] = True
-  attackLonelyMob _ = False
-  lonelyMobAttacksMe [FightPromptEvent _ target, HitEvent _ (ObjRef "вас"), loc@(LocationEvent _ _ [mob] _)] = True
-  lonelyMobAttacksMe _ = False
-  scanWindow n = PP.scan toWindow [] identity
-    where toWindow acc event
-            | P.length acc < n = event : acc
-            | otherwise = event : P.take (n - 1) acc
-:}
-
 stack test --file-watch
 
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter isCheckCaseEvt >-> PP.mapM_ (putStrLn . showt))
@@ -77,18 +52,13 @@ stack test --file-watch
 
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
 
-mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats) <-< PP.filter attackLonelyMob <-< scanWindow 4 <-< serverLogEventsProducer )
-
-mapM_ putStrLn . S.toList . S.fromList =<< (PP.toListM $ PP.map (render . toStats2) <-< PP.filter lonelyMobAttacksMe <-< scanWindow 3 <-< serverLogEventsProducer )
-
-runEffect $ PP.mapM_ putStrLn <-< PP.map renderHitEvents <-< PP.filter isWhiteSpiderEvent <-< serverLogEventsProducer
-
 --load known mobs
-mobsData >>= traverse_ (putStrLn . showt)
+mobsData >>= traverse_ printT
 
-mobsData >>= pure . M.toList >>= traverse_ (putStrLn . showt . snd)
+mobsData >>= pure . M.toList >>= traverse_ (printT . snd)
 
 world <- loadWorld "/home/tort/mud-drifter/" M.empty
+
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
@@ -99,6 +69,13 @@ g & run $ login
 g & run $ PP.print
 
 g & run $ yield (SendToServer "постой") >> yield (SendToServer "0")
+
+:{
+runE g $
+  travelToLoc bankLocation world >>
+  questWhiteSpider world >>
+  travelToLoc rentLocation world
+:}
 
 g & run $ forever await
 
@@ -116,7 +93,7 @@ g & runE $ travelToLoc "5100" world >> travel (zonePath world 5100) world
 
 g & runE $ travelToLoc "5100" world 
 
-runE g $ travelToLoc "5100" world >> (killEmAll world >-> travel (zonePath world 5100) world)
+runE g $ travelToLoc bankLocation world >> travelToLoc "5100" world >> (killEmAll world >-> travel (zonePath world 5100) world)
 
 g & runE $ travelToLoc bankLocation world
 
@@ -232,6 +209,19 @@ eatTillFull = eat
 :}
 
 :{
+  questWhiteSpider world = do
+    (killEmAll world >-> travelToLoc "5104" world)
+    ddo "приставить лестница"
+    killEmAll world >-> (travelToMob world (ObjRef "белый паук") >> pure ())
+    (killEmAll world >-> travelToLoc "5119" world)
+    ddo "отпер сунд"
+    ddo "откр сундук"
+    ddo "взять все сундук"
+    ddo "смотреть"
+    ddo "взять все"
+:}
+
+:{
 prepareToRoam = do 
   travelToLoc tavernLoc world 
   checkFoodAmount >>= \n -> buyFood (20 - n)
@@ -256,13 +246,6 @@ questOldBoots = do
         (exceptP . fmap Right $ ddo takeAllFromChest)
         (exceptP . fmap Right $ cover world) >-> travelToLoc "5112" world >> return ()) $ liftIO . printT
       (exceptP . fmap Right $ ddo unholdCandle >> ddo "держ нож")
-questWhiteSpider = do
-  Pipes.Lift.catchError ( do 
-    (exceptP . fmap Right $ killEmAll world) >-> travelToLoc "5104" world
-    (exceptP . fmap Right $ ddo "приставить лестница")
-    (exceptP . fmap Right $ cover world) >-> (travelAndKill world allKillableMobs $ MobRoomDesc "Большой паук с белым брюхом ждет жертву здесь.")
-    travelToLoc "5119" world
-    (exceptP . fmap Right $ ddo "отпер сунд" >> ddo "откр сундук" >> ddo "взять все сундук" >> ddo "смотреть" >> ddo "взять все" >> return "all good")) $ return
 questFisherman = do
   (exceptP . fmap Right $ killEmAll world) >-> (travelToMob world . MobRoomDesc $ "Старый рыбак чинит здесь свою сеть.")
   (exceptP . fmap Right $ ddo "говорить помогу")
