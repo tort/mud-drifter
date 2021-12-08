@@ -30,6 +30,7 @@ instance Ord Command where
 
 commandExecutor :: MonadIO m => Pipe Event ByteString m ()
 commandExecutor = forever $ await >>= \case (SendToServer text) -> (liftIO $ putStrLn text) >> (yield $ encodeUtf8 $ snoc text '\n')
+                                            (ConsoleInput text) -> yield text
                                             (ServerEvent (ParseError err)) -> liftIO $ print err
                                             _ -> return ()
 

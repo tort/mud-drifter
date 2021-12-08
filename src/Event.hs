@@ -67,6 +67,8 @@ module Event ( Event(..)
              , _ServerEvent
              , _UnknownServerEvent
              , _MobRipEvent
+             , _SendToServer
+             , _ConsoleInput
              ) where
 
 import qualified Prelude as P
@@ -74,7 +76,7 @@ import Protolude hiding (Location, Down, Up, Left, Right, Dual)
 import Pipes.Concurrent
 import Data.Text
 import qualified Data.Text as T
-import Data.ByteString
+import Data.ByteString.Char8
 
 import Data.Binary
 import GHC.Generics (Generic)
@@ -150,7 +152,7 @@ instance Binary (ObjRef Mob InRoomDesc)
 instance Binary (ObjRef Mob Alias)
 instance Binary InventoryItem
 
-data Event = ConsoleInput Text
+data Event = ConsoleInput ByteString
            | ConsoleOutput ByteString
            | SendToServer Text
            | SendOnPulse Int Text

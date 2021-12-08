@@ -17,6 +17,7 @@ module World ( locsByRegex
              , showLocs
              , loadWorld
              , parseServerEvents
+             , evtLogProducer
              , travelAction
              , zoneMap
              , loadServerEvents
@@ -141,9 +142,6 @@ loadServerEvents :: FilePath -> Producer ByteString IO ()
 loadServerEvents file = openfile >>= \h -> PBS.fromHandle h >> closefile h
   where openfile = lift $ openFile file ReadMode
         closefile h = lift $ hClose h
-
-binEvtLogParser :: Producer ByteString IO () -> Producer Event IO ()
-binEvtLogParser bsp = parseEventLogProducer =<< lift (PBS.toLazyM bsp) >-> PP.filter filterTravelActions
 
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files

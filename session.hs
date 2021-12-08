@@ -52,6 +52,32 @@ stack test --file-watch
 
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
 
+-- parse binary event log, filter, print
+runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ServerEvent . _LocationEvent) >-> printEvents
+
+-- reverse file
+(PP.fold' (\acc item -> item : acc) [] identity (evtLogProducer "evt.log")) >>= pure . fst >>= \events -> runEffect (Pipes.each events >-> (evtToFileConsumer "evt.reversed"))
+
+-- print reversed
+runEffect $ evtLogProducer "evt.reversed" >-> PP.filter (has $ _SendToServer) >-> printEvents
+
+(PP.fold' onEvent  [] identity (evtLogProducer "evt.reversed")) >>= pure . fst >>= traverse_ print
+
+data State = FindTarget | FindEnd deriving (Eq, Show)
+
+:{
+onEvent :: (State, [Event]) -> Event -> (State, [Event])
+onEvent (FindTarget, acc) evt@(ServerEvent locEvt@LocationEvent{})
+  | (_locationId . _location $ locEvt) == LocationId 5103 = (FindEnd, evt:acc)
+onEvent (FindTarget, acc) _ = (FindTarget, acc)
+onEvent (FindEnd, acc) evt
+  | has (_ServerEvent . _LocationEvent) evt = (FindTarget, evt:acc)
+onEvent (FindEnd, acc) evt = (FindEnd, evt:acc)
+:}
+
+-- find target event chains
+PP.fold' (evtLogProducer "evt.reversed")
+
 --load known mobs
 mobsData >>= traverse_ printT
 

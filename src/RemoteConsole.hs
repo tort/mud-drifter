@@ -9,6 +9,7 @@ import qualified Pipes.Prelude as PP
 import qualified Pipes.Attoparsec as PA
 import Pipes
 import qualified Pipes.Parse as PP
+import qualified Data.Text as T
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import Pipes.Network.TCP
 import Control.Concurrent.Async
@@ -21,12 +22,18 @@ import Event
 import Console
 import Control.Monad
 
-runRemoteConsole :: (Output ByteString, Input ByteString) -> IO ()
+runRemoteConsole :: (Output Event, Input ByteString) -> IO ()
 runRemoteConsole (evtBusOutput, evtBusInput) = do
   listen (Host "0.0.0.0") "4000" $ \(sock, addr) -> do
     accept sock $ \(s, _) -> do
-      async $ runEffect $ telnetFilteringParser (fromSocket s (2^15)) >-> toOutput evtBusOutput >> (liftIO $ print "remote console input parsing finished")
-      runEffect $ fromInput evtBusInput >-> toSocket s >> (liftIO $ print "server -> remote console stream finished")
+      async $
+        runEffect $
+        telnetFilteringParser (fromSocket s (2 ^ 15)) >-> PP.map (ConsoleInput) >-> (forever $ await >>= \evt -> lift (print evt) >> yield evt) >->
+        toOutput evtBusOutput >>
+        (liftIO $ print "remote console input parsing finished")
+      runEffect $
+        fromInput evtBusInput >-> toSocket s >>
+        (liftIO $ print "server -> remote console stream finished")
       return ()
     return ()
   return ()

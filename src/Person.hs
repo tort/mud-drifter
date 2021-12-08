@@ -2,6 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Person ( travel
               , travelToLoc
@@ -73,7 +74,7 @@ runE person task = run person $ (runExceptP task)
 initPerson :: Person -> IO (Output Event, Input Event)
 initPerson person = do
   (outToServerBox, inToServerBox, sealToServerBox) <- spawn' $ newest 7
-  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest 7
+  (outToExecutorBox, inToExecutorBox, sealToExecutorBox) <- spawn' $ newest @Event 7
   toDrifterBox <- spawn $ newest 100
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
   (outToBinaryLoggerBox, inToBinaryLoggerBox, sealToBinaryLoggerBox) <- spawn' $ newest 100
@@ -83,12 +84,12 @@ initPerson person = do
     toRemoteConsoleBox <- spawn $ newest 100
     let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toServerInputParserBox) `mappend` outToLoggerBox
         emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
-    async $ runRemoteConsole (outToServerBox, snd toRemoteConsoleBox)
+    async $ runRemoteConsole (outToExecutorBox <> outToBinaryLoggerBox, snd toRemoteConsoleBox)
     async $ runEffect $ fromInput (inToServerBox) >-> toSocket sock
     async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox
     async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox <> outToBinaryLoggerBox) >>= liftIO . print
     async $ runServerInputLogger inToLoggerBox
-    async $ runEvtLogger inToBinaryLoggerBox
+    async $ runEffect $ fromInput inToBinaryLoggerBox >-> evtLogWriter
     repeatedTimer emitPulseEvery (sDelay 1)
     runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
     performGC

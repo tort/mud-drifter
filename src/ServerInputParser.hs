@@ -193,12 +193,12 @@ iacAny = do iac
 remoteInputParser :: A.Parser ByteString
 remoteInputParser = telnetControlSeq <|> utf8String
   where utf8String = do text <- A.takeWhile (not . C.isEndOfLine)
-                        A.anyWord8
+                        C.endOfLine
                         return $ text <> "\n"
 
 telnetControlSeq :: A.Parser ByteString
-telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny >> return ""
-
+telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny >> remoteInputParser
+  
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do
     string " --------"
