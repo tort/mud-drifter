@@ -21,6 +21,7 @@ import Debug.Trace
 import Event
 import Console
 import Control.Monad
+import Pipes.Safe
 
 runRemoteConsole :: (Output Event, Input ByteString) -> IO ()
 runRemoteConsole (evtBusOutput, evtBusInput) = do
@@ -28,24 +29,25 @@ runRemoteConsole (evtBusOutput, evtBusInput) = do
     accept sock $ \(s, _) -> do
       async $
         runEffect $
-        telnetFilteringParser (fromSocket s (2 ^ 15)) >-> PP.map (ConsoleInput) >-> (forever $ await >>= \evt -> lift (print evt) >> yield evt) >->
-        toOutput evtBusOutput >>
-        (liftIO $ print "remote console input parsing finished")
+          runSafeP $
+            readSockPipeM s evtBusOutput
       runEffect $
-        fromInput evtBusInput >-> toSocket s >>
-        (liftIO $ print "server -> remote console stream finished")
+        fromInput evtBusInput >-> toSocket s *>
+        (liftIO $ print "server -> remote console stream finished") *>
+        closeSock s
       return ()
     return ()
   return ()
 
-extractText :: Pipe RemoteConsoleEvent ByteString IO ()
-extractText = do evt <- await
-                 handle evt
-                 extractText
-              where handle (RemoteUserInput txt) = yield txt
-                    handle _ = return ()
+readSockPipe :: Socket -> Output Event -> Effect IO ()
+readSockPipe s out = (telnetFilteringParser (fromSocket s (2 ^ 15))) >-> PP.map (ConsoleInput) >-> toOutput out
 
-telnetFilteringParser :: Producer ByteString IO () -> Producer ByteString IO ()
+readSockPipeM :: (MonadSafe m, MonadIO m) => Socket -> Output Event -> Effect m ()
+readSockPipeM s out = (catchP (telnetFilteringParser (fromSocket s (2 ^ 15))) onUserInputException) >-> PP.map (ConsoleInput) >-> toOutput out >> liftIO (print "read from remote console finished")
+
+onUserInputException (SomeException e) = liftIO (print "socket exception") >> pure ()
+
+telnetFilteringParser :: MonadIO m => Producer ByteString m () -> Producer ByteString m ()
 telnetFilteringParser src = PA.parsed remoteInputParser src >>= onEndOrError
   where onEndOrError Right{} = liftIO $ print "remote console input parsing finished"
         onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing remote input")

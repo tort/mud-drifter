@@ -13,6 +13,7 @@ import Person
 import World
 import Event
 import Mapper
+import Logger
 
 :{
 let rentLocation = "5000"
@@ -53,7 +54,7 @@ stack test --file-watch
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
 
 -- parse binary event log, filter, print
-runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ServerEvent . _LocationEvent) >-> printEvents
+runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ConsoleInput) >-> printEvents
 
 -- reverse file
 (PP.fold' (\acc item -> item : acc) [] identity (evtLogProducer "evt.log")) >>= pure . fst >>= \events -> runEffect (Pipes.each events >-> (evtToFileConsumer "evt.reversed"))
@@ -61,7 +62,7 @@ runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ServerEvent . _Locati
 -- print reversed
 runEffect $ evtLogProducer "evt.reversed" >-> PP.filter (has $ _SendToServer) >-> printEvents
 
-(PP.fold' onEvent  [] identity (evtLogProducer "evt.reversed")) >>= pure . fst >>= traverse_ print
+(PP.fold' onEvent (FindTarget, []) identity (evtLogProducer "evt.reversed")) >>= pure . snd . fst >>= traverse_ printEvent
 
 data State = FindTarget | FindEnd deriving (Eq, Show)
 

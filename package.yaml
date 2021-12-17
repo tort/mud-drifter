@@ -54,6 +54,7 @@ library:
                 , regex-tdfa
                 , mtl
                 , heap
+                , pipes-safe
                 ]
 
 executables:

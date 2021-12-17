@@ -79,27 +79,22 @@ initPerson person = do
   (outToLoggerBox, inToLoggerBox, sealToLoggerBox) <- spawn' $ newest 100
   (outToBinaryLoggerBox, inToBinaryLoggerBox, sealToBinaryLoggerBox) <- spawn' $ newest 100
   async $ connect mudHost mudPort $ \(sock, _) -> do
-    toServerInputParserBox <- spawn $ newest 100
+    (outToServerInputParserBox, inToServerInputParserBox, sealToServerInputParserBox) <- spawn' $ newest 100
     print "connected"
-    toRemoteConsoleBox <- spawn $ newest 100
-    let commonOutput = (fst toRemoteConsoleBox) `mappend` (fst toServerInputParserBox) `mappend` outToLoggerBox
+    (outToRemoteConsoleBox, inToRemoteConsoleBox, sealToRemoteConsoleBox) <- spawn' $ newest 100
+    let commonOutput = (outToRemoteConsoleBox) `mappend` outToServerInputParserBox `mappend` outToLoggerBox
         emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
-    async $ runRemoteConsole (outToExecutorBox <> outToBinaryLoggerBox, snd toRemoteConsoleBox)
+    async $ runRemoteConsole (outToExecutorBox <> outToBinaryLoggerBox, inToRemoteConsoleBox)
     async $ runEffect $ fromInput (inToServerBox) >-> toSocket sock
-    async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox
-    async $ runEffect $ parseServerEvents (fromInput (snd toServerInputParserBox)) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox <> outToBinaryLoggerBox) >>= liftIO . print
+    async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox >> liftIO (print "executor pipe finished")
+    async $ runEffect $ parseServerEvents (fromInput inToServerInputParserBox) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox <> outToBinaryLoggerBox) *> lift (print "server parser finished")
     async $ runServerInputLogger inToLoggerBox
-    async $ runEffect $ fromInput inToBinaryLoggerBox >-> evtLogWriter
+    async $ runBinaryLogger inToBinaryLoggerBox
     repeatedTimer emitPulseEvery (sDelay 1)
-    runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed")
-    performGC
-    atomically sealToLoggerBox
-    atomically sealToBinaryLoggerBox
-    atomically sealToServerBox
-    atomically sealToExecutorBox
+    runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed") >> liftIO (atomically sealToBinaryLoggerBox)
     performGC
     print "disconnected"
-  return (outToExecutorBox <> outToBinaryLoggerBox, snd toDrifterBox)
+  return (outToExecutorBox, snd toDrifterBox)
     where mudHost = T.unpack . host . residence $ person
           mudPort = show . port . residence $ person
 

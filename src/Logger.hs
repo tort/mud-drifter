@@ -2,9 +2,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Logger ( evtLogWriter
-              , evtToFileConsumer
-              , runServerInputLogger
+module Logger ( runServerInputLogger
+              , runBinaryLogger
               , serverLogDir
               , evtLogDir
               , printEvents
@@ -16,14 +15,13 @@ module Logger ( evtLogWriter
               , evtLogProducer
               ) where
 
-import Protolude hiding ((<>), toStrict, Location, yield)
+import Protolude hiding ((<>), toStrict, Location, yield, bracket)
 import Pipes
 import Pipes.Concurrent
 import qualified Pipes.Prelude as PP
 import qualified Pipes.ByteString as PBS
 import Event
 import qualified System.IO as IO
-import Control.Exception.Safe
 import Control.Monad
 import Data.String
 import Data.Maybe
@@ -41,6 +39,7 @@ import qualified Data.List as L
 import Control.Lens hiding ((&))
 import Data.Time
 import Data.Time.Format
+import Pipes.Safe
 import TextShow
 import Pipes.Binary (DecodingError)
 import qualified Pipes.Binary as PB
@@ -48,25 +47,6 @@ import qualified Pipes.Binary as PB
 serverLogDir = archiveDir ++ "/server-input-log/"
 evtLogDir = archiveDir ++ "/evt-log/"
 archiveDir = "archive"
-
-evtLogWriter :: Consumer Event IO ()
-evtLogWriter = do
-  startTimestamp <- lift timestamp
-  evtToFileConsumer eventLogFilename
-  stopTimestamp <- lift timestamp
-  liftIO $ archive eventLogFilename $ archivedLogFilename startTimestamp stopTimestamp
-  where archivedLogFilename startTs stopTs = evtLogDir ++ "evt-" ++ startTs ++ "__" ++ stopTs ++ ".log"
-        timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" <$> getCurrentTime
-        eventLogFilename = "evt.log"
-
-evtToFileConsumer fileName = do
-  h <- openfile
-  writeLog h
-  closefile h
-  where
-    writeLog h = serverInteractions >-> PBS.toHandle h >> liftIO (C8.putStr "logger input stream ceased\n")
-    openfile = lift $ openFile fileName WriteMode
-    closefile h = lift $ IO.hClose h
 
 evtLogProducer :: FilePath -> Producer Event  IO (Either (DecodingError, Producer ByteString IO ()) ())
 evtLogProducer file = producer ^. PB.decoded
@@ -86,10 +66,22 @@ runServerInputLogger input = do
   withFile serverInputLogFilename WriteMode writeLog
   stopTimestamp <- timestamp
   archive serverInputLogFilename $ archivedLogFilename startTimestamp stopTimestamp
-  where writeLog h = do runEffect $ fromInput input >-> PBS.toHandle h
+  where writeLog h = runEffect (fromInput input >-> PBS.toHandle h) >> C8.putStrLn "server log finished"
         archivedLogFilename startTs stopTs = serverLogDir ++ "genod-" ++ startTs ++ "__" ++ stopTs ++ ".log"
         timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" <$> getCurrentTime
         serverInputLogFilename = "server-input.log"
+
+runBinaryLogger :: Input Event -> IO ()
+runBinaryLogger input = do
+  startTimestamp <- timestamp
+  withFile eventLogFilename WriteMode writeLog
+  stopTimestamp <- timestamp
+  archive eventLogFilename $ archivedLogFilename startTimestamp stopTimestamp
+  where
+    writeLog h = runEffect $ fromInput input >-> serverInteractions >-> PBS.toHandle h
+    archivedLogFilename startTs stopTs = evtLogDir ++ "evt-" ++ startTs ++ "__" ++ stopTs ++ ".log"
+    timestamp = formatTime defaultTimeLocale "%Y%m%d_%H%M%S" <$> getCurrentTime
+    eventLogFilename = "evt.log"
 
 archive :: String -> String -> IO ()
 archive fromFileName toFilename =
