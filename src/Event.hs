@@ -69,6 +69,7 @@ module Event ( Event(..)
              , _MobRipEvent
              , _SendToServer
              , _ConsoleInput
+             , _TakeFromContainer
              ) where
 
 import qualified Prelude as P

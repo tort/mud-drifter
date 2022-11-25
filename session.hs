@@ -14,6 +14,7 @@ import World
 import Event
 import Mapper
 import Logger
+import qualified Pipes.ByteString as PBS
 
 :{
 let rentLocation = "5000"
@@ -54,13 +55,17 @@ stack test --file-watch
 (pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
 
 -- parse binary event log, filter, print
-runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ConsoleInput) >-> printEvents
+runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ServerEvent . _TakeFromContainer) >-> printEvents
 
+:{
 -- reverse file
-(PP.fold' (\acc item -> item : acc) [] identity (evtLogProducer "evt.log")) >>= pure . fst >>= \events -> runEffect (Pipes.each events >-> (evtToFileConsumer "evt.reversed"))
+(PP.fold' (\acc item -> item : acc) [] identity (evtLogProducer "evt.log")) >>=
+  pure . fst >>= \events ->
+  withFile "evt.reversed" WriteMode $ \h -> runEffect (Pipes.each events >-> serverInteractions >-> PBS.toHandle h)
+:}
 
 -- print reversed
-runEffect $ evtLogProducer "evt.reversed" >-> PP.filter (has $ _SendToServer) >-> printEvents
+runEffect $ evtLogProducer "evt.reversed" >-> PP.filter (has $ _ServerEvent . _TakeFromContainer) >-> printEvents
 
 (PP.fold' onEvent (FindTarget, []) identity (evtLogProducer "evt.reversed")) >>= pure . snd . fst >>= traverse_ printEvent
 
@@ -85,7 +90,6 @@ mobsData >>= traverse_ printT
 mobsData >>= pure . M.toList >>= traverse_ (printT . snd)
 
 world <- loadWorld "/home/tort/mud-drifter/" M.empty
-
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
@@ -124,7 +128,9 @@ runE g $ travelToLoc bankLocation world >> travelToLoc "5100" world >> (killEmAl
 
 g & runE $ travelToLoc bankLocation world
 
-g & runE $ travelToLoc rentLocation world >> yield (SendToServer "постой") >> yield (SendToServer "0")
+g & runE $ travelToLoc rentLocation world
+
+  >> yield (SendToServer "постой") >> yield (SendToServer "0")
 
 run g $ testParTasks world g
 

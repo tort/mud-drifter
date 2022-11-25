@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 module Logger ( runServerInputLogger
               , runBinaryLogger
@@ -13,6 +14,7 @@ module Logger ( runServerInputLogger
               , parseEventLogProducer
               , archive
               , evtLogProducer
+              , serverInteractions
               ) where
 
 import Protolude hiding ((<>), toStrict, Location, yield, bracket)
@@ -43,6 +45,7 @@ import Pipes.Safe
 import TextShow
 import Pipes.Binary (DecodingError)
 import qualified Pipes.Binary as PB
+import Text.Shakespeare.Text
 
 serverLogDir = archiveDir ++ "/server-input-log/"
 evtLogDir = archiveDir ++ "/evt-log/"
@@ -55,10 +58,6 @@ evtLogProducer file = producer ^. PB.decoded
       (lift $ IO.openFile file ReadMode) >>= \h ->
         PBS.fromHandle h >>
         (lift $ IO.hClose h)
-
-loadServerEvents file = openfile >>= \h -> PBS.fromHandle h >> closefile h
-  where openfile = lift $ openFile file ReadMode
-        closefile h = lift $ IO.hClose h
 
 runServerInputLogger :: Input ByteString -> IO ()
 runServerInputLogger input = do
@@ -118,6 +117,7 @@ printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\E
 printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
 printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
 printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
+printEvent (ServerEvent (TakeFromContainer item container)) = putStrLn [st|Вы взяли #{showt item} из #{showt container}|]
 printEvent event = printT . T.pack . show $ event
 
 {-printMove :: [LocToLocActions] -> IO ()
