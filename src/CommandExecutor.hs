@@ -4,17 +4,17 @@
 
 module CommandExecutor where
 
-import Protolude hiding (yield)
-import Pipes
-import qualified Pipes.Prelude as PP
-import qualified Pipes.Concurrent as PC
-import Pipes.Concurrent hiding (send)
-import Pipes.Network.TCP
-import Network.Simple.TCP
-import Data.Text
-import Data.Heap
+import           Data.Heap
 import qualified Data.Heap as H
-import Event
+import           Data.Text
+import           Event
+import           Network.Simple.TCP
+import           Pipes
+import qualified Pipes.Concurrent as PC
+import           Pipes.Concurrent hiding (send)
+import           Pipes.Network.TCP
+import qualified Pipes.Prelude as PP
+import           Protolude hiding (yield)
 
 data Command = Command Int Text | Lock Int | Release Int deriving (Eq, Show)
 
@@ -29,7 +29,7 @@ instance Ord Command where
   compare (Command l _) (Release r) = compare l r
 
 commandExecutor :: MonadIO m => Pipe Event ByteString m ()
-commandExecutor = forever $ await >>= \case (SendToServer text) -> (liftIO $ putStrLn text) >> (yield $ encodeUtf8 $ snoc text '\n')
+commandExecutor = forever $ await >>= \case (SendToServer text) -> liftIO (putStrLn text) >> yield (encodeUtf8 $ snoc text '\n')
                                             (ConsoleInput text) -> yield text
                                             (ServerEvent (ParseError err)) -> liftIO $ print err
                                             _ -> return ()
@@ -56,10 +56,12 @@ commandExecutor = exec H.empty
             (Just (item@(Command prio text), rest)) ->
               (liftIO $ putStrLn text) >> (yield . renderCommand $ text) >>
               exec (H.dropWhile (== item) rest)
--} 
+-}
 
-renderCommand text = encodeUtf8 $ snoc text '\n'
+renderCommand :: Text -> ByteString
+renderCommand = encodeUtf8 . flip snoc '\n'
 
 sendCommand :: Socket -> Text -> IO ()
-sendCommand sock txt = do send sock $ encodeUtf8 $ snoc txt '\n'
-                          return ()
+sendCommand sock txt = do
+  send sock $ encodeUtf8 $ snoc txt '\n'
+  return ()
