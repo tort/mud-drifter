@@ -16,7 +16,8 @@
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
 #resolver: lts-9.21
-resolver: lts-14.27
+#resolver: lts-14.27
+resolver: lts-20.4
 build:
   library-profiling: true
   executable-profiling: true
@@ -46,7 +47,8 @@ packages:
 extra-deps: 
   - timers-0.2.0.4
   - suspend-0.2.0.0
-  - haskell-src-exts-1.20.3
+  - pipes-binary-0.4.3@sha256:263905a64506fd709a6d90e750e4e3cdf0067066b275f46b1028ccb31aee4710,1807
+  - pipes-network-0.6.5@sha256:1dd16c7dd7f70c0683052c486f4d46d89ff4ae68d0738da2efa451d452fcd657,1776
   #- streaming-commons-0.1.19
 
 # Override default flag values for local packages and extra-deps
