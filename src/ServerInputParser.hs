@@ -513,14 +513,14 @@ imBashed = do many' clearColors
 
 skipLine :: A.Parser ()
 skipLine = 
-  skipWhile (not . C.isEndOfLine)
+  skipWhile (not . C.isEndOfLine) *>
   C.endOfLine
 
 expUp :: A.Parser ServerEvent
 expUp = do
   string $ encodeUtf8 "Ваш опыт повысился на "
   C.decimal
-  skipwhile (not . C.isEndOfLine)
+  skipWhile (not . C.isEndOfLine)
   C.endOfLine
   pure ExpUpEvent
 
