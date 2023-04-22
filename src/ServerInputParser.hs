@@ -26,48 +26,51 @@ import Event
 data RemoteConsoleEvent = TelnetControlSeq | RemoteUserInput B.ByteString
 
 serverInputParser :: A.Parser ServerEvent
-serverInputParser = codepagePrompt
-                    <|> loginPrompt
-                    <|> passwordPrompt
-                    <|> welcomePrompt
-                    <|> postWelcome
-                    <|> locationParser
-                    <|> move
-                    <|> listEquipment
-                    <|> listInventory
-                    <|> itemStats
-                    <|> shopList
-                    <|> darkness
-                    <|> prompt
-                    <|> fightPrompt
-                    <|> obstacleEvent
-                    <|> cantGoDir
-                    <|> darkInDirection
-                    <|> glanceDir
-                    <|> pickUp
-                    <|> youTook
-                    <|> mobGaveYouItem
-                    <|> gulp
-                    <|> eat
-                    <|> drinkFromAbsentObject
-                    <|> itemAbsent
-                    <|> liquidContainerIsEmpty
-                    <|> isNotHungry
-                    <|> isNotThirsty
-                    <|> examineContainer
-                    <|> expUp
-                    <|> myStats
-                    <|> imBashed
-                    <|> hitEvent
-                    <|> ripMob
-                    <|> checkNominative
-                    <|> checkGenitive
-                    <|> checkAccusative
-                    <|> checkDative
-                    <|> checkInstrumental
-                    <|> checkPrepositional
-                    <|> mobEnteredLocation
-                    <|> unknownMessage
+serverInputParser =
+  choice
+    [ codepagePrompt
+    , loginPrompt
+    , passwordPrompt
+    , welcomePrompt
+    , postWelcome
+    , locationParser
+    , move
+    , listEquipment
+    , listInventory
+    , itemStats
+    , shopList
+    , darkness
+    , prompt
+    , fightPrompt
+    , obstacleEvent
+    , cantGoDir
+    , darkInDirection
+    , glanceDir
+    , pickUp
+    , youTook
+    , mobGaveYouItem
+    , gulp
+    , eat
+    , drinkFromAbsentObject
+    , itemAbsent
+    , liquidContainerIsEmpty
+    , isNotHungry
+    , isNotThirsty
+    , examineContainer
+    , expUp
+    , myStats
+    , imBashed
+    , hitEvent
+    , ripMob
+    , checkNominative
+    , checkGenitive
+    , checkAccusative
+    , checkDative
+    , checkInstrumental
+    , checkPrepositional
+    , mobEnteredLocation
+    , unknownMessage
+    ]
 
 checkNominative :: A.Parser ServerEvent
 checkNominative = do cs >> string "1;30m"
@@ -163,7 +166,7 @@ codepagePrompt = do
     C.endOfLine
     C.endOfLine
     string "Using keytable"
-    _ <- manyTill' (skip (const True)) (string "Select one : ")
+    _ <- manyTill' skipLine (string "Select one : ")
     return CodepagePrompt
 
 iacWill :: A.Parser Word8
@@ -508,11 +511,16 @@ imBashed = do many' clearColors
         variant2 = do readWordsTill "вас на землю. Поднимайтесь!"
                       return ()
 
+skipLine :: A.Parser ()
+skipLine = 
+  skipWhile (not . C.isEndOfLine)
+  C.endOfLine
+
 expUp :: A.Parser ServerEvent
 expUp = do
   string $ encodeUtf8 "Ваш опыт повысился на "
   C.decimal
-  skipWhile (not . C.isEndOfLine)
+  skipwhile (not . C.isEndOfLine)
   C.endOfLine
   pure ExpUpEvent
 
