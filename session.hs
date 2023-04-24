@@ -1,3 +1,5 @@
+traverse TIO.putStrLn $ (\inOut objref objcase -> [st|instance #{inOut} (ObjRef #{objref} #{objcase})|]) <$> ["ToJSON", "FromJSON"] <*> ["Mob", "Item"] <*> ["InRoomDesc", "Genitive", "Accusative", "Dative", "Instrumental", "Prepositional", "Alias"]
+
 :set -XLambdaCase
 :set -XDataKinds
 import TextShow

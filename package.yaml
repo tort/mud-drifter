@@ -58,6 +58,10 @@ library:
                 , shakespeare
                 , contravariant
                 , recursion-schemes
+                , aeson
+                , aeson-pretty
+                , lens-aeson
+                , pretty-simple
                 ]
 
 executables:

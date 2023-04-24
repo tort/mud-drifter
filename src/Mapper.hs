@@ -32,7 +32,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.List as L
 import TextShow
 
-type Path = [LocationId]
+type Path = [LocationId Int]
 
 showPath :: World -> Maybe Path -> ByteString
 showPath world Nothing = "where is no path there\n"
@@ -48,10 +48,10 @@ showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nod
         toJust (Just left, Just right) = (left, right)
         lookupDir p = M.lookup p $ _directions world
 
-findTravelPath :: LocationId -> LocationId -> WorldMap -> Maybe Path
+findTravelPath :: LocationId Int -> LocationId Int -> WorldMap -> Maybe Path
 findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (SP.sp fromId toId worldMap)
 
-printItems :: Text -> Map ServerEvent (Map LocationId Int) -> Text
+printItems :: Text -> Map ServerEvent (Map (LocationId Int) Int) -> Text
 printItems subName itemsOnMap = (render . filterEvents) itemsOnMap
   where render mobs = M.foldMapWithKey renderMob mobs
         renderMob evt locToCountMap = renderEvent evt <> "\n" <> (renderLocs locToCountMap)
@@ -73,7 +73,7 @@ printLocations substr world = mapM_ printT $ locationsBy substr world
 printMobsByRegex :: World -> Text -> IO ()
 printMobsByRegex world regex = mapM_ printT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _inRoomDescToMobOnMap world
 
-findLocationsBy :: Text -> World -> [LocationId]
+findLocationsBy :: Text -> World -> [LocationId Int]
 findLocationsBy substr world = _locationId <$> locationsBy substr world
 
 locationsBy :: Text -> World -> [Location]
@@ -90,7 +90,7 @@ listToPairs list = fmap unwrap . filterDirs . scanToPairs $ list
         unwrap (Just left, Just right) = (left, right)
         scanToPairs = scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing)
 
-zonePath :: World -> Int -> [LocationId]
+zonePath :: World -> Int -> [LocationId Int]
 zonePath world anyZoneLocId = fmap LocationId $ concat $  mergeTree $ listToPairs (reverse . fmap fst . unLPath <$> MST.msTreeAt anyZoneLocId zone)
   where zone = zoneMap world anyZoneLocId
         mergeTree = foldr (\(l, r) acc -> mergePathPair l r : acc) []

@@ -14,6 +14,9 @@ module World ( locsByRegex
              , listFilesIn
              , extractLocs
              , extractDirections
+             , extractDiscovered
+             , cacheLocations
+             , cacheMobData
              , showLocs
              , loadWorld
              , parseServerEvents
@@ -68,15 +71,17 @@ import Text.Regex.TDFA
 import qualified Data.List as L
 import Data.Binary
 import Data.Binary.Get
+import Data.Aeson
+import Data.Aeson.Encode.Pretty
 
 data World = World { _worldMap :: WorldMap
                    , _locationEvents :: Set Location
                    , _directions :: Directions
-                   , _obstaclesOnMap :: Map (LocationId, RoomDir) Text
-                   , _questActions :: Map (LocationId, LocationId) [Event]
-                   , _itemsOnMap :: Map ServerEvent (Map LocationId Int)
+                   , _obstaclesOnMap :: Map (LocationId Int, RoomDir) Text
+                   , _questActions :: Map (LocationId Int, LocationId Int) [Event]
+                   , _itemsOnMap :: Map ServerEvent (Map (LocationId Int) Int)
                    , _itemStats :: [ItemStats]
-                   , _inRoomDescToMobOnMap :: Map (ObjRef Mob InRoomDesc) (Map LocationId Int)
+                   , _inRoomDescToMobOnMap :: Map (ObjRef Mob InRoomDesc) (Map (LocationId Int) Int)
                    , _inRoomDescToMob :: Map (ObjRef Mob InRoomDesc) MobStats
                    , _nominativeToMob :: Map (ObjRef Mob Nominative) MobStats
                    }
@@ -87,16 +92,16 @@ data Direction = Direction { locIdFrom :: LocIdFrom
                            }
                            deriving (Eq, Ord, Generic, Show)
 
-type LocIdFrom = LocationId
-type LocIdTo = LocationId
+type LocIdFrom = LocationId Int
+type LocIdTo = LocationId Int
 type Trigger = Text
 type WorldMap = Gr () Int
-type Directions = Map (LocationId, LocationId) RoomDir
+type Directions = Map (LocationId Int, LocationId Int) RoomDir
 
 unwrapRight :: Either ParsingError ServerEvent -> ServerEvent
 unwrapRight (Right val) = val
 
-accDirections :: Map (LocationId, LocationId) RoomDir -> [ServerEvent] -> Map (LocationId, LocationId) RoomDir
+accDirections :: Map (LocationId Int, LocationId Int) RoomDir -> [ServerEvent] -> Map (LocationId Int, LocationId Int) RoomDir
 accDirections directions pair =
   let updateWorld locFrom locTo dir
         | locFrom == locTo = directions
@@ -149,7 +154,7 @@ loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (r
 extractObjects :: Monad m => (ServerEvent -> a) -> Pipe ServerEvent a m ()
 extractObjects getter = PP.filter (has _LocationEvent) >-> PP.map getter
 
-extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map LocationId Int))
+extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map (LocationId Int) Int))
 extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _LocationEvent) <-< producer)
   where toMap acc evt@(LocationEvent (Location locId _) _ mobs _) = F.foldl (insertMob locId) acc (_mobs evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
@@ -158,7 +163,7 @@ extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _Loc
         plusOne Nothing = Just 1
         plusOne (Just x) = Just (x + 1)
 
-discoverItems :: (Monad m) => Producer ServerEvent m () -> m (Map ServerEvent (Map LocationId Int))
+discoverItems :: (Monad m) => Producer ServerEvent m () -> m (Map ServerEvent (Map (LocationId Int) Int))
 discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEvtWithLoc Nothing)
   where filterMapDiscoveries = forever $ await >>= \case
               evt@(LocationEvent (Location locId _) items _ _) -> yield evt >> mapM_ (yield . ItemInTheRoom) items
@@ -186,7 +191,7 @@ extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ locationEvents
 extractItemStats :: Monad m => Producer ServerEvent m () -> Producer ItemStats m ()
 extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter (has _ItemStatsEvent) >-> PP.map (\(ItemStatsEvent item) -> item)
 
-extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId, LocationId) RoomDir)
+extractDirections :: Monad m => Producer ServerEvent m () -> m (Map (LocationId Int, LocationId Int) RoomDir)
 extractDirections serverEvents = PP.fold accDirections M.empty identity locationEventsAndMovesTriples
   where locationEventsAndMoves = serverEvents >-> PP.filter (\evt -> has _LocationEvent evt || has _MoveEvent evt || has _CodepagePrompt evt)
         locationEventsAndMovesTriples = (locationEventsAndMoves >-> PP.scan toTriples [] identity
@@ -204,7 +209,7 @@ serverLogEventsProducer = combineStreams =<< liftIO logFiles
         combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file >> yield EndOfLogEvent) (return ())
         logfileEvtStream file = PP.dropWhile (hasn't _LocationEvent ) <-< (parseServerEvents . loadServerEvents $ file)
 
-obstaclesOnMap :: IO (Map (LocationId, RoomDir) Text)
+obstaclesOnMap :: IO (Map (LocationId Int, RoomDir) Text)
 obstaclesOnMap = fmap M.fromList $ PP.toListM $ PP.map toMapItems <-< PP.filter isLocationThenObstacle <-< PP.zip obstacleEvents (PP.drop 1 <-< obstacleEvents)
   where isObstacleEvt ObstacleEvent{} = True
         isObstacleEvt LocationEvent{} = True
@@ -229,18 +234,30 @@ mobRoomDescs = nubList <$> loadMobRoomDescs
 
 type NominativeWords =  [Text]
 
+cacheLocations :: IO ()
+cacheLocations = listFilesIn "archive/server-input-log/" >>=  extractLocs . parseServerEvents . loadLogs >>= LC8.writeFile "cache/locations.json" . encodePretty . toJSON
+
+cacheMobData :: IO ()
+cacheMobData = mobsData >>= LC8.writeFile "cache/mobs-data.json" . encodePretty . toJSON
+
+loadCachedMobData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
+loadCachedMobData = fmap fromJust . decodeFileStrict $ "cache/mobs-data.json"
+
+loadCachedLocations :: IO (Set Location)
+loadCachedLocations = fmap fromJust . decodeFileStrict $ "cache/locations.json"
+
 loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
 loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
   directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
-  locationEvents <- (extractLocs . parseServerEvents . loadLogs) serverLogFiles
+  locationEvents <- loadCachedLocations
   itemsStats <- pure []--PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- pure M.empty--(discoverItems . parseServerEvents . loadLogs) serverLogFiles
   mobsOnMap <- (extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
   questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- pure M.empty--obstaclesOnMap
-  mobsData <- mobsData
+  mobsData <- loadCachedMobData
   let worldMap = buildMap locationEvents directions
    in return World { _worldMap = worldMap
                    , _locationEvents = locationEvents
@@ -347,7 +364,7 @@ zoneMap world anyZoneLocId = mkGraph nodes edges
     dirInZone (LocationId lid, LocationId rid) = isInZone lid && isInZone rid
     isInZone locId = (div locId 100) == (div anyZoneLocId 100)
 
-travelActions :: Monad m => Map (LocationId, LocationId) (Pipe Event Event m ServerEvent)
+travelActions :: Monad m => Map (LocationId Int, LocationId Int) (Pipe Event Event m ServerEvent)
 travelActions = M.fromList [ ((LocationId 5104, LocationId 5117), setupLadder)
                            , ((LocationId 5052, LocationId 4064), payOldGipsy)
                            , ((LocationId 4064, LocationId 5052), payYoungGipsy)
@@ -378,7 +395,7 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
         removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> showt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
 
-travelAction :: MonadIO m => World -> LocationId -> LocationId -> Pipe Event Event m ()
+travelAction :: MonadIO m => World -> LocationId Int -> LocationId Int -> Pipe Event Event m ()
 travelAction world from to = case M.lookup (from, to) (_directions world) of
                                           Nothing -> return ()
                                           (Just dir) -> yield (SendToServer . showt $ dir)
@@ -438,7 +455,7 @@ scanFromTargetEvent =
       (lift $ openFile "evt.log" ReadMode) >>= \h ->
         PBS.fromHandle h >> (lift $ hClose h)
 
-dropLoopsFromPath :: IO (Map LocationId Int)
+dropLoopsFromPath :: IO (Map (LocationId Int) Int)
 dropLoopsFromPath = PP.fold onEvent M.empty identity indexedLocations
   where
     indexedLocations = PP.zip (Pipes.each [1..]) locationEvents

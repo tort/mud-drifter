@@ -110,7 +110,7 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId] -> World -> Pipe Event Event (ExceptT Text m) ()
+travel :: MonadIO m => [LocationId Int] -> World -> Pipe Event Event (ExceptT Text m) ()
 travel path world = waitMove path False
   where
     waitMove [] _ = lift $ throwError "path lost"
@@ -212,9 +212,9 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
     chooseTarget targets = join . find isJust . fmap findAlias $ targets
 
-travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (LocationId)
+travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (LocationId Int)
 travelToMob world mobNom = pipe $ mobArea
-  where mobArea :: Maybe (Map LocationId Int)
+  where mobArea :: Maybe (Map (LocationId Int) Int)
         mobArea = ((_inRoomDescToMobOnMap world) M.!?) =<< _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
         pipe (Just area)
           | M.size area < 1 = lift $ throwError "no habitation found"

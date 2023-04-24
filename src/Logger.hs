@@ -125,7 +125,7 @@ printMove moves = mapM_ printM moves
   where printM m = do print (fst m)
                       printEvents (snd m)-}
 
-obstacleActions :: Monad m => Producer Event m () -> m (Map (LocationId, LocationId) [Event])
+obstacleActions :: Monad m => Producer Event m () -> m (Map (LocationId Int, LocationId Int) [Event])
 obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, []), M.empty) identity questEventsProducer
   where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _)) = ((Just $ loc^.locationId, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
@@ -135,8 +135,8 @@ obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, [])
            in ((Just $ loc^.locationId, []), newTravelActions)
         toActionMap ((leftLoc, actions), travelActions) evt = ((leftLoc, evt : actions), travelActions)
 
-type LocToLocActions = ([LocationId], [Event])
-type LocPair = [LocationId]
+type LocToLocActions = ([LocationId Int], [Event])
+type LocPair = [LocationId Int]
 
 scanDoorEvents :: [Event] -> [LocToLocActions]
 scanDoorEvents evts = L.filter (\x -> (length $ fst x) >= 2) $ (\pair -> ((fst . snd) pair, (snd . fst) pair))  <$> (L.filter changeLocsOnly $ zipped)

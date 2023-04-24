@@ -205,7 +205,7 @@ telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny >> re
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do
     string " --------"
-    _ <- manyTill' (skip (const True)) (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
+    _ <- manyTill' skipLine (string $ encodeUtf8 "Введите имя персонажа (или \"новый\" для создания нового): ")
     return LoginPrompt
 
 passwordPrompt :: A.Parser ServerEvent
@@ -631,7 +631,7 @@ postWelcome :: A.Parser ServerEvent
 postWelcome = do
     C.endOfLine
     string $ encodeUtf8 "  Добро пожаловать на землю Киевскую, богатую историей"
-    _ <- manyTill' (skip (const True)) dblCrnl
+    A.count 4 skipLine
     return PostWelcome
 
 glanceDir :: A.Parser ServerEvent

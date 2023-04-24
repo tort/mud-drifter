@@ -10,6 +10,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Event ( Event(..)
              , ServerEvent(..)
@@ -78,6 +79,9 @@ import Pipes.Concurrent
 import Data.Text
 import qualified Data.Text as T
 import Data.ByteString.Char8
+import qualified Data.ByteString.Char8 as C8
+
+import qualified Data.ByteString.Lazy.Char8 as LC8
 
 import Data.Binary
 import GHC.Generics (Generic)
@@ -87,19 +91,21 @@ import Control.Lens hiding ((&))
 import TextShow
 import TextShow.Generic
 
+import Data.Aeson hiding (Result(..))
+
 data Result a = Success a | Failure Text
   deriving (Eq, Generic)
 
-newtype LocationId = LocationId Int
-  deriving (Eq, Ord, Generic, Show)
+newtype LocationId a = LocationId a
+  deriving (Eq, Ord, Generic, Show, Functor)
 
-instance TextShow LocationId where
+instance TextShow (LocationId Int) where
   showt (LocationId n) = showt n
 
 newtype LocationTitle = LocationTitle Text
   deriving (Eq, Ord, Generic, Show)
 
-data Location = Location { _locationId :: LocationId
+data Location = Location { _locationId :: LocationId Int
                          , _locationTitle :: LocationTitle
                          } deriving (Ord, Generic, Show)
 
@@ -125,7 +131,7 @@ instance TextShow RoomDir where
 instance Binary Event
 instance Binary ServerEvent
 instance Binary Location
-instance Binary LocationId
+instance Binary (LocationId Int)
 instance Binary LocationTitle
 instance Binary Slot
 instance Binary EquippedItem
@@ -153,6 +159,60 @@ instance Binary (ObjRef Mob InRoomDesc)
 instance Binary (ObjRef Mob Alias)
 instance Binary InventoryItem
 
+instance ToJSON (ObjRef Mob InRoomDesc)
+instance ToJSON (ObjRef Mob Nominative)
+instance ToJSON (ObjRef Mob Genitive)
+instance ToJSON (ObjRef Mob Accusative)
+instance ToJSON (ObjRef Mob Dative)
+instance ToJSON (ObjRef Mob Instrumental)
+instance ToJSON (ObjRef Mob Prepositional)
+instance ToJSON (ObjRef Mob Alias)
+instance ToJSON (ObjRef Item InRoomDesc)
+instance ToJSON (ObjRef Item Nominative)
+instance ToJSON (ObjRef Item Genitive)
+instance ToJSON (ObjRef Item Accusative)
+instance ToJSON (ObjRef Item Dative)
+instance ToJSON (ObjRef Item Instrumental)
+instance ToJSON (ObjRef Item Prepositional)
+instance ToJSON (ObjRef Item Alias)
+instance FromJSON (ObjRef Mob InRoomDesc)
+instance FromJSON (ObjRef Mob Nominative)
+instance FromJSON (ObjRef Mob Genitive)
+instance FromJSON (ObjRef Mob Accusative)
+instance FromJSON (ObjRef Mob Dative)
+instance FromJSON (ObjRef Mob Instrumental)
+instance FromJSON (ObjRef Mob Prepositional)
+instance FromJSON (ObjRef Mob Alias)
+instance FromJSON (ObjRef Item InRoomDesc)
+instance FromJSON (ObjRef Item Nominative)
+instance FromJSON (ObjRef Item Genitive)
+instance FromJSON (ObjRef Item Accusative)
+instance FromJSON (ObjRef Item Dative)
+instance FromJSON (ObjRef Item Instrumental)
+instance FromJSON (ObjRef Item Prepositional)
+instance FromJSON (ObjRef Item Alias)
+instance ToJSON (LocationId Int)
+instance FromJSON (LocationId Int)
+instance ToJSONKey (LocationId Int)
+instance FromJSONKey (LocationId Int)
+instance ToJSON LocationTitle
+instance FromJSON LocationTitle
+instance ToJSON Location
+instance FromJSON Location
+instance ToJSON MobStats
+instance FromJSON MobStats
+instance ToJSON (NameCases Mob)
+instance FromJSON (NameCases Mob)
+instance ToJSON (NameCases Item)
+instance FromJSON (NameCases Item)
+instance ToJSON EverAttacked
+instance FromJSON EverAttacked
+
+instance ToJSONKey (ObjRef Mob InRoomDesc)
+instance FromJSONKey (ObjRef Mob InRoomDesc)
+instance ToJSONKey (ObjRef Mob Genitive)
+instance FromJSONKey (ObjRef Mob Genitive)
+
 data Event = ConsoleInput ByteString
            | ConsoleOutput ByteString
            | SendToServer Text
@@ -165,7 +225,7 @@ data Event = ConsoleInput ByteString
            | ServerIOException
            | UserInputIOException
            | PulseEvent
-           | TravelRequest [LocationId]
+           | TravelRequest [LocationId Int]
            | TravelFailure
            deriving (Eq, Generic, Show)
 
@@ -297,7 +357,7 @@ instance Monoid (NameCases a) where
                      , _alias = Nothing
                      }
 
-newtype EverAttacked = EverAttacked Bool deriving (Eq, Ord, Show)
+newtype EverAttacked = EverAttacked Bool deriving (Eq, Ord, Show, Generic)
 
 instance Semigroup EverAttacked where
   (EverAttacked left) <> (EverAttacked right) = EverAttacked $ left || right
@@ -343,7 +403,7 @@ data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord
 class ShowVal a where
   showVal :: a -> Text
 
-instance ShowVal LocationId where
+instance ShowVal (LocationId Int) where
   showVal (LocationId id) = show id
 
 instance ShowVal LocationTitle where
