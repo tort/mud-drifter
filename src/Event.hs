@@ -207,6 +207,8 @@ instance ToJSON (NameCases Item)
 instance FromJSON (NameCases Item)
 instance ToJSON EverAttacked
 instance FromJSON EverAttacked
+instance ToJSON RoomDir
+instance FromJSON RoomDir
 
 instance ToJSONKey (ObjRef Mob InRoomDesc)
 instance FromJSONKey (ObjRef Mob InRoomDesc)

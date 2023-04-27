@@ -234,23 +234,50 @@ mobRoomDescs = nubList <$> loadMobRoomDescs
 
 type NominativeWords =  [Text]
 
+cacheLocationsFile = "cache/locations.json"
+cacheDirectionsFile ="cache/directions.json"
+cacheMobsOnMapFile = "cache/mobs-on-map.json"
+cacheMobsDataFile = "cache/mobs-data.json"
+
 cacheLocations :: IO ()
-cacheLocations = listFilesIn "archive/server-input-log/" >>=  extractLocs . parseServerEvents . loadLogs >>= LC8.writeFile "cache/locations.json" . encodePretty . toJSON
+cacheLocations =
+  listFilesIn "archive/server-input-log/" >>=
+  extractLocs . parseServerEvents . loadLogs >>=
+  LC8.writeFile cacheLocationsFile . encodePretty . toJSON
 
 cacheMobData :: IO ()
-cacheMobData = mobsData >>= LC8.writeFile "cache/mobs-data.json" . encodePretty . toJSON
+cacheMobData =
+  mobsData >>= LC8.writeFile cacheMobsDataFile . encodePretty . toJSON
+
+cacheDirections :: IO ()
+cacheDirections =
+  listFilesIn "archive/server-input-log/" >>=
+  extractDirections . parseServerEvents . loadLogs >>=
+  LC8.writeFile cacheDirectionsFile . encodePretty . toJSON
+
+cacheMobsOnMap :: IO ()
+cacheMobsOnMap =
+  listFilesIn "archive/server-input-log/" >>=
+  extractDiscovered . parseServerEvents . loadLogs >>=
+  LC8.writeFile cacheMobsOnMapFile . encodePretty . toJSON
 
 loadCachedMobData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-loadCachedMobData = fmap fromJust . decodeFileStrict $ "cache/mobs-data.json"
+loadCachedMobData = fmap fromJust . decodeFileStrict $ cacheMobsDataFile
 
 loadCachedLocations :: IO (Set Location)
-loadCachedLocations = fmap fromJust . decodeFileStrict $ "cache/locations.json"
+loadCachedLocations = fmap fromJust . decodeFileStrict $ cacheLocationsFile
+
+loadCachedDirections :: IO (Map (LocationId Int, LocationId Int) RoomDir)
+loadCachedDirections = fmap fromJust . decodeFileStrict $ cacheDirectionsFile
+
+loadCachedMobsOnMap :: IO (Map (ObjRef Mob InRoomDesc) (Map (LocationId Int) Int))
+loadCachedMobsOnMap = fmap fromJust . decodeFileStrict $ cacheMobsOnMapFile
 
 loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
 loadWorld currentDir customMobProperties = do
   serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
   evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
-  directions <- (extractDirections . parseServerEvents . loadLogs) serverLogFiles
+  directions <- loadCachedDirections
   locationEvents <- loadCachedLocations
   itemsStats <- pure []--PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- pure M.empty--(discoverItems . parseServerEvents . loadLogs) serverLogFiles
