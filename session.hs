@@ -1,3 +1,7 @@
+
+-- calculate unidentified mobs
+mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap
+
 traverse TIO.putStrLn $ (\inOut objref objcase -> [st|instance #{inOut} (ObjRef #{objref} #{objcase})|]) <$> ["ToJSON", "FromJSON"] <*> ["Mob", "Item"] <*> ["InRoomDesc", "Genitive", "Accusative", "Dative", "Instrumental", "Prepositional", "Alias"]
 
 :set -XLambdaCase
@@ -86,12 +90,8 @@ onEvent (FindEnd, acc) evt = (FindEnd, evt:acc)
 -- find target event chains
 PP.fold' (evtLogProducer "evt.reversed")
 
---load known mobs
-mobsData >>= traverse_ printT
+world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
 
-mobsData >>= pure . M.toList >>= traverse_ (printT . snd)
-
-world <- loadWorld "/home/tort/mud-drifter/" M.empty
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
@@ -124,7 +124,7 @@ g & runE $ runZoneV3Field >> travelToLoc rentLocation world
 
 g & runE $ travelToLoc "5100" world >> travel (zonePath world 5100) world
 
-g & runE $ travelToLoc "5100" world 
+g & runE $ travelToLoc "4056" world 
 
 runE g $ travelToLoc bankLocation world >> travelToLoc "5100" world >> (killEmAll world >-> travel (zonePath world 5100) world)
 
@@ -139,6 +139,20 @@ run g $ testParTasks world g
 run g PP.drain
 
 g & runE $ travelToLoc rentLocation world
+
+:{
+ddo :: Monad m => Text -> Pipe Event Event m ()
+ddo = Pipes.yield . SendToServer
+checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
+identifyNameCases :: Set (ObjRef Mob InRoomDesc) -> Pipe Event Event IO ()
+identifyNameCases mobs
+  | S.null mobs = pure ()
+  | otherwise =
+    await >>= \case
+      (ServerEvent (LocationEvent _ _ [mob] _)) ->
+        checkCases (unObjRef mob) *> identifyNameCases (S.delete mob mobs)
+      _ -> identifyNameCases mobs
+:}
 
 runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
 

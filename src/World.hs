@@ -256,7 +256,7 @@ loadWorld currentDir customMobProperties = do
   locationEvents <- loadCachedLocations
   itemsStats <- pure []--PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
   itemsOnMap <- pure M.empty--(discoverItems . parseServerEvents . loadLogs) serverLogFiles
-  mobsOnMap <- (extractDiscovered . parseServerEvents . loadLogs) serverLogFiles
+  mobsOnMap <- loadCachedMobsOnMap
   questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- pure M.empty--obstaclesOnMap
   mobsData <- loadCachedMobData
