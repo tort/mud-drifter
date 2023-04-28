@@ -5,36 +5,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DataKinds #-}
 
-module World ( locsByRegex
-             , mobsData
-             , nominativeToEverAttacked
-             , inRoomDescToMobCase
-             , groupByCase
-             , loadLogs
-             , listFilesIn
-             , extractLocs
-             , extractDirections
-             , extractDiscovered
-             , cacheLocations
-             , cacheMobData
-             , showLocs
-             , loadWorld
-             , parseServerEvents
-             , evtLogProducer
-             , travelAction
-             , zoneMap
-             , loadServerEvents
-             , serverLogEventsProducer
-             , discoverItems
-             , binarizeServerLog
-             , parseEvtLog
-             , scanFromTargetEvent
-             , World(..)
-             , Direction(..)
-             , Trigger(..)
-             , WorldMap
-             , dropLoopsFromPath
-             ) where
+module World where
 
 import Protolude hiding (Location, runStateT, Down, yield, to)
 import qualified Data.ByteString.Char8 as C8
@@ -238,6 +209,10 @@ cacheLocationsFile = "cache/locations.json"
 cacheDirectionsFile ="cache/directions.json"
 cacheMobsOnMapFile = "cache/mobs-on-map.json"
 cacheMobsDataFile = "cache/mobs-data.json"
+
+generateCache :: IO ()
+generateCache =
+  cacheLocations *> cacheMobData *> cacheDirections *> cacheMobsOnMap
 
 cacheLocations :: IO ()
 cacheLocations =
