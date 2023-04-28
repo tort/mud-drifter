@@ -150,7 +150,10 @@ identifyNameCases mobs
   | otherwise =
     await >>= \case
       (ServerEvent (LocationEvent _ _ [mob] _)) ->
-        checkCases (unObjRef mob) *> identifyNameCases (S.delete mob mobs)
+        if S.member mob mobs
+          then checkCases (unObjRef mob) *>
+               identifyNameCases (S.delete mob mobs)
+          else identifyNameCases mobs
       _ -> identifyNameCases mobs
 :}
 

@@ -24,6 +24,13 @@ dependencies:
 
 library:
   source-dirs: src
+  default-extensions: [ OverloadedStrings
+                      , LambdaCase
+                      , DataKinds
+                      , NoImplicitPrelude
+                      , QuasiQuotes
+                      , DuplicateRecordFields
+                      ]
   dependencies: [ protolude
                 , text
                 , text-show
@@ -68,6 +75,13 @@ executables:
   mud-drifter:
     main:                Main.hs
     source-dirs:         app
+    default-extensions: [ OverloadedStrings
+                        , LambdaCase
+                        , DataKinds
+                        , NoImplicitPrelude
+                        , QuasiQuotes
+                        , DuplicateRecordFields
+                        ]
     ghc-options:
     - -threaded
     - -rtsopts
@@ -82,7 +96,12 @@ executables:
                   , pipes-network
                   , directory
                   , attoparsec
-                  , pipes-concurrency ]
+                  , pipes-concurrency
+                  , aeson
+                  , aeson-pretty
+                  , lens-aeson
+                  , pretty-simple
+                  ]
 
 tests:
   drifter-test:
