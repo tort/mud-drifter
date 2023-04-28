@@ -3,7 +3,7 @@
 
 module RemoteConsole ( runRemoteConsole ) where
 
-import Prelude
+import Protolude hiding (yield, traceIO)
 import Pipes.Concurrent hiding (send)
 import qualified Pipes.Prelude as PP
 import qualified Pipes.Attoparsec as PA

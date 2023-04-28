@@ -73,7 +73,6 @@ module Event ( Event(..)
              , _TakeFromContainer
              ) where
 
-import qualified Prelude as P
 import Protolude hiding (Location, Down, Up, Left, Right, Dual)
 import Pipes.Concurrent
 import Data.Text
