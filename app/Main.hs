@@ -1,10 +1,18 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE LambdaCase #-}
-
 module Main where
 
-import Protolude
+import Protolude hiding (Location, Down, Up, Left, Right, Dual)
+import qualified Data.Text as T
+import qualified Data.Set as S
+import qualified Data.Map.Strict as M
+import qualified Data.List as L
+import qualified Data.Foldable as F
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy.Char8 as LC8
+import TextShow
+import TextShow.Generic
+import Control.Lens hiding ((&))
+import Data.Aeson hiding (Result(..))
+import Data.Aeson.Encode.Pretty
 import Pipes
 
 import ServerInputParser
@@ -12,8 +20,6 @@ import Console
 import Event
 import Mapper
 import Person
-import qualified Data.ByteString.Char8 as C8
-import qualified Data.Text as T
 import World
 
 main :: IO ()
