@@ -33,24 +33,24 @@ runRemoteConsole (evtBusOutput, evtBusInput) = do
             readSockPipeM s evtBusOutput
       runEffect $
         fromInput evtBusInput >-> toSocket s *>
-        (liftIO $ print "server -> remote console stream finished") *>
+        liftIO (print "server -> remote console stream finished") *>
         closeSock s
       return ()
     return ()
   return ()
 
 readSockPipe :: Socket -> Output Event -> Effect IO ()
-readSockPipe s out = (telnetFilteringParser (fromSocket s (2 ^ 15))) >-> PP.map (ConsoleInput) >-> toOutput out
+readSockPipe s out = telnetFilteringParser (fromSocket s (2 ^ 15)) >-> PP.map ConsoleInput >-> toOutput out
 
 readSockPipeM :: (MonadSafe m, MonadIO m) => Socket -> Output Event -> Effect m ()
-readSockPipeM s out = (catchP (telnetFilteringParser (fromSocket s (2 ^ 15))) onUserInputException) >-> PP.map (ConsoleInput) >-> toOutput out >> liftIO (print "read from remote console finished")
+readSockPipeM s out = catchP (telnetFilteringParser (fromSocket s (2 ^ 15))) onUserInputException >-> PP.map ConsoleInput >-> toOutput out >> liftIO (print "read from remote console finished")
 
-onUserInputException (SomeException e) = liftIO (print "socket exception") >> pure ()
+onUserInputException (SomeException e) = void (liftIO (print "socket exception"))
 
 telnetFilteringParser :: MonadIO m => Producer ByteString m () -> Producer ByteString m ()
 telnetFilteringParser src = PA.parsed remoteInputParser src >>= onEndOrError
   where onEndOrError Right{} = liftIO $ print "remote console input parsing finished"
-        onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing remote input")
+        onEndOrError (Left (err, producer)) = liftIO $ print "error when parsing remote input"
         --errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (C8.concat ctxts) <> "\n"
 
 
