@@ -156,6 +156,7 @@ identifyNameCases mobs
           else identifyNameCases mobs
       _ -> identifyNameCases mobs
 :}
+-- ServerEvent (CheckNominative)
 
 runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
 

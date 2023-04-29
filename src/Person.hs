@@ -38,6 +38,7 @@ import qualified Pipes.Prelude as PP
 import Pipes.Network.TCP
 import Control.Concurrent.Timer
 import Control.Concurrent.Suspend.Lifted
+import Control.Monad
 import CommandExecutor
 import Pipes.Lift
 import RemoteConsole
@@ -63,13 +64,13 @@ run (outChan, inChan) task =
       forever $
       await >>= \case
         evt@SendToServer {} ->
-          (liftIO . atomically . PC.send outChan $ evt) >> pure ()
+          (void (liftIO . atomically . PC.send outChan $ evt))
         evt@SendOnPulse {} ->
-          (liftIO . atomically . PC.send outChan $ evt) >> pure ()
+          (void (liftIO . atomically . PC.send outChan $ evt))
         _ -> pure ()
 
 runE :: (MonadIO m, Show a) => (Output Event, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
-runE person task = run person $ (runExceptP task)
+runE person task = run person (runExceptP task)
 
 initPerson :: Person -> IO (Output Event, Input Event)
 initPerson person = do
@@ -82,16 +83,16 @@ initPerson person = do
     (outToServerInputParserBox, inToServerInputParserBox, sealToServerInputParserBox) <- spawn' $ newest 100
     print "connected"
     (outToRemoteConsoleBox, inToRemoteConsoleBox, sealToRemoteConsoleBox) <- spawn' $ newest 100
-    let commonOutput = (outToRemoteConsoleBox) `mappend` outToServerInputParserBox `mappend` outToLoggerBox
-        emitPulseEvery = atomically $ PC.send (fst toDrifterBox) PulseEvent >> return ()
+    let commonOutput = outToRemoteConsoleBox `mappend` outToServerInputParserBox `mappend` outToLoggerBox
+        emitPulseEvery = atomically $ void (PC.send (fst toDrifterBox) PulseEvent)
     async $ runRemoteConsole (outToExecutorBox <> outToBinaryLoggerBox, inToRemoteConsoleBox)
-    async $ runEffect $ fromInput (inToServerBox) >-> toSocket sock
-    async $ runEffect $ fromInput (inToExecutorBox) >-> commandExecutor >-> toOutput outToServerBox >> liftIO (print "executor pipe finished")
+    async $ runEffect $ fromInput inToServerBox >-> toSocket sock
+    async $ runEffect $ fromInput inToExecutorBox >-> commandExecutor >-> toOutput outToServerBox >> liftIO (print "executor pipe finished")
     async $ runEffect $ parseServerEvents (fromInput inToServerInputParserBox) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox <> outToBinaryLoggerBox) *> lift (print "server parser finished")
     async $ runServerInputLogger inToLoggerBox
     async $ runBinaryLogger inToBinaryLoggerBox
     repeatedTimer emitPulseEvery (sDelay 1)
-    runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> (liftIO $ print "remote connection closed") >> liftIO (atomically sealToBinaryLoggerBox)
+    runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> liftIO (print "remote connection closed") >> liftIO (atomically sealToBinaryLoggerBox)
     performGC
     print "disconnected"
   return (outToExecutorBox, snd toDrifterBox)
@@ -135,11 +136,11 @@ travelToLoc substr world = action findLocation
     findLocation = findLocationsBy substr world
     action [] = lift $ throwError "no matching locations found"
     action [locTo] =
-      (liftIO $ putStrLn ("travelling to " <> showt locTo)) >>
+      liftIO (putStrLn ("travelling to " <> showt locTo)) >>
       travelAction locTo
     action _ =
-      (liftIO $ printLocations substr world) >>
-      (lift $ throwError "multiple locations found")
+      liftIO (printLocations substr world) >>
+      lift (throwError "multiple locations found")
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
         case findTravelPath from to (_worldMap world) of
@@ -162,7 +163,7 @@ trackBash = forever awaitBash
                                 evt -> yield evt >> stand
 
 killEmAll :: MonadIO m => World -> Pipe Event Event m ()
-killEmAll world = (forever lootAll) >-> awaitTargets [] False
+killEmAll world = forever lootAll >-> awaitTargets [] False
   where
     lootAll =
       await >>= \evt -> do
@@ -184,13 +185,13 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
           evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
           evt@(ServerEvent (MobWentOut mobNom)) -> do
             let newMobs =
-                  case (_inRoomDesc . _nameCases =<< ((M.!?) (_nominativeToMob world) mobNom)) of
+                  case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
             awaitTargets newMobs inFight
           evt@(ServerEvent (MobRipEvent mr)) -> do
             let newMobs =
-                  case (_inRoomDesc . _nameCases =<< ((M.!?) (_nominativeToMob world) mr)) of
+                  case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mr of
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
              in awaitTargets newMobs False
@@ -210,12 +211,12 @@ killEmAll world = (forever lootAll) >-> awaitTargets [] False
     findAlias mobRef =
       _nominative . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
-    chooseTarget targets = join . find isJust . fmap findAlias $ targets
+    chooseTarget = join . find isJust . fmap findAlias
 
 travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (LocationId Int)
-travelToMob world mobNom = pipe $ mobArea
+travelToMob world mobNom = pipe mobArea
   where mobArea :: Maybe (Map (LocationId Int) Int)
-        mobArea = ((_inRoomDescToMobOnMap world) M.!?) =<< _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
+        mobArea = (_inRoomDescToMobOnMap world M.!?) =<< _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
         pipe (Just area)
           | M.size area < 1 = lift $ throwError "no habitation found"
           | M.size area > 1 = lift $ throwError "multiple habitation locations found"
@@ -251,7 +252,7 @@ supplyTask = init
                                evt -> yield evt >> init
         readStats = await >>= \case evt@(ServerEvent (MyStats maxHp maxMv)) -> yield evt >> trackHp maxHp maxMv
                                     evt -> yield evt >> readStats
-        trackHp maxHp maxMv = await >>= \evt -> yield evt >> case evt of (ServerEvent (PromptEvent hp mv)) -> if (div (100 * hp) maxHp) < 90 || (div (100 * mv) maxMv) < 20
+        trackHp maxHp maxMv = await >>= \evt -> yield evt >> case evt of (ServerEvent (PromptEvent hp mv)) -> if div (100 * hp) maxHp < 90 || div (100 * mv) maxMv < 20
                                                                                                                  then rest maxHp maxMv
                                                                                                                  else trackHp maxHp maxMv
                                                                          _ -> trackHp maxHp maxMv

@@ -75,7 +75,6 @@ import Data.Text
 import qualified Data.Text as T
 import Data.ByteString.Char8
 import qualified Data.ByteString.Char8 as C8
-
 import qualified Data.ByteString.Lazy.Char8 as LC8
 
 import Data.Binary
