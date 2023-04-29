@@ -1,26 +1,15 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Person ( travel
-              , travelToLoc
-              , travelToMob
-              --, travelAndKill
-              , findCurrentLoc
-              , login
-              , cover
-              , initPerson
-              , run
-              , runE
-              , killEmAll
-              --, runZone
-              , Person(..)
-              , MudServer(..)
-              ) where
+module Person where
 
-import Protolude hiding (Location, yield)
+import Protolude hiding (yield, Location, Down, Up, Left, Right, Dual)
+import qualified Data.Text as T
+import qualified Data.Set as S
+import qualified Data.Map.Strict as M
+import qualified Data.List as L
+import qualified Data.Foldable as F
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy.Char8 as LC8
 import Pipes
 import Mapper
 import Event
@@ -43,6 +32,7 @@ import CommandExecutor
 import Pipes.Lift
 import RemoteConsole
 import Logger
+import System.IO hiding (getLine, print, putStr, putStrLn)
 
 type Name = Text
 type Password = Text
@@ -105,6 +95,32 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
                         (ServerEvent PasswordPrompt) -> yield (SendToServer "каркасный") >> login
                         (ServerEvent WelcomePrompt) -> yield (SendToServer "")
                         _ -> login
+
+ddo :: Monad m => Text -> Pipe Event Event m ()
+ddo = Pipes.yield . SendToServer
+checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
+identifyNameCases :: Set (ObjRef Mob InRoomDesc) -> Pipe Event Event IO ()
+identifyNameCases knownMobs
+  | S.null knownMobs = pure ()
+  | otherwise =
+    await >>= \case
+      (ServerEvent (LocationEvent _ _ [mob] _)) ->
+        if S.notMember mob knownMobs
+          then (liftIO (readAlias . unObjRef $ mob) >>= checkCases) *>
+               identifyNameCases (S.insert mob knownMobs)
+          else identifyNameCases knownMobs
+      _ -> identifyNameCases knownMobs
+  where
+    readAlias mob =
+      hGetBuffering stdout >>= \stdoutBuffering ->
+        hGetBuffering stdin >>= \stdinBuffering ->
+        putStr @Text ("Need alias for " <> mob <> ": ") *>
+          hSetBuffering stdout LineBuffering *>
+          hSetBuffering stdin LineBuffering *>
+          getLine >>= \alias ->
+            hSetBuffering stdout stdoutBuffering *>
+            hSetBuffering stdin stdinBuffering *>
+            pure alias
 
 findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
 findCurrentLoc = yield (SendToServer "смотреть") >> go
@@ -189,6 +205,12 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
             awaitTargets newMobs inFight
+          evt@(ServerEvent (MobWentIn mobNom)) -> do
+            let newMobs =
+                  case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
+                    Nothing -> mobs
+                    Just deadMob -> L.insert deadMob mobs
+            awaitTargets newMobs inFight
           evt@(ServerEvent (MobRipEvent mr)) -> do
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mr of
@@ -207,11 +229,11 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
               (_, True) -> awaitTargets mobs inFight
               _ -> yield PulseEvent *> awaitTargets mobs inFight
           evt -> awaitTargets mobs inFight
-    findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative)
+    findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative, EverAttacked)
     findAlias mobRef =
-      _nominative . _nameCases =<< M.lookup mobRef (_inRoomDescToMob world)
+      (liftA2) (\l r -> (,) <$> l <*> r) (_nominative . _nameCases) (_everAttacked) =<< M.lookup mobRef (_inRoomDescToMob world)
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
-    chooseTarget = join . find isJust . fmap findAlias
+    chooseTarget = fmap (fst) . join . find (\opt -> fmap snd opt == Just (EverAttacked(True))) . fmap findAlias
 
 travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (LocationId Int)
 travelToMob world mobNom = pipe mobArea
@@ -270,3 +292,22 @@ runZone world startFrom = travelToLoc startFrom world *>
   cover world >-> supplyTask >-> killEmAll world >-> travel path world
   where path = zonePath world startFrom
 -}
+
+runTwo :: (Output Event, Input Event) -> Pipe Event Event IO () -> Pipe Event Event IO () -> IO ()
+runTwo person@(personOut, personIn) task1 task2 =
+  spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
+    spawn' (newest 100) >>= \(subtaskOut2, subtaskIn2, seal2) ->
+      (async $
+       run (personOut, subtaskIn1) task1 >>
+       print "subtask1 finished" >>
+       (atomically seal1) >>
+       (atomically seal2)) >>
+      (async $
+       run (personOut, subtaskIn2) task2 >>
+       print "subtask2 finished" >>
+       (atomically seal1) >>
+       (atomically seal2)) >>
+      (runEffect $
+       fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
+       print "read finished") >>
+      pure ()

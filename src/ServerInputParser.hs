@@ -1168,10 +1168,13 @@ unknownMessage = do
   where
     parseLine :: C8.ByteString -> Text -> ServerEvent
     parseLine bs txt
-      | wentOut txt && direction txt = (MobWentOut . ObjRef . T.toLower . L.head . T.splitOn " уш") txt
+      | wentOut txt && direction txt = (MobWentOut . ObjRef . T.toLower . L.head . T.splitOn " у") txt
+      | wentIn txt && directionIn txt = (MobWentIn . ObjRef . T.toLower . L.head . T.splitOn " при") txt
       | otherwise = UnknownServerEvent bs
-    wentOut txt = T.isInfixOf " ушла " txt || T.isInfixOf " ушел " txt || T.isInfixOf " ушли " txt || T.isInfixOf " ушло " txt
+    wentOut txt = T.isInfixOf " ушла " txt || T.isInfixOf " ушел " txt || T.isInfixOf " ушли " txt || T.isInfixOf " ушло " txt || T.isInfixOf " улетела " txt || T.isInfixOf " улетело " txt || T.isInfixOf " улетел " txt || T.isInfixOf " улетели " txt
+    wentIn txt = T.isInfixOf " пришел " txt || T.isInfixOf " пришла " txt || T.isInfixOf " пришли " txt || T.isInfixOf " пришло " txt || T.isInfixOf " прилетела " txt || T.isInfixOf " прилетело " txt || T.isInfixOf " прилетел " txt || T.isInfixOf " прилетели " txt
     direction txt = T.isInfixOf "на север" txt || T.isInfixOf "на юг" txt || T.isInfixOf "на запад" txt || T.isInfixOf "на восток" txt || T.isInfixOf "вверх" txt || T.isInfixOf "вниз" txt
+    directionIn txt = T.isInfixOf "с севера" txt || T.isInfixOf "с юга" txt || T.isInfixOf "с запада" txt || T.isInfixOf "с востока" txt || T.isInfixOf "сверху" txt || T.isInfixOf "снизу" txt
 
 iacGA :: A.Parser Word8
 iacGA = do iac

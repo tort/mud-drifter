@@ -99,6 +99,8 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
+S.fromList . M.keys <$> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases knownMobs)
+
 g & run $ PP.print
 
 g & run $ yield (SendToServer "постой") >> yield (SendToServer "0")
@@ -140,48 +142,12 @@ run g PP.drain
 
 g & runE $ travelToLoc rentLocation world
 
-:{
-ddo :: Monad m => Text -> Pipe Event Event m ()
-ddo = Pipes.yield . SendToServer
-checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
-identifyNameCases :: Set (ObjRef Mob InRoomDesc) -> Pipe Event Event IO ()
-identifyNameCases mobs
-  | S.null mobs = pure ()
-  | otherwise =
-    await >>= \case
-      (ServerEvent (LocationEvent _ _ [mob] _)) ->
-        if S.member mob mobs
-          then checkCases (unObjRef mob) *>
-               identifyNameCases (S.delete mob mobs)
-          else identifyNameCases mobs
-      _ -> identifyNameCases mobs
-:}
--- ServerEvent (CheckNominative)
-
-runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
+. runTwo g (killEmAll world >> pure ()) ((runExceptP $ travel (zonePath world 5100) world) >> pure ())
 
 (awaitLoc 3 (LocationId 5000))
 (awaitLoc 2 (LocationId 5000))
 
 :{
-runTwo :: (Output Event, Input Event) -> Pipe Event Event IO () -> Pipe Event Event IO () -> IO ()
-runTwo person@(personOut, personIn) task1 task2 =
-  spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
-    spawn' (newest 100) >>= \(subtaskOut2, subtaskIn2, seal2) ->
-      (async $
-       run (personOut, subtaskIn1) task1 >>
-       print "subtask1 finished" >>
-       (atomically seal1) >>
-       (atomically seal2)) >>
-      (async $
-       run (personOut, subtaskIn2) task2 >>
-       print "subtask2 finished" >>
-       (atomically seal1) >>
-       (atomically seal2)) >>
-      (runEffect $
-       fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
-       print "read finished") >>
-      pure ()
 awaitLoc :: Int -> LocationId -> Pipe Event Event IO ()
 awaitLoc taskId locIdToWait = inner
   where
@@ -189,7 +155,7 @@ awaitLoc taskId locIdToWait = inner
       await >>= \case
         (ServerEvent (LocationEvent (Event.Location (locId) _) _ _ _)) ->
           if locId == locIdToWait
-            then yield $ SendOnPulse taskId jump
+            then Pipes.yield $ SendOnPulse taskId jump
             else inner
         _ -> inner
     jump = "говорить помогу" <> showt taskId

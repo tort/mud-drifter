@@ -8,66 +8,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE DeriveFunctor #-}
 
-module Event ( Event(..)
-             , ServerEvent(..)
-             , EventBus
-             , Location(..)
-             , LocationId(..)
-             , LocationTitle(..)
-             , Slot(..)
-             , EquippedItem(..)
-             , ItemState(..)
-             , ItemStats(..)
-             , InventoryItem(..)
-             , ObjType(..)
-             , WeaponClass(..)
-             , RoomDir(..)
-             , RoomExit(..)
-             , ObjRef(..)
-             , ObjCase(..)
-             , MobRoomDesc(..)
-             , MobInTheRoom(..)
-             , MobStats(..)
-             , EverAttacked(..)
-             , NameCases(..)
-             , ShowVal(..)
-             , Result(..)
-             , location
-             , locationId
-             , locationTitle
-             , objects
-             , mobs
-             , serverEvent
-             , nameCases
-             , inRoomDesc
-             , nominative
-             , genitive
-             , accusative
-             , dative
-             , instrumental
-             , prepositional
-             , everAttacked
-             , _CodepagePrompt
-             , _CheckNominative
-             , _CheckGenitive
-             , _CheckAccusative
-             , _CheckDative
-             , _CheckInstrumental
-             , _CheckPrepositional 
-             , _LocationEvent
-             , _MoveEvent
-             , _ItemStatsEvent
-             , _FightPromptEvent
-             , _ShopListItemEvent
-             , _PromptEvent
-             , _TakeFromContainer
-             , _ServerEvent
-             , _UnknownServerEvent
-             , _MobRipEvent
-             , _SendToServer
-             , _ConsoleInput
-             , _TakeFromContainer
-             ) where
+module Event  where
 
 import Protolude hiding (Location, Down, Up, Left, Right, Dual)
 import Pipes.Concurrent
@@ -256,6 +197,7 @@ data ServerEvent = CodepagePrompt
                  | TakeInBothHands (ObjRef Item Accusative)
                  | MobGaveYouItem (ObjRef Mob Nominative) (ObjRef Item Accusative)
                  | MobWentOut (ObjRef Mob Nominative)
+                 | MobWentIn (ObjRef Mob Nominative)
                  | Drink Text Text
                  | Eat Text
                  | DrinkFromAbsentObject
