@@ -1208,15 +1208,7 @@ stateParser stateTxt stateVal = do cs
                                    return stateVal
 
 unknownMessage :: A.Parser ServerEvent
-unknownMessage = do
-  takeTillEndOfLineOrGA >>= \bs -> pure (parseLine bs $ decodeUtf8 bs)
-  where
-    parseLine :: C8.ByteString -> Text -> ServerEvent
-    parseLine bs txt
-      | wentOut txt && direction txt = (MobWentOut . ObjRef . T.toLower . L.head . T.splitOn " у") txt
-      | otherwise = UnknownServerEvent bs
-    wentOut txt = T.isInfixOf " ушла " txt || T.isInfixOf " ушел " txt || T.isInfixOf " ушли " txt || T.isInfixOf " ушло " txt || T.isInfixOf " улетела " txt || T.isInfixOf " улетело " txt || T.isInfixOf " улетел " txt || T.isInfixOf " улетели " txt
-    direction txt = T.isInfixOf "на север" txt || T.isInfixOf "на юг" txt || T.isInfixOf "на запад" txt || T.isInfixOf "на восток" txt || T.isInfixOf "вверх" txt || T.isInfixOf "вниз" txt
+unknownMessage = takeTillEndOfLineOrGA >>= pure . UnknownServerEvent
 
 iacGA :: A.Parser Word8
 iacGA = do iac

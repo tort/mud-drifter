@@ -198,6 +198,7 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
           PulseEvent -> pure ()
           _ -> yield evt
         case evt of
+          evt@(ServerEvent CantSeeTarget) -> yield (SendToServer "смотреть") *> awaitTargets mobs inFight
           evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
           evt@(ServerEvent (MobWentOut mobNom)) -> do
             let newMobs =
