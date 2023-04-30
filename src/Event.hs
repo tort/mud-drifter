@@ -197,8 +197,6 @@ data ServerEvent = CodepagePrompt
                  | TakeInLeftHand (ObjRef Item Accusative)
                  | TakeInBothHands (ObjRef Item Accusative)
                  | MobGaveYouItem (ObjRef Mob Nominative) (ObjRef Item Accusative)
-                 | MobWentOut (ObjRef Mob Nominative)
-                 | MobWentIn (ObjRef Mob Nominative)
                  | Drink Text Text
                  | Eat Text
                  | DrinkFromAbsentObject
@@ -219,7 +217,8 @@ data ServerEvent = CodepagePrompt
                  | CheckDative (ObjRef Mob Dative)
                  | CheckInstrumental (ObjRef Mob Instrumental)
                  | CheckPrepositional (ObjRef Mob Prepositional)
-                 | MobEnteredLocation
+                 | MobWentOut (ObjRef Mob Nominative)
+                 | MobWentIn (ObjRef Mob Nominative)
                  | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
                  | EndOfLogEvent
                  deriving (Eq, Generic, Ord, Show)

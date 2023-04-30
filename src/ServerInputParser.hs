@@ -66,7 +66,7 @@ serverInputParser =
     , checkDative
     , checkInstrumental
     , checkPrepositional
-    , mobEnteredLocation
+    , mobWentIn
     , unknownMessage
     ]
 
@@ -127,31 +127,37 @@ checkPrepositional = do cs >> string "1;30m"
                         C.endOfLine
                         return . CheckPrepositional . ObjRef . decodeUtf8 $ mob
 
-mobEnteredLocation :: A.Parser ServerEvent
-mobEnteredLocation = do readWordsTillParser arrived
-                        C.space
-                        froms
-                        C.char '.'
-                        C.endOfLine
-                        return MobEnteredLocation
-  where froms = F.foldl1 (<|>) . fmap (string . encodeUtf8) $ ["с севера", "с юга", "с запада", "с востока", "снизу", "сверху"]
-        arrived = F.foldl1 (<|>) . fmap (string . encodeUtf8 ) $ [ "пришел"
-                                                                 , "пришла"
-                                                                 , "пришло"
-                                                                 , "пришли"
-                                                                 , "прилетел"
-                                                                 , "прилетела"
-                                                                 , "прилетело"
-                                                                 , "прилетели"
-                                                                 , "прибежал"
-                                                                 , "прибежала"
-                                                                 , "прибежало"
-                                                                 , "прибежали"
-                                                                 , "приполз"
-                                                                 , "приползла"
-                                                                 , "приползло"
-                                                                 , "приползли"
-                                                                 ]
+mobWentIn :: A.Parser ServerEvent
+mobWentIn = do
+  mob <- readWordsTillParser arrived
+  C.space
+  froms
+  C.char '.'
+  C.endOfLine
+  return . MobWentIn . ObjRef . decodeUtf8 $ mob
+  where
+    froms =
+      choice . fmap (string . encodeUtf8) $
+      ["с севера", "с юга", "с запада", "с востока", "снизу", "сверху"]
+    arrived =
+      choice . fmap (string . encodeUtf8) $
+      [ "пришел"
+      , "пришла"
+      , "пришло"
+      , "пришли"
+      , "прилетел"
+      , "прилетела"
+      , "прилетело"
+      , "прилетели"
+      , "прибежал"
+      , "прибежала"
+      , "прибежало"
+      , "прибежали"
+      , "приполз"
+      , "приползла"
+      , "приползло"
+      , "приползли"
+      ]
 
 codepagePrompt :: A.Parser ServerEvent
 codepagePrompt = do
