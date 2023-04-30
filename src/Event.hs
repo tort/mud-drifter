@@ -185,6 +185,7 @@ data ServerEvent = CodepagePrompt
                  | FightPromptEvent { _me :: ObjRef Mob Nominative, _target :: ObjRef Mob Nominative }
                  | ObstacleEvent RoomDir Text
                  | CantGoDir
+                 | CantSeeTarget
                  | DarkInDirection RoomDir
                  | GlanceEvent RoomDir LocationTitle [ObjRef Mob Nominative]
                  | PickItemEvent (ObjRef Item Accusative)

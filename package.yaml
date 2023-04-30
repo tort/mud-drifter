@@ -88,6 +88,7 @@ executables:
     - -with-rtsopts=-N
     dependencies: [ mud-drifter
                   , text
+                  , text-show
                   , protolude
                   , bytestring
                   , suspend
@@ -99,14 +100,23 @@ executables:
                   , pipes-concurrency
                   , aeson
                   , aeson-pretty
+                  , lens
                   , lens-aeson
                   , pretty-simple
+                  , containers
                   ]
 
 tests:
   drifter-test:
     main:                Spec.hs
     source-dirs:         test
+    default-extensions: [ OverloadedStrings
+                        , LambdaCase
+                        , DataKinds
+                        , NoImplicitPrelude
+                        , QuasiQuotes
+                        , DuplicateRecordFields
+                        ]
     ghc-options:
     - -threaded
     - -rtsopts

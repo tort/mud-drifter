@@ -1,6 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-
 module ServerInputParserSpec (spec) where
 
 import Protolude hiding (Location, Up, Down)
@@ -120,6 +117,9 @@ spec = describe "Parser" $ do
         it "parse multiple messages in one GA frame" $ do let log = "test/logs/multipleEventsInGA.log"
                                                           serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter nonEmptyUnknown
                                                           length serverEventList `shouldBe` 5
+        it "parse mob entered the room" $ do let log = "test/logs/mob-enters-the-room.log"
+                                             serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter (has (_MobWentIn))
+                                             length serverEventList `shouldBe` 1
         it "parse sample trigger text" $ do let log = "test/logs/triggerText.log"
                                             serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter nonEmptyUnknown
                                             length serverEventList `shouldBe` 6

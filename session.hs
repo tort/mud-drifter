@@ -1,4 +1,15 @@
 
+world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
+
+genod = Person { personName = "генод"
+               , personPassword = "каркасный"
+               , residence = MudServer "bylins.su" 4000
+               }
+g <- initPerson genod
+g & run $ login
+
+S.fromList . M.keys <$> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases knownMobs)
+
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap
 
@@ -90,16 +101,6 @@ onEvent (FindEnd, acc) evt = (FindEnd, evt:acc)
 -- find target event chains
 PP.fold' (evtLogProducer "evt.reversed")
 
-world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
-
-genod = Person { personName = "генод"
-               , personPassword = "каркасный"
-               , residence = MudServer "bylins.su" 4000
-               }
-g <- initPerson genod
-g & run $ login
-
-S.fromList . M.keys <$> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases knownMobs)
 
 g & run $ PP.print
 

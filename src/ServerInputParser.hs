@@ -4,6 +4,7 @@ module ServerInputParser ( serverInputParser
                          ) where
 
 import Protolude hiding (Location, Down, Up, Dual, option, try)
+import Data.Functor
 import Control.Applicative
 import Control.Monad
 import Pipes.Attoparsec
@@ -40,6 +41,7 @@ serverInputParser =
     , fightPrompt
     , obstacleEvent
     , cantGoDir
+    , cantSeeTarget
     , darkInDirection
     , glanceDir
     , pickUp
@@ -197,7 +199,7 @@ remoteInputParser = telnetControlSeq <|> utf8String
 
 telnetControlSeq :: A.Parser ByteString
 telnetControlSeq = do iacWill <|> iacWont <|> iacDo <|> iacDont <|> iacAny >> remoteInputParser
-  
+
 loginPrompt :: A.Parser ServerEvent
 loginPrompt = do
     string " --------"
@@ -508,7 +510,7 @@ imBashed = do many' clearColors
                       return ()
 
 skipLine :: A.Parser ()
-skipLine = 
+skipLine =
   skipWhile (not . C.isEndOfLine) *>
   C.endOfLine
 
@@ -531,7 +533,7 @@ ripMob = do
   partial <- manyTill' C.anyChar (string $ encodeUtf8 "душа медленно подымается в небеса.")
   C.endOfLine
   pure . MobRipEvent . ObjRef . T.toLower . L.head . T.splitOn " мертв" . fst . T.breakOnEnd "мертв" . decodeUtf8 . C8.pack $ partial
-  where 
+  where
     hit1 = string . encodeUtf8 $ "Вы выбили остатки жизни из"-- блохи своим мощным ударом."
     hit2 = string . encodeUtf8 $ "Вы нанесли "--"клопу прекрасный удар - после этого ему уже не встать."
 
@@ -764,6 +766,10 @@ cantGoDir :: A.Parser ServerEvent
 cantGoDir = do string $ encodeUtf8 "Вы не сможете туда пройти..."
                return CantGoDir
 
+cantSeeTarget :: A.Parser ServerEvent
+cantSeeTarget =
+  (string (encodeUtf8 "Вы не видите цели.") *> C.endOfLine) Data.Functor.$> CantSeeTarget
+
 pickUp :: A.Parser ServerEvent
 pickUp = do string $ encodeUtf8 "Вы подняли"
             C.space
@@ -814,9 +820,9 @@ lootCorpse = lootMoney <|> lootItem
                            A.word8 _period
                            C.endOfLine
                            return . LootMoney . ObjRef . decodeUtf8 $ source
-        lootOneCoin = do (string $ encodeUtf8 "одну куну")
+        lootOneCoin = do string $ encodeUtf8 "одну куну"
                          C.space
-                         (string . encodeUtf8 $ "из трупа")
+                         string . encodeUtf8 $ "из трупа"
                          C.space
                          source <- takeTill (== _period)
                          A.word8 _period
