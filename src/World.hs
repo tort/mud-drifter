@@ -383,7 +383,7 @@ openObstacle :: MonadIO m => World -> ServerEvent -> RoomDir -> Pipe Event Event
 openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exits locEvt)
                                              then findObstacleName >>= removeObstacle
                                              else return ()
-  where glanceDirection = await >>= \case PulseEvent -> yield (SendToServer $ "смотреть " <> showt dir) >> return ()
+  where glanceDirection = await >>= \case PulseEvent -> yield (SendToServer $ "смотреть " <> genericShowt dir) >> return ()
                                           evt -> yield evt >> glanceDirection
         awaitObstacle = await >>= \case (ServerEvent (ObstacleEvent _ obstacle)) -> return obstacle
                                         evt -> yield evt >> awaitObstacle
@@ -391,13 +391,13 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
                                                                         Nothing -> glanceDirection >> awaitObstacle
         locId = _locationId . _location $ locEvt
         obstaclesOnMap = _obstaclesOnMap world
-        removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> showt dir)
+        removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> genericShowt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
 
 travelAction :: MonadIO m => World -> LocationId Int -> LocationId Int -> Pipe Event Event m ()
 travelAction world from to = case M.lookup (from, to) (_directions world) of
                                           Nothing -> return ()
-                                          (Just dir) -> yield (SendToServer . showt $ dir)
+                                          (Just dir) -> yield (SendToServer . genericShowt $ dir)
 
 payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
 payOldGipsy = move

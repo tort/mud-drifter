@@ -43,6 +43,7 @@ import Data.Time
 import Data.Time.Format
 import Pipes.Safe
 import TextShow
+import TextShow.Generic
 import Pipes.Binary (DecodingError)
 import qualified Pipes.Binary as PB
 import Text.Shakespeare.Text
@@ -116,8 +117,8 @@ printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerE
 printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
 printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
 printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
-printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
-printEvent (ServerEvent (TakeFromContainer item container)) = putStrLn [st|Вы взяли #{showt item} из #{showt container}|]
+printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (genericShowt id) <> "]\ESC[0m")
+printEvent (ServerEvent (TakeFromContainer item container)) = putStrLn [st|Вы взяли #{genericShowt item} из #{genericShowt container}|]
 printEvent event = printT . T.pack . show $ event
 
 {-printMove :: [LocToLocActions] -> IO ()

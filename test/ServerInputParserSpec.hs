@@ -119,7 +119,7 @@ spec = describe "Parser" $ do
                                                           length serverEventList `shouldBe` 5
         it "parse mob entered the room" $ do let log = "test/logs/mob-enters-the-room.log"
                                              serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter (has (_MobWentIn))
-                                             length serverEventList `shouldBe` 2
+                                             serverEventList `shouldBe` [MobWentIn (ObjRef "Блоха"), MobWentIn (ObjRef "Светлячок")]
         it "parse mob left the room" $ do let log = "test/logs/mob-enters-the-room.log"
                                           serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter (has (_MobWentOut))
                                           length serverEventList `shouldBe` 1

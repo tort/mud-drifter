@@ -34,9 +34,6 @@ data Result a = Success a | Failure Text
 newtype LocationId a = LocationId a
   deriving (Eq, Ord, Generic, Show, Functor)
 
-instance TextShow (LocationId Int) where
-  showt (LocationId n) = showt n
-
 newtype LocationTitle = LocationTitle Text
   deriving (Eq, Ord, Generic, Show)
 
@@ -44,24 +41,8 @@ data Location = Location { _locationId :: LocationId Int
                          , _locationTitle :: LocationTitle
                          } deriving (Ord, Generic, Show)
 
-instance TextShow Location where
-  showt (Location (LocationId locId) (LocationTitle title)) = showt locId <> ": " <> title
-
-instance TextShow ServerEvent where
-  showt (MobGaveYouItem from to) = "MobGaveYouItem [" <> showt from <> "] [" <> showt to <> "]"
-  showt (TakeFromContainer from to) = "TakeFromContainer [" <> showt from <> "] [" <> showt to <> "]"
-  showt x = T.pack . show $ x
-
 instance Eq Location where
   left == right = _locationId left == _locationId right
-
-instance TextShow RoomDir where
-  showt North = "север"
-  showt South = "юг"
-  showt West = "запад"
-  showt East = "восток"
-  showt Up = "вверх"
-  showt Down = "вниз"
 
 instance Binary Event
 instance Binary ServerEvent
@@ -304,20 +285,6 @@ data MobStats = MobStats { _nameCases :: NameCases Mob
                          , _everAttacked :: Maybe (EverAttacked)
                          } deriving (Eq, Ord, Generic, Show)
 
-instance TextShow MobStats where
-  showt = showt . _nameCases
-
-instance TextShow (NameCases Mob) where
-  showt v = 
-    T.intercalate "\n" $
-     [ maybe "" unObjRef $ _inRoomDesc v
-     , maybe "" unObjRef $ _nominative v
-     , maybe "" unObjRef $ _genitive v
-     , maybe "" unObjRef $ _accusative v
-     , maybe "" unObjRef $ _dative v
-     , maybe "" unObjRef $ _instrumental v
-     , maybe "" unObjRef $ _prepositional v
-     ]
   --showt v = T.intercalate "\n" . ((\f -> (maybe "" showt . unObjRef . f) v) <$> [_inRoomDesc, _nominative, _genitive, _accusative, _dative, _instrumental, _prepositional])
 
 instance Semigroup MobStats where
@@ -331,9 +298,6 @@ instance Monoid MobStats where
                     }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
-
-instance TextShow (ObjRef a b) where
-  showt = unObjRef
 
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
 data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)

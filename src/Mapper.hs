@@ -31,6 +31,7 @@ import qualified Data.Set as S
 import qualified Data.Map.Strict as M
 import qualified Data.List as L
 import TextShow
+import TextShow.Generic
 
 type Path = [LocationId Int]
 
@@ -40,7 +41,7 @@ showPath world (Just []) = "path is empty\n"
 showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nodePairs
   where render = encodeUtf8 . addRet . joinToOneMsg
         joinToOneMsg = T.intercalate ","
-        showDirection (Just roomDir) = showt roomDir
+        showDirection (Just roomDir) = genericShowt roomDir
         showDirection Nothing = "direction not found"
         addRet txt = T.snoc txt ','
         nodePairs = filterDirs $ scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing) path
@@ -68,16 +69,16 @@ printItems subName itemsOnMap = (render . filterEvents) itemsOnMap
         renderEvent (MobGaveYouItem (ObjRef mob) (ObjRef item)) = mob <> " дал вам " <> item
 
 printLocations :: Text -> World -> IO ()
-printLocations substr world = mapM_ printT $ locationsBy substr world
+printLocations substr world = mapM_ genericPrintT $ locationsBy substr world
 
 printMobsByRegex :: World -> Text -> IO ()
-printMobsByRegex world regex = mapM_ printT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _inRoomDescToMobOnMap world
+printMobsByRegex world regex = mapM_ genericPrintT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _inRoomDescToMobOnMap world
 
 findLocationsBy :: Text -> World -> [LocationId Int]
 findLocationsBy substr world = _locationId <$> locationsBy substr world
 
 locationsBy :: Text -> World -> [Location]
-locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . showt) (_locationEvents world ^.. folded)
+locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . genericShowt) (_locationEvents world ^.. folded)
 
 sharePrefix :: Eq a => [a] -> [a] -> ([a], [a], [a])
 sharePrefix l1 l2 = let prefix = map fst $ takeWhile (uncurry (==)) $ zip l1 l2

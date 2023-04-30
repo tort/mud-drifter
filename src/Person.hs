@@ -21,6 +21,7 @@ import qualified Data.Text as T
 import qualified Data.List as L
 import qualified Data.Map.Strict as M
 import TextShow
+import TextShow.Generic
 import qualified Pipes.Concurrent as PC
 import Pipes.Concurrent
 import qualified Pipes.Prelude as PP
@@ -152,7 +153,7 @@ travelToLoc substr world = action findLocation
     findLocation = findLocationsBy substr world
     action [] = lift $ throwError "no matching locations found"
     action [locTo] =
-      liftIO (putStrLn ("travelling to " <> showt locTo)) >>
+      liftIO (putStrLn ("travelling to " <> genericShowt locTo)) >>
       travelAction locTo
     action _ =
       liftIO (printLocations substr world) >>
@@ -178,7 +179,7 @@ trackBash = forever awaitBash
         stand = await >>= \case PulseEvent -> yield (SendToServer "встать")
                                 evt -> yield evt >> stand
 
-killEmAll :: MonadIO m => World -> Pipe Event Event m ()
+killEmAll :: World -> Pipe Event Event IO ()
 killEmAll world = forever lootAll >-> awaitTargets [] False
   where
     lootAll =
@@ -194,12 +195,12 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
           evt -> pure ()
     awaitTargets mobs inFight =
       await >>= \evt -> do
+        liftIO (putStrLn (genericShowt evt :: Text))
         case evt of
           PulseEvent -> pure ()
           _ -> yield evt
         case evt of
-          evt@(ServerEvent CantSeeTarget) -> yield (SendToServer "смотреть") *> awaitTargets mobs inFight
-          evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
+          evt@(ServerEvent CantSeeTarget) -> yield (SendToServer "смотреть") *> awaitTargets mobs False
           evt@(ServerEvent (MobWentOut mobNom)) -> do
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
@@ -218,6 +219,7 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
              in awaitTargets newMobs False
+          evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
           evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
             awaitTargets mobs inFight
           PulseEvent ->
