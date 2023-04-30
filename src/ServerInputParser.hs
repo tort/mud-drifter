@@ -135,7 +135,7 @@ mobWentIn = do
   froms
   C.char '.'
   C.endOfLine
-  return . MobWentIn . ObjRef . decodeUtf8 $ mob
+  return . MobWentIn . ObjRef . T.toLower . decodeUtf8 $ mob
   where
     froms =
       choice . fmap (string . encodeUtf8) $
@@ -158,6 +158,10 @@ mobWentIn = do
       , "приползла"
       , "приползло"
       , "приползли"
+      , "приплыл"
+      , "приплыла"
+      , "приплыло"
+      , "приплыли"
       ]
 
 mobWentOut :: A.Parser ServerEvent
@@ -167,7 +171,7 @@ mobWentOut = do
   tos
   C.char '.'
   C.endOfLine
-  return . MobWentOut . ObjRef . decodeUtf8 $ mob
+  return . MobWentOut . ObjRef . T.toLower . decodeUtf8 $ mob
   where
     tos =
       choice . fmap (string . encodeUtf8) $
@@ -190,6 +194,10 @@ mobWentOut = do
       , "уползла"
       , "уползло"
       , "уползли"
+      , "уплыл"
+      , "уплыла"
+      , "уплыло"
+      , "уплыли"
       ]
 
 codepagePrompt :: A.Parser ServerEvent
@@ -681,7 +689,7 @@ glanceDir = do cs >> "0;33m"
                C.endOfLine
                mobShortDescriptions <- (roomObjects "1;31m")
                clearColors
-               let locationTitle = LocationTitle $ decodeUtf8 locTitle
+               let locationTitle = decodeUtf8 locTitle
                    mobs = ObjRef <$> mobShortDescriptions
                 in return $ GlanceEvent dir locationTitle mobs
 
@@ -717,8 +725,8 @@ locationParser = do
     objects <- roomObjects "1;33m"
     mobs <- roomObjects "1;31m"
     clearColors
-    let location = Location { _locationId = LocationId locId
-                            , _locationTitle = LocationTitle $ T.strip $ decodeUtf8 locationName
+    let location = Location { _locationId = locId
+                            , _locationTitle = T.strip $ decodeUtf8 locationName
                             }
      in return $ LocationEvent location (ObjRef <$> objects) (ObjRef <$> mobs) exits
     where schoolEntrance = do cs

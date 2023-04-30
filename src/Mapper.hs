@@ -33,7 +33,7 @@ import qualified Data.List as L
 import TextShow
 import TextShow.Generic
 
-type Path = [LocationId Int]
+type Path = [Int]
 
 showPath :: World -> Maybe Path -> ByteString
 showPath world Nothing = "where is no path there\n"
@@ -49,15 +49,15 @@ showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nod
         toJust (Just left, Just right) = (left, right)
         lookupDir p = M.lookup p $ _directions world
 
-findTravelPath :: LocationId Int -> LocationId Int -> WorldMap -> Maybe Path
-findTravelPath (LocationId fromId) (LocationId toId) worldMap = (LocationId <$>) <$> (SP.sp fromId toId worldMap)
+findTravelPath :: Int -> Int -> WorldMap -> Maybe Path
+findTravelPath (fromId) (toId) worldMap = (SP.sp fromId toId worldMap)
 
-printItems :: Text -> Map ServerEvent (Map (LocationId Int) Int) -> Text
+printItems :: Text -> Map ServerEvent (Map (Int) Int) -> Text
 printItems subName itemsOnMap = (render . filterEvents) itemsOnMap
   where render mobs = M.foldMapWithKey renderMob mobs
         renderMob evt locToCountMap = renderEvent evt <> "\n" <> (renderLocs locToCountMap)
         renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
-        showAssoc (locId, count) = "\t" <> (showVal locId) <> ": " <> show count <> "\n"
+        showAssoc (locId, count) = "\t" <> (showt locId) <> ": " <> show count <> "\n"
         filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
         filterEvent (ItemInTheRoom (ObjRef text)) = T.isInfixOf subName (T.toLower text)
         filterEvent (LootItem (ObjRef item) (ObjRef mob)) = T.isInfixOf subName (T.toLower item)
@@ -74,7 +74,7 @@ printLocations substr world = mapM_ genericPrintT $ locationsBy substr world
 printMobsByRegex :: World -> Text -> IO ()
 printMobsByRegex world regex = mapM_ genericPrintT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _inRoomDescToMobOnMap world
 
-findLocationsBy :: Text -> World -> [LocationId Int]
+findLocationsBy :: Text -> World -> [Int]
 findLocationsBy substr world = _locationId <$> locationsBy substr world
 
 locationsBy :: Text -> World -> [Location]
@@ -91,8 +91,8 @@ listToPairs list = fmap unwrap . filterDirs . scanToPairs $ list
         unwrap (Just left, Just right) = (left, right)
         scanToPairs = scanl (\acc item -> (snd acc, Just item)) (Nothing, Nothing)
 
-zonePath :: World -> Int -> [LocationId Int]
-zonePath world anyZoneLocId = fmap LocationId $ concat $  mergeTree $ listToPairs (reverse . fmap fst . unLPath <$> MST.msTreeAt anyZoneLocId zone)
+zonePath :: World -> Int -> [Int]
+zonePath world anyZoneLocId = concat $  mergeTree $ listToPairs (reverse . fmap fst . unLPath <$> MST.msTreeAt anyZoneLocId zone)
   where zone = zoneMap world anyZoneLocId
         mergeTree = foldr (\(l, r) acc -> mergePathPair l r : acc) []
         mergePathPair l r = let (commonPath, lPrivatePath, rPrivatePath) = sharePrefix l r

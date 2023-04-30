@@ -117,7 +117,7 @@ printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerE
 printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
 printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
 printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
-printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (genericShowt id) <> "]\ESC[0m")
+printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
 printEvent (ServerEvent (TakeFromContainer item container)) = putStrLn [st|Вы взяли #{genericShowt item} из #{genericShowt container}|]
 printEvent event = printT . T.pack . show $ event
 
@@ -126,7 +126,7 @@ printMove moves = mapM_ printM moves
   where printM m = do print (fst m)
                       printEvents (snd m)-}
 
-obstacleActions :: Monad m => Producer Event m () -> m (Map (LocationId Int, LocationId Int) [Event])
+obstacleActions :: Monad m => Producer Event m () -> m (Map (Int, Int) [Event])
 obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, []), M.empty) identity questEventsProducer
   where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _)) = ((Just $ loc^.locationId, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
@@ -136,8 +136,8 @@ obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, [])
            in ((Just $ loc^.locationId, []), newTravelActions)
         toActionMap ((leftLoc, actions), travelActions) evt = ((leftLoc, evt : actions), travelActions)
 
-type LocToLocActions = ([LocationId Int], [Event])
-type LocPair = [LocationId Int]
+type LocToLocActions = ([Int], [Event])
+type LocPair = [Int]
 
 scanDoorEvents :: [Event] -> [LocToLocActions]
 scanDoorEvents evts = L.filter (\x -> (length $ fst x) >= 2) $ (\pair -> ((fst . snd) pair, (snd . fst) pair))  <$> (L.filter changeLocsOnly $ zipped)

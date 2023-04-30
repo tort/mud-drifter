@@ -31,14 +31,8 @@ import Data.Aeson hiding (Result(..))
 data Result a = Success a | Failure Text
   deriving (Eq, Generic)
 
-newtype LocationId a = LocationId a
-  deriving (Eq, Ord, Generic, Show, Functor)
-
-newtype LocationTitle = LocationTitle Text
-  deriving (Eq, Ord, Generic, Show)
-
-data Location = Location { _locationId :: LocationId Int
-                         , _locationTitle :: LocationTitle
+data Location = Location { _locationId :: Int
+                         , _locationTitle :: Text
                          } deriving (Ord, Generic, Show)
 
 instance Eq Location where
@@ -47,8 +41,6 @@ instance Eq Location where
 instance Binary Event
 instance Binary ServerEvent
 instance Binary Location
-instance Binary (LocationId Int)
-instance Binary LocationTitle
 instance Binary Slot
 instance Binary EquippedItem
 instance Binary ItemState
@@ -107,12 +99,6 @@ instance FromJSON (ObjRef Item Dative)
 instance FromJSON (ObjRef Item Instrumental)
 instance FromJSON (ObjRef Item Prepositional)
 instance FromJSON (ObjRef Item Alias)
-instance ToJSON (LocationId Int)
-instance FromJSON (LocationId Int)
-instance ToJSONKey (LocationId Int)
-instance FromJSONKey (LocationId Int)
-instance ToJSON LocationTitle
-instance FromJSON LocationTitle
 instance ToJSON Location
 instance FromJSON Location
 instance ToJSON MobStats
@@ -143,7 +129,7 @@ data Event = ConsoleInput ByteString
            | ServerIOException
            | UserInputIOException
            | PulseEvent
-           | TravelRequest [LocationId Int]
+           | TravelRequest [Int ]
            | TravelFailure
            deriving (Eq, Generic, Show)
 
@@ -168,7 +154,7 @@ data ServerEvent = CodepagePrompt
                  | CantGoDir
                  | CantSeeTarget
                  | DarkInDirection RoomDir
-                 | GlanceEvent RoomDir LocationTitle [ObjRef Mob Nominative]
+                 | GlanceEvent RoomDir Text [ObjRef Mob Nominative]
                  | PickItemEvent (ObjRef Item Accusative)
                  | ItemInTheRoom (ObjRef Item InRoomDesc)
                  | LootItem (ObjRef Item Accusative) (ObjRef Mob Genitive)
@@ -302,19 +288,8 @@ type MobRoomDesc = ObjRef Mob InRoomDesc
 data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
 data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)
 
-class ShowVal a where
-  showVal :: a -> Text
-
-instance ShowVal (LocationId Int) where
-  showVal (LocationId id) = show id
-
-instance ShowVal LocationTitle where
-  showVal (LocationTitle text) = text
-
 
 makeFieldsNoPrefix ''Location
-makeFieldsNoPrefix ''LocationId
-makeFieldsNoPrefix ''LocationTitle
 makeFieldsNoPrefix ''Slot
 makeFieldsNoPrefix ''EquippedItem
 makeFieldsNoPrefix ''ItemState

@@ -128,7 +128,7 @@ findCurrentLoc = yield (SendToServer "смотреть") >> go
   where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
                              evt -> yield evt >> go
 
-travel :: MonadIO m => [LocationId Int] -> World -> Pipe Event Event (ExceptT Text m) ()
+travel :: MonadIO m => [Int] -> World -> Pipe Event Event (ExceptT Text m) ()
 travel path world = waitMove path False
   where
     waitMove [] _ = lift $ throwError "path lost"
@@ -153,7 +153,7 @@ travelToLoc substr world = action findLocation
     findLocation = findLocationsBy substr world
     action [] = lift $ throwError "no matching locations found"
     action [locTo] =
-      liftIO (putStrLn ("travelling to " <> genericShowt locTo)) >>
+      liftIO (putStrLn ("travelling to " <> showt locTo)) >>
       travelAction locTo
     action _ =
       liftIO (printLocations substr world) >>
@@ -194,20 +194,16 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
             yield (SendToServer "полож все мешок")
           evt -> pure ()
     awaitTargets mobs inFight =
-      await >>= \evt -> do
-        liftIO (putStrLn (genericShowt evt :: Text))
-        case evt of
-          PulseEvent -> pure ()
-          _ -> yield evt
-        case evt of
-          evt@(ServerEvent CantSeeTarget) -> yield (SendToServer "смотреть") *> awaitTargets mobs False
+      await >>= \case 
           evt@(ServerEvent (MobWentOut mobNom)) -> do
+            liftIO (putStrLn ("MobWentOut " <> (unObjRef mobNom)))
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
             awaitTargets newMobs inFight
           evt@(ServerEvent (MobWentIn mobNom)) -> do
+            liftIO (putStrLn ("MobWentIn " <> (unObjRef mobNom)))
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
                     Nothing -> mobs
@@ -238,9 +234,9 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
     chooseTarget = fmap (fst) . join . find (\opt -> fmap snd opt == Just (EverAttacked(True))) . fmap findAlias
 
-travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (LocationId Int)
+travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (Int)
 travelToMob world mobNom = pipe mobArea
-  where mobArea :: Maybe (Map (LocationId Int) Int)
+  where mobArea :: Maybe (Map (Int) Int)
         mobArea = (_inRoomDescToMobOnMap world M.!?) =<< _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
         pipe (Just area)
           | M.size area < 1 = lift $ throwError "no habitation found"
