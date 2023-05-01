@@ -1,6 +1,17 @@
+:{
+initAliasCache =
+  (encodePretty @(Map Text (Maybe Text)) <$> (M.union <$> knownMobs <*> allMobs)) >>=
+  LC8.writeFile "cache/mob-aliases.json"
+  where
+    allMobs :: IO (Map Text (Maybe Text))
+    allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> loadCachedMobsOnMap
+    knownMobs :: IO (Map Text (Maybe Text))
+    knownMobs = M.fromList . fmap (bimap unObjRef (fmap unObjRef . _alias . _nameCases)) . M.assocs <$> loadCachedMobData
+:}
+
+(encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> loadCachedMobAliases) >>= LC8.writeFile "mob-aliases.list.json"
 
 world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
-
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
@@ -8,7 +19,9 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
-S.fromList . M.keys <$> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases knownMobs)
+g & run $ killEmAll world
+
+loadCachedMobAliases >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases knownMobs)
 
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap

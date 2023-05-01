@@ -100,28 +100,17 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
 ddo :: Monad m => Text -> Pipe Event Event m ()
 ddo = Pipes.yield . SendToServer
 checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
-identifyNameCases :: Set (ObjRef Mob InRoomDesc) -> Pipe Event Event IO ()
+identifyNameCases :: Map Text (Maybe Text) -> Pipe Event Event IO ()
 identifyNameCases knownMobs
-  | S.null knownMobs = pure ()
+  | M.null knownMobs = pure ()
   | otherwise =
     await >>= \case
       (ServerEvent (LocationEvent _ _ [mob] _)) ->
-        if S.notMember mob knownMobs
-          then (liftIO (readAlias . unObjRef $ mob) >>= checkCases) *>
-               identifyNameCases (S.insert mob knownMobs)
+        if M.notMember (unObjRef mob) knownMobs
+          then (checkCases (fromJust . join . M.lookup (unObjRef mob) $ knownMobs)) *>
+               identifyNameCases (M.insert (unObjRef mob) Nothing knownMobs)
           else identifyNameCases knownMobs
       _ -> identifyNameCases knownMobs
-  where
-    readAlias mob =
-      hGetBuffering stdout >>= \stdoutBuffering ->
-        hGetBuffering stdin >>= \stdinBuffering ->
-        putStr @Text ("Need alias for " <> mob <> ": ") *>
-          hSetBuffering stdout LineBuffering *>
-          hSetBuffering stdin LineBuffering *>
-          getLine >>= \alias ->
-            hSetBuffering stdout stdoutBuffering *>
-            hSetBuffering stdin stdinBuffering *>
-            pure alias
 
 findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
 findCurrentLoc = yield (SendToServer "смотреть") >> go

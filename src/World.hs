@@ -206,10 +206,13 @@ cacheLocationsFile = "cache/locations.json"
 cacheDirectionsFile ="cache/directions.json"
 cacheMobsOnMapFile = "cache/mobs-on-map.json"
 cacheMobsDataFile = "cache/mobs-data.json"
+cacheMobAliasFile = "cache/mobs-aliases.json"
 
 generateCache :: IO ()
 generateCache =
-  cacheLocations *> cacheMobData *> cacheDirections *> cacheMobsOnMap
+  loadCachedMobAliases >>= \mobsAliases ->
+    cacheLocations *> cacheMobData mobsAliases *> cacheDirections *>
+    cacheMobsOnMap
 
 cacheLocations :: IO ()
 cacheLocations =
@@ -217,9 +220,9 @@ cacheLocations =
   extractLocs . parseServerEvents . loadLogs >>=
   LC8.writeFile cacheLocationsFile . encodePretty . toJSON
 
-cacheMobData :: IO ()
-cacheMobData =
-  mobsData >>= LC8.writeFile cacheMobsDataFile . encodePretty . toJSON
+cacheMobData :: Map Text (Maybe Text) -> IO ()
+cacheMobData mobsAliases =
+  mobsData mobsAliases >>= LC8.writeFile cacheMobsDataFile . encodePretty . toJSON
 
 cacheDirections :: IO ()
 cacheDirections =
@@ -233,6 +236,14 @@ cacheMobsOnMap =
   extractDiscovered . parseServerEvents . loadLogs >>=
   LC8.writeFile cacheMobsOnMapFile . encodePretty . toJSON
 
+cacheMobsAliases :: IO ()
+cacheMobsAliases = 
+  (encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> (M.union <$> loadCachedMobAliases <*> allMobs)) >>=
+  LC8.writeFile cacheMobAliasFile
+  where
+    allMobs :: IO (Map Text (Maybe Text))
+    allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> loadCachedMobsOnMap
+
 loadCachedMobData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
 loadCachedMobData = fmap fromJust . decodeFileStrict $ cacheMobsDataFile
 
@@ -244,6 +255,12 @@ loadCachedDirections = fmap fromJust . decodeFileStrict $ cacheDirectionsFile
 
 loadCachedMobsOnMap :: IO (Map (ObjRef Mob InRoomDesc) (Map (Int) Int))
 loadCachedMobsOnMap = fmap fromJust . decodeFileStrict $ cacheMobsOnMapFile
+
+loadCachedMobAliases :: IO (Map Text (Maybe Text))
+loadCachedMobAliases = M.fromList <$> load
+  where
+    load :: IO [(Text, Maybe Text)]
+    load = fmap fromJust . decodeFileStrict $ cacheMobAliasFile
 
 loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
 loadWorld currentDir customMobProperties = do
@@ -282,8 +299,8 @@ regroupTo getter = groupByCase getter . fmap snd . M.toList
 nominativeToEverAttacked :: IO (Map (ObjRef Mob Nominative) MobStats)
 nominativeToEverAttacked = groupByCase _nominative . fmap (\ref -> mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~ ref) <$> (PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
 
-inRoomDescToMobCase :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-inRoomDescToMobCase =
+inRoomDescToMobCase :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
+inRoomDescToMobCase mobAliases =
   groupByCase _inRoomDesc <$>
   (PP.toListM $
    PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-<
@@ -302,32 +319,35 @@ inRoomDescToMobCase =
         , _dative = Just dat
         , _instrumental = Just instr
         , _prepositional = Just prep
-        , _alias = Just . ObjRef . defaultAlias . unObjRef $ nom
+        , _alias = fmap ObjRef . join . M.lookup (unObjRef mob) $ mobAliases
         }
-    allCasesWindow [prep, instr, dat, acc, gen, nom, locEvt] =
-      locWithOneMob locEvt &&
+    allCasesWindow [prep, instr, dat, acc, gen, nom, (LocationEvent _ _ [mob] _)] =
       has _CheckNominative nom &&
       has _CheckGenitive gen &&
       has _CheckAccusative acc &&
       has _CheckDative dat &&
-      has _CheckInstrumental instr && has _CheckPrepositional prep
+      has _CheckInstrumental instr && has _CheckPrepositional prep && M.member (unObjRef mob) mobAliases
     allCasesWindow _ = False
     scanWindow n = PP.scan toWindow [] identity
-          where toWindow acc event
-                  | length acc < n = event : acc
-                  | otherwise = event : take (n - 1) acc
+      where
+        toWindow acc event
+          | length acc < n = event : acc
+          | otherwise = event : take (n - 1) acc
     isCheckCaseEvt evt = has _LocationEvent evt || isCaseEvt evt
-    isCaseEvt evt = has _CheckNominative evt || has _CheckGenitive evt || has _CheckAccusative evt || has _CheckDative evt || has _CheckInstrumental evt || has _CheckPrepositional evt
+    isCaseEvt evt =
+      has _CheckNominative evt ||
+      has _CheckGenitive evt ||
+      has _CheckAccusative evt ||
+      has _CheckDative evt ||
+      has _CheckInstrumental evt || has _CheckPrepositional evt
     defaultAlias = T.intercalate "." . T.words
-    locWithOneMob (LocationEvent _ _ [mob] _) = True
-    locWithOneMob _ = False
 
-mobsData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobsData =
+mobsData :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
+mobsData mobsAliases =
   regroupTo _inRoomDesc <$>
   (M.unionWith (<>) <$> nominativeToMobCase <*> nominativeToEverAttacked)
   where
-    nominativeToMobCase = regroupTo _nominative <$> inRoomDescToMobCase
+    nominativeToMobCase = regroupTo _nominative <$> inRoomDescToMobCase mobsAliases
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
