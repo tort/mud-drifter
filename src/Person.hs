@@ -106,7 +106,7 @@ identifyNameCases knownMobs
   | otherwise =
     await >>= \case
       (ServerEvent (LocationEvent _ _ [mob] _)) ->
-        if M.notMember (unObjRef mob) knownMobs
+        if M.notMember (unObjRef mob) knownMobs //FIX. SHOULD CHECK IF MAP VALUE IS NOTHING
           then (checkCases (fromJust . join . M.lookup (unObjRef mob) $ knownMobs)) *>
                identifyNameCases (M.insert (unObjRef mob) Nothing knownMobs)
           else identifyNameCases knownMobs
