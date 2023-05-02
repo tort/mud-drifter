@@ -100,17 +100,15 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
 ddo :: Monad m => Text -> Pipe Event Event m ()
 ddo = Pipes.yield . SendToServer
 checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
-identifyNameCases :: Map Text (Maybe Text) -> Pipe Event Event IO ()
-identifyNameCases knownMobs
-  | M.null knownMobs = pure ()
-  | otherwise =
-    await >>= \case
-      (ServerEvent (LocationEvent _ _ [mob] _)) ->
-        if M.notMember (unObjRef mob) knownMobs //FIX. SHOULD CHECK IF MAP VALUE IS NOTHING
-          then (checkCases (fromJust . join . M.lookup (unObjRef mob) $ knownMobs)) *>
-               identifyNameCases (M.insert (unObjRef mob) Nothing knownMobs)
-          else identifyNameCases knownMobs
-      _ -> identifyNameCases knownMobs
+identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text (Maybe Text) -> Pipe Event Event IO ()
+identifyNameCases knownMobs aliases =
+  await >>= \case
+    (ServerEvent (LocationEvent _ _ [mob] _)) ->
+      case (S.member mob knownMobs, join . M.lookup (unObjRef mob) $ aliases) of
+        (False, Just alias) ->
+          (checkCases alias) *> identifyNameCases (S.insert mob knownMobs) aliases
+        _ -> identifyNameCases knownMobs aliases
+    _ -> identifyNameCases knownMobs aliases
 
 findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
 findCurrentLoc = yield (SendToServer "смотреть") >> go
