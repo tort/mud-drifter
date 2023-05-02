@@ -728,7 +728,7 @@ locationParser = do
     let location = Location { _locationId = locId
                             , _locationTitle = T.strip $ decodeUtf8 locationName
                             }
-     in return $ LocationEvent location (ObjRef <$> objects) (ObjRef <$> mobs) exits
+     in return $ LocationEvent location (ObjRef <$> objects) (ObjRef . T.strip "(летит) " <$> mobs) exits
     where schoolEntrance = do cs
                               string $ encodeUtf8 "1;32mСовсем малых, да не"
                               C.skipMany C.space
