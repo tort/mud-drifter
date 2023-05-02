@@ -210,9 +210,9 @@ cacheMobAliasFile = "cache/mobs-aliases.json"
 
 generateCache :: IO ()
 generateCache =
-  loadCachedMobAliases >>= \mobsAliases ->
-    cacheLocations *> cacheMobData mobsAliases *> cacheDirections *>
-    cacheMobsOnMap
+  cacheMobsOnMap *> loadCachedMobsOnMap >>= \mobsOnMap ->
+    cacheMobsAliases mobsOnMap *> loadCachedMobAliases >>= \mobsAliases ->
+      cacheLocations *> cacheMobData mobsAliases *> cacheDirections 
 
 cacheLocations :: IO ()
 cacheLocations =
@@ -236,13 +236,12 @@ cacheMobsOnMap =
   extractDiscovered . parseServerEvents . loadLogs >>=
   LC8.writeFile cacheMobsOnMapFile . encodePretty . toJSON
 
-cacheMobsAliases :: IO ()
-cacheMobsAliases = 
-  (encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> (M.union <$> loadCachedMobAliases <*> allMobs)) >>=
-  LC8.writeFile cacheMobAliasFile
+cacheMobsAliases :: Map (ObjRef 'Mob 'InRoomDesc) (Map Int Int) -> IO ()
+cacheMobsAliases mobsOnMap =
+  (M.union <$> loadCachedMobAliases <*> allMobs) >>= LC8.writeFile cacheMobAliasFile . encodePretty @[(Text , Maybe Text)] . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList
   where
     allMobs :: IO (Map Text (Maybe Text))
-    allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> loadCachedMobsOnMap
+    allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> (pure mobsOnMap)
 
 loadCachedMobData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
 loadCachedMobData = fmap fromJust . decodeFileStrict $ cacheMobsDataFile
@@ -295,7 +294,7 @@ groupByCase getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCase
 
 regroupTo :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> Map (ObjRef Mob a) MobStats -> Map (ObjRef Mob b) MobStats
 regroupTo getter = groupByCase getter . fmap snd . M.toList
-  
+
 nominativeToEverAttacked :: IO (Map (ObjRef Mob Nominative) MobStats)
 nominativeToEverAttacked = groupByCase _nominative . fmap (\ref -> mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~ ref) <$> (PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
 

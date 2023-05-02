@@ -695,75 +695,95 @@ glanceDir = do cs >> "0;33m"
 
 locationParser :: A.Parser ServerEvent
 locationParser = do
-    cs
-    string "1;36m"
-    locationName <- takeTill (== _bracketleft)
-    A.word8 _bracketleft
-    locId <- C.decimal
-    A.word8 _bracketright
-    cs
-    string "0;37m"
-    desc <- takeTill (== telnetEscape)
-    many' schoolEntrance
-    exits <- exitsParser
-    _ <- many' $ do cs >> string "1;30m"
-                    string $ encodeUtf8 "Вы просто увязаете в грязи."
-                    cs >> string "0;37m"
-                    C.endOfLine
-    _ <- many' $ do cs >> string "1;37m"
-                    string $ encodeUtf8 "Снежный ковер лежит у вас под ногами."
-                    cs >> string "0;37m"
-                    C.endOfLine
-    _ <- many' $ do cs >> string "1;36m"
-                    string $ encodeUtf8 "Тоненький ледок вот-вот проломится под вами."
-                    cs >> string "0;37m"
-                    C.endOfLine
-    _ <- many' $ do cs >> string "1;34m"
-                    string $ encodeUtf8 "У вас под ногами толстый лед."
-                    cs >> string "0;37m"
-                    C.endOfLine
-    objects <- roomObjects "1;33m"
-    mobs <- roomObjects "1;31m"
-    clearColors
-    let location = Location { _locationId = locId
-                            , _locationTitle = T.strip $ decodeUtf8 locationName
-                            }
-     in return $ LocationEvent location (ObjRef <$> objects) (ObjRef . T.strip "(летит) " <$> mobs) exits
-    where schoolEntrance = do cs
-                              string $ encodeUtf8 "1;32mСовсем малых, да не"
-                              C.skipMany C.space
-                              string $ encodeUtf8 "обученных так и тянет "
-                              cs
-                              string $ encodeUtf8 "1;33mвойти "
-                              cs
-                              string $ encodeUtf8 "1;32mв "
-                              cs
-                              string $ encodeUtf8 "1;33mшколу"
-                              cs
-                              "1;32m."
-                              clearColors
-                              C.endOfLine
-          exitsParser = do cs
-                           string "0;36m"
-                           A.word8 _bracketleft
-                           C.space
-                           string "Exits: "
-                           exits <- many' exitParser
-                           A.word8 _bracketright
-                           cs
-                           string "0;37m"
-                           C.endOfLine
-                           return exits
-          exitParser = (openExit <|> closedExit) >>= \exit -> C.space >> return exit
-            where openExit = dir >>= return . OpenExit
-                  closedExit = C.char '(' >> dir >>= \d -> C.char ')' >> return (ClosedExit d)
-                  dir = north <|> south <|> east <|> west <|> up <|> down
-                  north = C.char 'n' <|> C.char 'N' >> return North
-                  south = C.char 's' <|> C.char 'S' >> return South
-                  east = C.char 'e' <|> C.char 'E' >> return East
-                  west = C.char 'w' <|> C.char 'W' >> return West
-                  up = C.char 'd' <|> C.char 'D' >> return Down
-                  down = C.char 'u' <|> C.char 'U' >> return Up
+  cs
+  string "1;36m"
+  locationName <- takeTill (== _bracketleft)
+  A.word8 _bracketleft
+  locId <- C.decimal
+  A.word8 _bracketright
+  cs
+  string "0;37m"
+  desc <- takeTill (== telnetEscape)
+  many' schoolEntrance
+  exits <- exitsParser
+  _ <-
+    many' $ do
+      cs >> string "1;30m"
+      string $ encodeUtf8 "Вы просто увязаете в грязи."
+      cs >> string "0;37m"
+      C.endOfLine
+  _ <-
+    many' $ do
+      cs >> string "1;37m"
+      string $ encodeUtf8 "Снежный ковер лежит у вас под ногами."
+      cs >> string "0;37m"
+      C.endOfLine
+  _ <-
+    many' $ do
+      cs >> string "1;36m"
+      string $ encodeUtf8 "Тоненький ледок вот-вот проломится под вами."
+      cs >> string "0;37m"
+      C.endOfLine
+  _ <-
+    many' $ do
+      cs >> string "1;34m"
+      string $ encodeUtf8 "У вас под ногами толстый лед."
+      cs >> string "0;37m"
+      C.endOfLine
+  objects <- roomObjects "1;33m"
+  mobs <- roomObjects "1;31m"
+  clearColors
+  let location =
+        Location
+          { _locationId = locId
+          , _locationTitle = T.strip $ decodeUtf8 locationName
+          }
+   in return $
+      LocationEvent
+        location
+        (ObjRef <$> objects)
+        ((\mob -> ObjRef . fromMaybe mob . T.stripPrefix "(летит) " $ mob) <$> mobs)
+        exits
+  where
+    schoolEntrance = do
+      cs
+      string $ encodeUtf8 "1;32mСовсем малых, да не"
+      C.skipMany C.space
+      string $ encodeUtf8 "обученных так и тянет "
+      cs
+      string $ encodeUtf8 "1;33mвойти "
+      cs
+      string $ encodeUtf8 "1;32mв "
+      cs
+      string $ encodeUtf8 "1;33mшколу"
+      cs
+      "1;32m."
+      clearColors
+      C.endOfLine
+    exitsParser = do
+      cs
+      string "0;36m"
+      A.word8 _bracketleft
+      C.space
+      string "Exits: "
+      exits <- many' exitParser
+      A.word8 _bracketright
+      cs
+      string "0;37m"
+      C.endOfLine
+      return exits
+    exitParser = (openExit <|> closedExit) >>= \exit -> C.space >> return exit
+      where
+        openExit = dir >>= return . OpenExit
+        closedExit =
+          C.char '(' >> dir >>= \d -> C.char ')' >> return (ClosedExit d)
+        dir = north <|> south <|> east <|> west <|> up <|> down
+        north = C.char 'n' <|> C.char 'N' >> return North
+        south = C.char 's' <|> C.char 'S' >> return South
+        east = C.char 'e' <|> C.char 'E' >> return East
+        west = C.char 'w' <|> C.char 'W' >> return West
+        up = C.char 'd' <|> C.char 'D' >> return Down
+        down = C.char 'u' <|> C.char 'U' >> return Up
 
 roomObjects :: C8.ByteString -> A.Parser [Text]
 roomObjects colorCode = do cs

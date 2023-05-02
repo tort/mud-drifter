@@ -21,9 +21,11 @@ g & run $ login
 
 g & run $ killEmAll world
 
+:{
 loadCachedMobAliases >>= \aliases ->
   loadCachedMobData >>= \knownMobs ->
     runTwo g (killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+:}
 
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap
