@@ -19,13 +19,9 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
-g & run $ killEmAll world
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
-:{
-loadCachedMobAliases >>= \aliases ->
-  loadCachedMobData >>= \knownMobs ->
-    runTwo g (killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
-:}
+g & run $ killEmAll world
 
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap

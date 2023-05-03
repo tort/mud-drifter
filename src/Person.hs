@@ -182,20 +182,21 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
           evt -> pure ()
     awaitTargets mobs inFight =
       await >>= \case 
+          ServerEvent CantSeeTarget -> yield (SendToServer "смотр") *> awaitTargets mobs False
           evt@(ServerEvent (MobWentOut mobNom)) -> do
             liftIO (putStrLn ("MobWentOut " <> (unObjRef mobNom)))
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
                     Nothing -> mobs
                     Just deadMob -> L.delete deadMob mobs
-            awaitTargets newMobs inFight
+             in awaitTargets newMobs inFight
           evt@(ServerEvent (MobWentIn mobNom)) -> do
             liftIO (putStrLn ("MobWentIn " <> (unObjRef mobNom)))
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
                     Nothing -> mobs
                     Just deadMob -> L.insert deadMob mobs
-            awaitTargets newMobs inFight
+             in awaitTargets newMobs inFight
           evt@(ServerEvent (MobRipEvent mr)) -> do
             let newMobs =
                   case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mr of
@@ -203,6 +204,7 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
                     Just deadMob -> L.delete deadMob mobs
              in awaitTargets newMobs False
           evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
+          evt@(ServerEvent PromptEvent {}) -> awaitTargets mobs False
           evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
             awaitTargets mobs inFight
           PulseEvent ->
