@@ -188,7 +188,6 @@ data ServerEvent = CodepagePrompt
                  | MobWentIn (ObjRef Mob Nominative)
                  | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
                  | EndOfLogEvent
-                 | Zone Text
                  deriving (Eq, Generic, Ord, Show)
 
 data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobNomRef { _unMobNomRef :: ObjRef Mob Nominative }

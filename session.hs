@@ -1,3 +1,30 @@
+:t PP.toListM $ snd <$> runStateP (Nothing, Nothing) $ (forever scanZone) <-< PP.map (runReader (liftA2 (,) (preview (_LocationEvent . _5 . traverse)) (preview (_LocationEvent . _1 . locationTitle)))) <-< serverLogEventsProducer
+
+:{
+zonedLocs =
+  PP.toListM $
+  snd <$> runStateP (Nothing, Nothing) $
+  (forever scanZone) <-<
+  PP.map
+    (runReader
+       (liftA2
+          (,)
+          (preview (_LocationEvent . _5 . traverse))
+          (preview (_LocationEvent . _1 . locationTitle)))) <-<
+  serverLogEventsProducer
+:}
+
+:{
+scanZone :: MonadIO m => Producer (Maybe Text, Maybe Text) (Text, Text) m ()
+scanZone =
+  Pipes.await >>= \case
+    (Just zone, Just location) -> put zone *> Pipes.yield (zone, location)
+    (Nothing, Just location) -> get zone >>= \z -> Pipes.yield (z, location)
+    _ -> pure ()
+:}
+
+fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . traverse))) <-< PP.filter (has (_LocationEvent . _5 . _Just)) <-< serverLogEventsProducer
+
 :{
 initAliasCache =
   (encodePretty @(Map Text (Maybe Text)) <$> (M.union <$> knownMobs <*> allMobs)) >>=
