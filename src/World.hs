@@ -113,10 +113,10 @@ locsByRegex :: World -> Text -> [Location]
 locsByRegex world regex = S.toList $ S.filter (T.isInfixOf regex . T.toLower . (\l -> l^.locationTitle)) locs
   where locs = _locationEvents world
 
-loadServerEvents :: FilePath -> Producer ByteString IO ()
+loadServerEvents :: MonadIO m => FilePath -> Producer ByteString m ()
 loadServerEvents file = openfile >>= \h -> PBS.fromHandle h >> closefile h
-  where openfile = lift $ openFile file ReadMode
-        closefile h = lift $ hClose h
+  where openfile = liftIO $ openFile file ReadMode
+        closefile h = liftIO $ hClose h
 
 loadLogs :: [FilePath] -> Producer ByteString IO ()
 loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (return ()) files
@@ -170,13 +170,13 @@ extractDirections serverEvents = PP.fold accDirections M.empty identity location
                                                                                               | length acc < 3 = event : acc
                                                                                               | otherwise = event : take 2 acc
 
-listFilesIn :: FilePath -> IO [FilePath]
-listFilesIn dir = ((dir ++ ) <$>) <$> listDirectory dir
+listFilesIn :: MonadIO m => FilePath -> m [FilePath]
+listFilesIn dir = ((dir ++ ) <$>) <$> (liftIO . listDirectory) dir
 
-serverLogEventsProducer :: Producer ServerEvent IO ()
+serverLogEventsProducer :: MonadIO m => Producer ServerEvent m ()
 serverLogEventsProducer = combineStreams =<< liftIO logFiles
   where logFiles = getCurrentDirectory >>= \currentDir -> listFilesIn (currentDir ++ "/" ++ serverLogDir)
-        combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file >> yield EndOfLogEvent) (return ())
+        combineStreams = F.foldl' (\evtPipe file -> evtPipe >> logfileEvtStream file >> yield EndOfLogEvent) (pure ())
         logfileEvtStream file = PP.dropWhile (hasn't _LocationEvent ) <-< (parseServerEvents . loadServerEvents $ file)
 
 obstaclesOnMap :: IO (Map (Int, RoomDir) Text)
@@ -371,7 +371,7 @@ printWorldStats world = yield $ ConsoleOutput worldStats
         itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
         mobs = (show . length . _inRoomDescToMobOnMap) world <> " мобов найдено\n"
 
-parseServerEvents :: Producer ByteString IO () -> Producer ServerEvent IO ()
+parseServerEvents :: MonadIO m => Producer ByteString m () -> Producer ServerEvent m ()
 parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
   where onEndOrError Right{} = return ()
         onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing") >> (yield $ ParseError $ errDesc err)
