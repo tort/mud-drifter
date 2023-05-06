@@ -117,7 +117,7 @@ printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerE
 printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
 printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
 printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
-printEvent (ServerEvent (LocationEvent (Location id title) _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
+printEvent (ServerEvent (LocationEvent (Location id title) _ _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
 printEvent (ServerEvent (TakeFromContainer item container)) = putStrLn [st|Вы взяли #{genericShowt item} из #{genericShowt container}|]
 printEvent event = printT . T.pack . show $ event
 
@@ -128,9 +128,9 @@ printMove moves = mapM_ printM moves
 
 obstacleActions :: Monad m => Producer Event m () -> m (Map (Int, Int) [Event])
 obstacleActions questEventsProducer = snd <$> PP.fold toActionMap ((Nothing, []), M.empty) identity questEventsProducer
-  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _)) = ((Just $ loc^.locationId, []), travelActions)
+  where toActionMap ((Nothing, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _ _)) = ((Just $ loc^.locationId, []), travelActions)
         toActionMap acc@((Nothing, actions), travelActions) _ = acc
-        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _)) =
+        toActionMap ((Just leftLocId, actions), travelActions) (ServerEvent (LocationEvent loc _ _ _ _)) =
           let newTravelActions = case actions of [] -> travelActions
                                                  _ -> insert (leftLocId, loc^.locationId) (L.reverse actions) travelActions
            in ((Just $ loc^.locationId, []), newTravelActions)
@@ -141,9 +141,9 @@ type LocPair = [Int]
 
 scanDoorEvents :: [Event] -> [LocToLocActions]
 scanDoorEvents evts = L.filter (\x -> (length $ fst x) >= 2) $ (\pair -> ((fst . snd) pair, (snd . fst) pair))  <$> (L.filter changeLocsOnly $ zipped)
-  where doorEvents ([], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _)) = ([locId], [])
-        doorEvents (from:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _)) = ([from, locId], [])
-        doorEvents (from:to:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _)) = ([to, locId], [])
+  where doorEvents ([], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _ _)) = ([locId], [])
+        doorEvents (from:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _ _)) = ([from, locId], [])
+        doorEvents (from:to:[], actions) (ServerEvent (LocationEvent (Location locId _) _ _ _ _)) = ([to, locId], [])
         doorEvents (locPair, actions) ev = (locPair, ev:actions)
         events = scanl doorEvents ([], []) evts :: [LocToLocActions]
         zipped = events `zip` (L.tail events) :: [(LocToLocActions, LocToLocActions)]

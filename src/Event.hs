@@ -140,7 +140,7 @@ data ServerEvent = CodepagePrompt
                  | PasswordPrompt
                  | WelcomePrompt
                  | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [ObjRef Item InRoomDesc], _mobs :: [ObjRef Mob InRoomDesc], _exits :: [RoomExit] }
+                 | LocationEvent { _location :: Location, _objects :: [ObjRef Item InRoomDesc], _mobs :: [ObjRef Mob InRoomDesc], _exits :: [RoomExit], _zone :: Maybe Text }
                  | MoveEvent Text
                  | DarknessEvent
                  | UnknownServerEvent ByteString
@@ -188,6 +188,7 @@ data ServerEvent = CodepagePrompt
                  | MobWentIn (ObjRef Mob Nominative)
                  | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
                  | EndOfLogEvent
+                 | Zone Text
                  deriving (Eq, Generic, Ord, Show)
 
 data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobNomRef { _unMobNomRef :: ObjRef Mob Nominative }

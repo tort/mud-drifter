@@ -103,7 +103,7 @@ checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap 
 identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text (Maybe Text) -> Pipe Event Event IO ()
 identifyNameCases knownMobs aliases =
   await >>= \case
-    (ServerEvent (LocationEvent _ _ [mob] _)) ->
+    (ServerEvent (LocationEvent _ _ [mob] _ _)) ->
       case (S.member mob knownMobs, join . M.lookup (unObjRef mob) $ aliases) of
         (False, Just alias) ->
           (checkCases alias) *> identifyNameCases (S.insert mob knownMobs) aliases
@@ -146,7 +146,7 @@ travelToLoc substr world = action findLocation
       liftIO (printLocations substr world) >>
       lift (throwError "multiple locations found")
     travelAction to =
-      findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _) ->
+      findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _ _) ->
         case findTravelPath from to (_worldMap world) of
           (Just path) -> travel path world
           Nothing -> lift $ throwError "no path found"
@@ -205,22 +205,22 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
              in awaitTargets newMobs False
           evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
           evt@(ServerEvent PromptEvent {}) -> awaitTargets mobs False
-          evt@(ServerEvent (LocationEvent _ _ mobs _)) ->
+          evt@(ServerEvent (LocationEvent _ _ mobs _ _)) ->
             awaitTargets mobs inFight
           PulseEvent ->
             case (chooseTarget mobs, inFight) of
               (Just mobAlias, False) -> do
                 yield
                   (SendToServer $
-                   "убить " <> (L.head . T.words . unObjRef $ mobAlias))
+                   "убить " <> (unObjRef $ mobAlias))
                 awaitTargets mobs True
               (_, True) -> awaitTargets mobs inFight
               _ -> yield PulseEvent *> awaitTargets mobs inFight
           evt -> awaitTargets mobs inFight
-    findAlias :: MobRoomDesc -> Maybe (ObjRef Mob Nominative, EverAttacked)
+    findAlias :: ObjRef Mob InRoomDesc -> Maybe (ObjRef Mob Alias, EverAttacked)
     findAlias mobRef =
-      (liftA2) (\l r -> (,) <$> l <*> r) (_nominative . _nameCases) (_everAttacked) =<< M.lookup mobRef (_inRoomDescToMob world)
-    chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Nominative)
+      (liftA2) (\l r -> (,) <$> l <*> r) (_alias . _nameCases) (_everAttacked) =<< M.lookup mobRef (_inRoomDescToMob world)
+    chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
     chooseTarget = fmap (fst) . join . find (\opt -> fmap snd opt == Just (EverAttacked(True))) . fmap findAlias
 
 travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (Int)

@@ -42,20 +42,22 @@ spec = describe "Parser" $ do
         it "parse post welcome message" $ do log <- C8.readFile "test/logs/postWelcome.log"
                                              log ~> serverInputParser `shouldParse` PostWelcome
         it "parse location" $ do log <- C8.readFile "test/logs/locationMessage.log"
-                                 log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5032) (LocationTitle "В светлой комнате")
+                                 log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5032 "В светлой комнате"
                                                                                        , _objects = [ ObjRef "Ваш походный сундучок стоит здесь." ]
                                                                                        , _mobs = [ ObjRef "Дочка старейшины стоит здесь."
                                                                                                  , ObjRef "Дородная женщина стоит здесь." ]
-                                                                                      , _exits = [OpenExit North]
+                                                                                       , _exits = [OpenExit North]
+                                                                                       , _zone = Nothing
                                                                                        }
         it "parse location with closed doors" $ do log <- C8.readFile "test/logs/locationWithClosedDoor.log"
-                                                   log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5102) (LocationTitle "В сенях")
+                                                   log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5102 "В сенях"
                                                                                                         , _objects = [ ]
                                                                                                         , _mobs = [ ObjRef "Клоп ползает здесь." ]
                                                                                                         , _exits = [ClosedExit North,OpenExit East,ClosedExit South]
+                                                                                                        , _zone = Nothing
                                                                                                         }
         it "trims mobs room descriptions" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
-                                               log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
+                                               log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5000 "Комнаты отдыха"
                                                                                                     , _objects = [ ObjRef "У ваших ног лежит глиняная плошка."
                                                                                                                  , ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"
                                                                                                                  ]
@@ -63,9 +65,10 @@ spec = describe "Parser" $ do
                                                                                                               , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                                                                               ]
                                                                                                     , _exits = [OpenExit Down]
+                                                                                                    , _zone = Nothing
                                                                                                     }
         it "parse location with autoexits" $ do log <- C8.readFile "test/logs/locationWithAutoExits.log"
-                                                log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
+                                                log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5000 "Комнаты отдыха"
                                                                                                      , _objects = [ ObjRef "У ваших ног лежит глиняная плошка."
                                                                                                                   , ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"
                                                                                                                   ]
@@ -73,26 +76,30 @@ spec = describe "Parser" $ do
                                                                                                                , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                                                                                ]
                                                                                                      , _exits = [OpenExit Down]
+                                                                                                     , _zone = Nothing
                                                                                                      }
         it "parse move to location" $ do log <- C8.readFile "test/logs/move.log"
                                          log ~> serverInputParser `shouldParse` (MoveEvent "юг")
         it "parse location with thin ice" $ do log <- C8.readFile "test/logs/locationWithThinIce.log"
-                                               log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5600) (LocationTitle "У истока реки")
+                                               log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5600 "У истока реки"
                                                                                                     , _objects = []
                                                                                                     , _mobs = []
                                                                                                     , _exits = [OpenExit North, OpenExit South]
+                                                                                                    , _zone = Just "На реке"
                                                                                                     }
         it "parse location with ice" $ do log <- C8.readFile "test/logs/locationWithIce.log"
-                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5601) (LocationTitle "Мелководье")
+                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5601 "Мелководье"
                                                                                                , _objects = [ ObjRef "Лужица ржаного кваса разлита у ваших ног." ]
                                                                                                , _mobs = []
                                                                                                , _exits = [OpenExit North, OpenExit South]
+                                                                                               , _zone = Nothing
                                                                                                }
         it "parse location with mud" $ do log <- C8.readFile "test/logs/muddyLocation.log"
-                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5200) (LocationTitle "Лесная дорога")
+                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5200 "Лесная дорога"
                                                                                                , _objects = []
                                                                                                , _mobs = []
                                                                                                , _exits = [OpenExit North, OpenExit East, OpenExit South, OpenExit West]
+                                                                                               , _zone = Just "Лесная дорога"
                                                                                                }
         it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
@@ -119,7 +126,7 @@ spec = describe "Parser" $ do
                                                           length serverEventList `shouldBe` 5
         it "parse mob entered the room" $ do let log = "test/logs/mob-enters-the-room.log"
                                              serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter (has (_MobWentIn))
-                                             serverEventList `shouldBe` [MobWentIn (ObjRef "Блоха"), MobWentIn (ObjRef "Светлячок")]
+                                             serverEventList `shouldBe` [MobWentIn (ObjRef "блоха"), MobWentIn (ObjRef "светлячок")]
         it "parse mob left the room" $ do let log = "test/logs/mob-enters-the-room.log"
                                           serverEventList <- toListM $ loadAndParseServerEvents log >-> PP.filter (has (_MobWentOut))
                                           length serverEventList `shouldBe` 1
@@ -129,14 +136,15 @@ spec = describe "Parser" $ do
         it "parse move and location on agromob" $ do let log = "test/logs/enterRoomWithFight2.log"
                                                      serverEventList <- toListM $ parseServerEvents (loadServerEvents log) >-> PP.filter moveOrLocation
                                                      serverEventList `shouldBe` [ MoveEvent "восток"
-                                                                                , LocationEvent { _location = (Location (LocationId 5112) (LocationTitle "На кухне"))
+                                                                                , LocationEvent { _location = (Location 5112 "На кухне")
                                                                                                 , _objects = []
-                                                                                                , _mobs = [ ObjRef "(летит) Комар жужжит здесь."
+                                                                                                , _mobs = [ ObjRef "Комар жужжит здесь."
                                                                                                          , ObjRef "Таракан быстро пробежал здесь."
                                                                                                          , ObjRef "Блоха прячется в мусоре."
-                                                                                                         , ObjRef "(летит) Моль летает здесь."
+                                                                                                         , ObjRef "Моль летает здесь."
                                                                                                          ]
                                                                                                 , _exits = [OpenExit North,OpenExit West,OpenExit Down]
+                                                                                                , _zone = Nothing
                                                                                                 }
                                                                                 ]
         it "parse equipment list" $ do log <- C8.readFile "test/logs/listEquipment2.log"
@@ -181,17 +189,17 @@ spec = describe "Parser" $ do
                                               (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
         it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent 143 101
-        it "parse school entrance location" $ let location = Location (LocationId 5000) (LocationTitle "Комнаты отдыха")
+        it "parse school entrance location" $ let location = Location 5000 "Комнаты отдыха"
                                                   objects = [ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                   mobs = [ ObjRef "Полянин Дорман стоит здесь."
                                                          , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                          ]
                                                   exits = [OpenExit Down]
                                                in do log <- C8.readFile "test/logs/schoolEntrance.log"
-                                                     log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
+                                                     log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits (Just "Деревня у реки"))
         it "parse school entrance location misspelled" $ do
           log <- C8.readFile "test/logs/rentLocation.log"
-          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 4056) (LocationTitle "Гостиный двор")
+          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 4056 "Гостиный двор"
                                                                , _objects = [ ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!" ]
                                                                , _mobs = [ ObjRef "Велянка Ванесса летает здесь."
                                                                          , ObjRef "Шум и блеск экипировки выдает чье-то присутствие."
@@ -199,6 +207,7 @@ spec = describe "Parser" $ do
                                                                          , ObjRef "Хозяин постоялого двора с интересом рассматривает Вас."
                                                                          ]
                                                                , _exits = [ OpenExit East ]
+                                                               , _zone = Just "Лесная деревня"
                                                                }
         it "parse unknown obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.1.log"
                                                                     log ~> serverInputParser `shouldParse` (ObstacleEvent South "дверь")
@@ -207,12 +216,13 @@ spec = describe "Parser" $ do
         it "parse failure to go in direction" $ do log <- C8.readFile "test/logs/noWayThisDir.log"
                                                    log ~> serverInputParser `shouldParse` CantGoDir
         it "parse zone border exits" $ do log <- C8.readFile "test/logs/zoneBorderExit.log"
-                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location (LocationId 5023) (LocationTitle "Заброшенный дом")
+                                          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5023 "Заброшенный дом"
                                                                                                , _objects = []
                                                                                                , _mobs = [ ObjRef "Местная жительница идет по своим делам."
                                                                                                          , ObjRef "Местный житель идет здесь."
                                                                                                          ]
                                                                                                , _exits = [OpenExit East, OpenExit West]
+                                                                                               , _zone = Nothing
                                                                                                }
         it "parses my stats" $ do log <- C8.readFile "test/logs/myStats.log"
                                   log ~> serverInputParser `shouldParse` (MyStats 223 112)
@@ -227,9 +237,9 @@ spec = describe "Parser" $ do
         it "parses i'm bashed with colors drop" $ do log <- C8.readFile "test/logs/imBashed.2.log"
                                                      log ~> serverInputParser `shouldParse` ImBashedEvent
         it "parse objects in the room" $ do log <- C8.readFile "test/logs/roomWithObjects.log"
-                                            log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits)
+                                            log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits Nothing)
                                               where objects = [ ObjRef "Лужица дождевой воды разлита у ваших ног." ]
-                                                    location = Location (LocationId 5026) (LocationTitle "Лесная улица")
+                                                    location = Location 5026 "Лесная улица"
                                                     mobs = [ObjRef "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."]
                                                     exits = [OpenExit North,OpenExit South]
 

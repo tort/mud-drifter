@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 
 module World where
 
@@ -76,7 +78,7 @@ accDirections directions pair =
         | otherwise = insertOpposite $ insertAhead directions
         where insertAhead = M.insert ((locFrom^.locationId), (locTo^.locationId)) $ parseDir dir
               insertOpposite = M.insert ((locTo^.locationId), (locFrom^.locationId)) $ oppositeDir $ parseDir dir
-   in case pair of [LocationEvent locTo _ _ _, MoveEvent dir, LocationEvent locFrom _ _ _] -> updateWorld locFrom locTo dir
+   in case pair of [LocationEvent locTo _ _ _ _, MoveEvent dir, LocationEvent locFrom _ _ _ _] -> updateWorld locFrom locTo dir
                    _ -> directions
 
 parseDir :: Text -> RoomDir
@@ -124,7 +126,7 @@ extractObjects getter = PP.filter (has _LocationEvent) >-> PP.map getter
 
 extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map (Int) Int))
 extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _LocationEvent) <-< producer)
-  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _) = F.foldl (insertMob locId) acc (_mobs evt)
+  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _ _) = F.foldl (insertMob locId) acc (_mobs evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
         updateCount locId Nothing = Just (M.insert locId 1 M.empty)
         updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
@@ -134,12 +136,12 @@ extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _Loc
 discoverItems :: (Monad m) => Producer ServerEvent m () -> m (Map ServerEvent (Map (Int) Int))
 discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEvtWithLoc Nothing)
   where filterMapDiscoveries = forever $ await >>= \case
-              evt@(LocationEvent (Location locId _) items _ _) -> yield evt >> mapM_ (yield . ItemInTheRoom) items
+              evt@(LocationEvent (Location locId _) items _ _ _) -> yield evt >> mapM_ (yield . ItemInTheRoom) items
               evt@LootItem{} -> yield evt
               evt@TakeFromContainer{} -> yield evt
               evt@MobGaveYouItem{} -> yield evt
               _ ->  return ()
-        scanEvtWithLoc maybeLocId = await >>= \case (LocationEvent (Location locId _) _ _ _) -> scanEvtWithLoc (Just locId)
+        scanEvtWithLoc maybeLocId = await >>= \case (LocationEvent (Location locId _) _ _ _ _) -> scanEvtWithLoc (Just locId)
                                                     evt -> case maybeLocId of Nothing -> scanEvtWithLoc Nothing
                                                                               (Just locId) -> yield (evt, locId) >> scanEvtWithLoc maybeLocId
         foldToMap = PP.fold toMap M.empty identity
@@ -295,8 +297,19 @@ groupByCase getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCase
 regroupTo :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> Map (ObjRef Mob a) MobStats -> Map (ObjRef Mob b) MobStats
 regroupTo getter = groupByCase getter . fmap snd . M.toList
 
-nominativeToEverAttacked :: IO (Map (ObjRef Mob Nominative) MobStats)
-nominativeToEverAttacked = groupByCase _nominative . fmap (\ref -> mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~ ref) <$> (PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-< archiveToServerEvents)
+nominativeToEverAttacked :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
+nominativeToEverAttacked =
+  groupByCase _inRoomDesc .
+  fmap
+    (\nom ->
+       mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~
+       nom) <$>
+  ioNominatives
+  where
+    ioNominatives :: IO [ObjRef Mob Nominative]
+    ioNominatives =
+      PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-<
+      archiveToServerEvents
 
 inRoomDescToMobCase :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
 inRoomDescToMobCase mobAliases =
@@ -309,7 +322,7 @@ inRoomDescToMobCase mobAliases =
    archiveToServerEvents)
   where
     windowToCases :: [ServerEvent] -> NameCases Mob
-    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _] =
+    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _ _] =
       NameCases
         { _inRoomDesc = Just mob
         , _nominative = Just nom
@@ -320,7 +333,7 @@ inRoomDescToMobCase mobAliases =
         , _prepositional = Just prep
         , _alias = fmap ObjRef . join . M.lookup (unObjRef mob) $ mobAliases
         }
-    allCasesWindow [prep, instr, dat, acc, gen, nom, (LocationEvent _ _ [mob] _)] =
+    allCasesWindow [prep, instr, dat, acc, gen, nom, (LocationEvent _ _ [mob] _ _)] =
       has _CheckNominative nom &&
       has _CheckGenitive gen &&
       has _CheckAccusative acc &&
@@ -342,11 +355,12 @@ inRoomDescToMobCase mobAliases =
     defaultAlias = T.intercalate "." . T.words
 
 mobsData :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobsData mobsAliases =
-  regroupTo _inRoomDesc <$>
+mobsData mobsAliases = inRoomDescToMobCase mobsAliases
+{-
   (M.unionWith (<>) <$> nominativeToMobCase <*> nominativeToEverAttacked)
   where
-    nominativeToMobCase = regroupTo _nominative <$> inRoomDescToMobCase mobsAliases
+    nominativeToMobCase = inRoomDescToMobCase mobsAliases
+-}
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
@@ -466,7 +480,7 @@ scanFromTargetEvent =
   PP.map (snd . fromJust) >->
   printEvents
   where
-    onEvent _ item@(ServerEvent (LocationEvent (Location (5119) _) _ _ _)) = Just (True, item)
+    onEvent _ item@(ServerEvent (LocationEvent (Location (5119) _) _ _ _ _)) = Just (True, item)
     onEvent _ item@(ServerEvent EndOfLogEvent) = Just (False, item)
     onEvent acc item = fmap (\(flag, _) -> (flag, item)) acc
     producer =
@@ -478,7 +492,7 @@ dropLoopsFromPath = PP.fold onEvent M.empty identity indexedLocations
   where
     indexedLocations = PP.zip (Pipes.each [1..]) locationEvents
     locationEvents = logEvents >-> PP.filter (has (_ServerEvent . _LocationEvent))
-    onEvent acc item@(i, ServerEvent (LocationEvent (Location locId _) _ _ _)) = M.insert locId i acc
+    onEvent acc item@(i, ServerEvent (LocationEvent (Location locId _) _ _ _ _)) = M.insert locId i acc
     logEvents = producer ^. PB.decoded >> pure ()
     producer =
       (lift $ openFile "evt.log" ReadMode) >>= \h ->
