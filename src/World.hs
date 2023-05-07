@@ -311,34 +311,48 @@ nominativeToEverAttacked =
       PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-<
       archiveToServerEvents
 
+scanZone :: MonadIO m => Pipe ServerEvent ServerEvent m ()
+scanZone = PP.map (fromJust . fst) <-< PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (Nothing, Nothing) identity
+  where
+    action :: (Maybe ServerEvent, Maybe Text) -> ServerEvent -> (Maybe ServerEvent, Maybe Text)
+    action (_, _) evt@(LocationEvent _ _ _ _ (Just zone)) = (Just evt, Just zone)
+    action (_, prevZone) evt@(LocationEvent _ _ _ _ Nothing) = (Just $ evt & zone .~ prevZone, prevZone)
+    action (_, prevZone) e = (Just e, prevZone)
+
 inRoomDescToMobCase :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
 inRoomDescToMobCase mobAliases =
   groupByCase _inRoomDesc <$>
   (PP.toListM $
-   PP.map (\w -> nameCases .~ windowToCases w $ mempty) <-<
+   PP.map (\(nc, z) -> mempty & nameCases .~ nc & zone .~ z) <-<
+   PP.map windowToCases <-<
    PP.filter allCasesWindow <-<
    scanWindow 7 <-<
    PP.filter isCheckCaseEvt <-<
+   scanZone <-<
    archiveToServerEvents)
   where
-    windowToCases :: [ServerEvent] -> NameCases Mob
-    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _ _] =
-      NameCases
-        { _inRoomDesc = Just mob
-        , _nominative = Just nom
-        , _genitive = Just gen
-        , _accusative = Just acc
-        , _dative = Just dat
-        , _instrumental = Just instr
-        , _prepositional = Just prep
-        , _alias = fmap ObjRef . join . M.lookup (unObjRef mob) $ mobAliases
-        }
+    windowToCases :: [ServerEvent] -> (NameCases Mob, Maybe Text)
+    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _ zone] =
+      let nc =
+            NameCases
+              { _inRoomDesc = Just mob
+              , _nominative = Just nom
+              , _genitive = Just gen
+              , _accusative = Just acc
+              , _dative = Just dat
+              , _instrumental = Just instr
+              , _prepositional = Just prep
+              , _alias =
+                  fmap ObjRef . join . M.lookup (unObjRef mob) $ mobAliases
+              }
+       in (nc, zone)
     allCasesWindow [prep, instr, dat, acc, gen, nom, (LocationEvent _ _ [mob] _ _)] =
       has _CheckNominative nom &&
       has _CheckGenitive gen &&
       has _CheckAccusative acc &&
       has _CheckDative dat &&
-      has _CheckInstrumental instr && has _CheckPrepositional prep && M.member (unObjRef mob) mobAliases
+      has _CheckInstrumental instr &&
+      has _CheckPrepositional prep && M.member (unObjRef mob) mobAliases
     allCasesWindow _ = False
     scanWindow n = PP.scan toWindow [] identity
       where

@@ -269,6 +269,7 @@ instance Semigroup EverAttacked where
 
 data MobStats = MobStats { _nameCases :: NameCases Mob
                          , _everAttacked :: Maybe (EverAttacked)
+                         , _zone :: Maybe Text
                          } deriving (Eq, Ord, Generic, Show)
 
   --showt v = T.intercalate "\n" . ((\f -> (maybe "" showt . unObjRef . f) v) <$> [_inRoomDesc, _nominative, _genitive, _accusative, _dative, _instrumental, _prepositional])
@@ -281,6 +282,7 @@ instance Semigroup MobStats where
 instance Monoid MobStats where
   mempty = MobStats { _nameCases = mempty
                     , _everAttacked = mempty
+                    , _zone = mempty
                     }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
@@ -298,8 +300,8 @@ makeFieldsNoPrefix ''WeaponClass
 makeFieldsNoPrefix ''RoomDir
 makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
+makeFieldsNoPrefix ''MobStats
 
-makeLenses ''MobStats
 makeLenses ''NameCases
 
 makePrisms ''ServerEvent
