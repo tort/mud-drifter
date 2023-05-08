@@ -2,45 +2,8 @@ PP.toListM $ PP.scan scanZoneP (Nothing, Nothing) identity <-< PP.filter (isJust
 
 :t PP.toListM $ snd <$> runStateP (Nothing, Nothing) $ (forever scanZone) <-< PP.map (runReader (liftA2 (,) (preview (_LocationEvent . _5 . traverse)) (preview (_LocationEvent . _1 . locationTitle)))) <-< serverLogEventsProducer
 
-:{
-zonedLocs =
-  PP.toListM $
-  runStateP (Nothing, Nothing) $
-  (forever scanZone) <-<
-  PP.map
-    (runReader
-       (liftA2
-          (,)
-          (preview (_LocationEvent . _5 . traverse))
-          (preview (_LocationEvent . _1 . locationTitle)))) <-<
-  serverLogEventsProducer
-:}
-
-:{
-scanZone =
-  Pipes.await >>= \case
-    (Just zone, Just location) -> put zone *> Pipes.yield (zone, location)
-    (Nothing, Just location) -> get zone >>= \z -> Pipes.yield (z, location)
-    _ -> pure ()
-:}
-
-:{
-scanZoneP (prevZone, _) (Just zone, title) = (Just zone, title)
-scanZoneP (Just prevZone, _) (Nothing, title) = (Just prevZone, title)
-:}
 
 fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . traverse))) <-< PP.filter (has (_LocationEvent . _5 . _Just)) <-< serverLogEventsProducer
-
-:{
-initAliasCache =
-  (encodePretty @(Map Text (Maybe Text)) <$> (M.union <$> knownMobs <*> allMobs)) >>=
-  LC8.writeFile "cache/mob-aliases.json"
-  where
-    allMobs :: IO (Map Text (Maybe Text))
-    allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> loadCachedMobsOnMap
-    knownMobs :: IO (Map Text (Maybe Text))
-    knownMobs = M.fromList . fmap (bimap unObjRef (fmap unObjRef . _alias . _nameCases)) . M.assocs <$> loadCachedMobData
-:}
 
 (encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> loadCachedMobAliases) >>= LC8.writeFile "mob-aliases.list.json"
 
@@ -326,4 +289,15 @@ runZoneV2Forest = runZone world allKillableMobs "5401" 5400
 runZoneV3Garden = runZone world allKillableMobs "6601" 6600
 runZoneAbandonedHouse = runZone world allKillableMobs "5101" 5100
 runZoneV3Field = runZone world allKillableMobs "6701" 6700
+:}
+
+:{
+initAliasCache =
+  (encodePretty @(Map Text (Maybe Text)) <$> (M.union <$> knownMobs <*> allMobs)) >>=
+  LC8.writeFile "cache/mob-aliases.json"
+  where
+    allMobs :: IO (Map Text (Maybe Text))
+    allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> loadCachedMobsOnMap
+    knownMobs :: IO (Map Text (Maybe Text))
+    knownMobs = M.fromList . fmap (bimap unObjRef (fmap unObjRef . _alias . _nameCases)) . M.assocs <$> loadCachedMobData
 :}

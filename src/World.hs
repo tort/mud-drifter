@@ -316,19 +316,28 @@ scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (N
     action (_, prevZone) evt@(LocationEvent _ _ _ _ Nothing) = (Just $ evt & zone .~ prevZone, prevZone)
     action (_, prevZone) e = (Just e, prevZone)
 
-inRoomDescToMobCase :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
-inRoomDescToMobCase mobAliases =
+inRoomDescToMobCase :: Map Text (Maybe Text) -> Set (ObjRef Mob Nominative, Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
+inRoomDescToMobCase mobAliases everAttackedMobs =
   groupByCase _inRoomDesc <$>
   (PP.toListM $
-   PP.map (\(nc, z) -> mempty & nameCases .~ nc & zone .~ z) <-<
+   PP.map
+     (\p@(nc, z) ->
+        mempty & nameCases .~ nc & zone .~ z &
+        everAttacked .~ (ifEverAttacked (nc ^. nominative) z)) <-<
    PP.map windowToCases <-<
    PP.filter allCasesWindow <-<
    scanWindow 7 <-<
    PP.filter isCheckCaseEvt <-<
-   PP.map (fromJust . fst) <-< 
+   PP.map (fromJust . fst) <-<
    scanZone <-<
    archiveToServerEvents)
   where
+    ifEverAttacked :: Maybe (ObjRef Mob Nominative) -> Maybe Text -> Maybe EverAttacked
+    ifEverAttacked (Just nominative) (Just zone) =
+      if S.member (nominative, zone) everAttackedMobs
+        then Just (EverAttacked True)
+        else Nothing
+    ifEverAttacked _ _ = Nothing
     windowToCases :: [ServerEvent] -> (NameCases Mob, Maybe Text)
     windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _ zone] =
       let nc =
@@ -367,7 +376,7 @@ inRoomDescToMobCase mobAliases =
     defaultAlias = T.intercalate "." . T.words
 
 mobsData :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobsData mobsAliases = inRoomDescToMobCase mobsAliases
+mobsData mobsAliases = S.fromList <$> nominativeToEverAttacked >>= inRoomDescToMobCase mobsAliases
 {-
   (M.unionWith (<>) <$> nominativeToMobCase <*> nominativeToEverAttacked)
   where
