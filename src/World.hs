@@ -297,22 +297,19 @@ groupByCase getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCase
 regroupTo :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> Map (ObjRef Mob a) MobStats -> Map (ObjRef Mob b) MobStats
 regroupTo getter = groupByCase getter . fmap snd . M.toList
 
-nominativeToEverAttacked :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
-nominativeToEverAttacked =
-  groupByCase _inRoomDesc .
-  fmap
-    (\nom ->
-       mempty & everAttacked ?~ EverAttacked True & nameCases . nominative ?~
-       nom) <$>
-  ioNominatives
+nominativeToEverAttacked :: IO [(ObjRef Mob Nominative, Text)]
+nominativeToEverAttacked = 
+  PP.toListM $
+  PP.map fromJust <-<
+  PP.filter isJust <-<
+  PP.map (uncurry (liftA2 (,))) <-<
+  PP.map (bimap getNominative identity) <-< scanZone <-< archiveToServerEvents
   where
-    ioNominatives :: IO [ObjRef Mob Nominative]
-    ioNominatives =
-      PP.toListM $ PP.map _target <-< PP.filter (has _FightPromptEvent) <-<
-      archiveToServerEvents
+    getNominative :: Maybe ServerEvent -> Maybe (ObjRef Mob Nominative)
+    getNominative = preview (traverse . _FightPromptEvent . _2)
 
-scanZone :: MonadIO m => Pipe ServerEvent ServerEvent m ()
-scanZone = PP.map (fromJust . fst) <-< PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (Nothing, Nothing) identity
+scanZone :: MonadIO m => Pipe ServerEvent (Maybe ServerEvent, Maybe Text) m ()
+scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (Nothing, Nothing) identity
   where
     action :: (Maybe ServerEvent, Maybe Text) -> ServerEvent -> (Maybe ServerEvent, Maybe Text)
     action (_, _) evt@(LocationEvent _ _ _ _ (Just zone)) = (Just evt, Just zone)
@@ -328,6 +325,7 @@ inRoomDescToMobCase mobAliases =
    PP.filter allCasesWindow <-<
    scanWindow 7 <-<
    PP.filter isCheckCaseEvt <-<
+   PP.map (fromJust . fst) <-< 
    scanZone <-<
    archiveToServerEvents)
   where
