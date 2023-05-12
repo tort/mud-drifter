@@ -101,6 +101,20 @@ spec = describe "Parser" $ do
                                                                                                , _exits = [OpenExit North, OpenExit East, OpenExit South, OpenExit West]
                                                                                                , _zone = Just "Лесная дорога"
                                                                                                }
+        it "parse little bear location" $ do log <- C8.readFile "test/logs/littleBear.log"
+                                             log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 4829 "На полянке"
+                                                                                                  , _objects = [ ObjRef "Немного отрубей просыпано здесь."]
+                                                                                                  , _mobs = [ObjRef "Большой рой комаров мешает тут Мише."
+                                                                                                            , ObjRef "Большой рой комаров мешает тут Мише."
+                                                                                                            , ObjRef "Большой рой комаров мешает тут Мише."
+                                                                                                            , ObjRef "Довольный медвежонок лопает здесь малину."
+                                                                                                            ]
+                                                                                                  , _exits = [OpenExit West]
+                                                                                                  , _zone = Nothing
+                                                                                                  }
+        it "parse little bear run" $ do let log = "test/logs/little-bear-run.log"
+                                        serverEventList <- toListM $ PP.filter ((== (Just 4829)) . preview (_LocationEvent . _1 . locationId)) <-< loadAndParseServerEvents log
+                                        length serverEventList `shouldBe` 3
         it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
         it "parse in darkness server event" $ do let log = "test/logs/enterDarkRoom.log"

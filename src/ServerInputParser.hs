@@ -790,10 +790,7 @@ locationParser = do
 roomObjects :: C8.ByteString -> A.Parser [Text]
 roomObjects colorCode = do cs
                            string colorCode
-                           objectsStr <- takeTill (== telnetEscape)
-                           return $ toObjects objectsStr
-                             where toObjects = dropTrailingCr . fmap T.strip . T.lines . decodeUtf8
-                                   dropTrailingCr strings = T.dropWhileEnd (== '\r') <$> strings
+                           fmap (T.dropWhileEnd (== '\r') . T.strip) . T.lines . decodeUtf8 <$> takeTill (== telnetEscape)
 
 parseZone :: A.Parser (Maybe Text)
 parseZone = listToMaybe <$> many' zoneLine

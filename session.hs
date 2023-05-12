@@ -1,9 +1,14 @@
-PP.toListM $ PP.scan scanZoneP (Nothing, Nothing) identity <-< PP.filter (isJust . snd) <-< PP.map (runReader (liftA2 (,) (preview (_LocationEvent . _5 . traverse)) (preview (_LocationEvent . _1 . locationTitle)))) <-< serverLogEventsProducer
-
-:t PP.toListM $ snd <$> runStateP (Nothing, Nothing) $ (forever scanZone) <-< PP.map (runReader (liftA2 (,) (preview (_LocationEvent . _5 . traverse)) (preview (_LocationEvent . _1 . locationTitle)))) <-< serverLogEventsProducer
-
+-- for some reason bear parsing does not happen
+runEffect $ Pipes.ByteString.stdout <-< PP.map (encodeUtf8 . (<> "\n") . unObjRef . Data.Maybe.fromJust) <-< PP.filter isJust <-< PP.map (preview (_LocationEvent . _3 . traverse)) <-< (parseServerEvents . loadServerEvents) "archive/server-input-log/genod-20230509_050445__20230509_051118.log"
 
 fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . traverse))) <-< PP.filter (has (_LocationEvent . _5 . _Just)) <-< serverLogEventsProducer
+
+:{
+runEffect $
+  Pipes.ByteString.stdout <-< PP.map (encodeUtf8 . (<> "\n") . genericShowt) <-<
+  PP.filter ((== (Just 4829)) . runReader (preview (_LocationEvent . _1 . locationId))) <-<
+  (parseServerEvents . loadServerEvents) "test/logs/little-bear-run.log"
+:}
 
 (encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> loadCachedMobAliases) >>= LC8.writeFile "mob-aliases.list.json"
 
@@ -17,7 +22,7 @@ g & run $ login
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
-g & run $ killEmAll world
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap
