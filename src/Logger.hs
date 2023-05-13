@@ -117,7 +117,7 @@ printEvent (ServerEvent (UnknownServerEvent txt)) = C8.putStrLn ("UnknownServerE
 printEvent (ServerEvent (MoveEvent txt)) = putStrLn ("MoveEvent: " <> txt <> "\ESC[0m")
 printEvent (ConsoleInput txt) = putStrLn ("ConsoleInput: " <> txt <> "\ESC[0m")
 printEvent (SendToServer txt) = putStrLn ("SendToServer: " <> txt <> "\ESC[0m")
-printEvent (ServerEvent (LocationEvent (Location id title) _ _ _ _)) = putStrLn ("LocationEvent: [" <> (showt id) <> "]\ESC[0m")
+printEvent (ServerEvent locEvt@(LocationEvent (Location id title) _ _ _ _)) = genericPrintT locEvt
 printEvent (ServerEvent (TakeFromContainer item container)) = putStrLn [st|Вы взяли #{genericShowt item} из #{genericShowt container}|]
 printEvent event = printT . T.pack . show $ event
 

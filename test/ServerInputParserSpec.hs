@@ -114,7 +114,7 @@ spec = describe "Parser" $ do
                                                                                                   }
         it "parse little bear run" $ do let log = "test/logs/little-bear-run.log"
                                         serverEventList <- toListM $ PP.filter ((== (Just 4829)) . preview (_LocationEvent . _1 . locationId)) <-< loadAndParseServerEvents log
-                                        length serverEventList `shouldBe` 3
+                                        length serverEventList `shouldBe` 6
         it "parse move in darkness with nightvision" $ do log <- C8.readFile "test/logs/inDarknessWithInfra.log"
                                                           log ~> serverInputParser `shouldParse` (MoveEvent "север")
         it "parse in darkness server event" $ do let log = "test/logs/enterDarkRoom.log"

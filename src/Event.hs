@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric, DerivingVia #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
@@ -31,9 +31,13 @@ import Data.Aeson hiding (Result(..))
 data Result a = Success a | Failure Text
   deriving (Eq, Generic)
 
-data Location = Location { _locationId :: Int
-                         , _locationTitle :: Text
-                         } deriving (Ord, Generic, Show)
+data Location =
+  Location
+    { _locationId :: Int
+    , _locationTitle :: Text
+    }
+  deriving (Ord, Generic, Show)
+  deriving TextShow  via FromGeneric  Location
 
 instance Eq Location where
   left == right = _locationId left == _locationId right
@@ -195,21 +199,27 @@ data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobN
 
 data Slot = Body | Head | Arms | Legs | Wield | Hold | DualWield | Hands | Feet | Waist | RightWrist | LeftWrist | Neck | Shoulders
   deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  Slot
 data EquippedItem = EquippedItem Slot (ObjRef Item Nominative)
   deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  EquippedItem
 data ItemState = Excellent | VeryGood | Good | Bad
   deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  ItemState
 data ItemStats = Weapon (ObjRef Item Nominative) WeaponClass [Slot] AvgDamage | Armor (ObjRef Item Nominative) [Slot] AC ArmorVal
   deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  ItemStats
 type AvgDamage = Double
 data WeaponClass = LongBlade | ShortBlade | Axe | Dagger | Spear | Club | Dual | Other
   deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  WeaponClass
 type AC = Int
 type ArmorVal = Int
 type Price = Int
 
 data InventoryItem = Single (ObjRef Item Nominative) ItemState | Multiple (ObjRef Item Nominative) Int
   deriving (Eq, Ord, Generic, Show)
+  deriving TextShow  via FromGeneric  InventoryItem
 
 data ObjCase = Nominative
              | Genitive
@@ -225,6 +235,7 @@ data ObjType = Mob | Item deriving (Eq, Ord, Show)
 
 newtype ObjRef (a :: ObjType) (b :: ObjCase) = ObjRef { unObjRef :: Text }
   deriving (Eq, Ord, Generic, Show)
+  deriving TextShow  via FromGeneric  (ObjRef a b)
 
 instance Semigroup (ObjRef a b) where
   left <> right = left
@@ -287,8 +298,21 @@ instance Monoid MobStats where
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
 
-data RoomDir = North | South | East | West | Up | Down deriving (Eq, Generic, Ord, Show)
-data RoomExit = OpenExit RoomDir | ClosedExit RoomDir deriving (Eq, Generic, Ord, Show)
+data RoomDir
+  = North
+  | South
+  | East
+  | West
+  | Up
+  | Down
+  deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  RoomDir
+
+data RoomExit
+  = OpenExit RoomDir
+  | ClosedExit RoomDir
+  deriving (Eq, Generic, Ord, Show)
+  deriving TextShow  via FromGeneric  RoomExit
 
 
 makeFieldsNoPrefix ''Location

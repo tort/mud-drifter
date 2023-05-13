@@ -4,8 +4,8 @@ runEffect $ Pipes.ByteString.stdout <-< PP.map (encodeUtf8 . (<> "\n") . unObjRe
 fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . traverse))) <-< PP.filter (has (_LocationEvent . _5 . _Just)) <-< serverLogEventsProducer
 
 :{
-runEffect $
-  Pipes.ByteString.stdout <-< PP.map (encodeUtf8 . (<> "\n") . genericShowt) <-<
+  PP.toListM $
+  PP.map (runReader (preview (_LocationEvent . _1))) <-<
   PP.filter ((== (Just 4829)) . runReader (preview (_LocationEvent . _1 . locationId))) <-<
   (parseServerEvents . loadServerEvents) "test/logs/little-bear-run.log"
 :}
