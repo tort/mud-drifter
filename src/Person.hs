@@ -103,12 +103,16 @@ checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap 
 identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text (Maybe Text) -> Pipe Event Event IO ()
 identifyNameCases knownMobs aliases =
   await >>= \case
-    (ServerEvent (LocationEvent _ _ [mob] _ _)) ->
-      case (S.member mob knownMobs, join . M.lookup (unObjRef mob) $ aliases) of
+    (ServerEvent l@(LocationEvent _ _ [mob] _ _)) ->
+      (lift . genericPrintT) l *>
+      case (isKnown mob, getAlias mob) of
         (False, Just alias) ->
           (checkCases alias) *> identifyNameCases (S.insert mob knownMobs) aliases
         _ -> identifyNameCases knownMobs aliases
     _ -> identifyNameCases knownMobs aliases
+  where
+    isKnown mob = S.member mob knownMobs
+    getAlias mob = join . M.lookup (unObjRef mob) $ aliases
 
 findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
 findCurrentLoc = yield (SendToServer "смотреть") >> go

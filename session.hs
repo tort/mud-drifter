@@ -5,8 +5,9 @@ fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . trav
 
 :{
   PP.toListM $
-  PP.map (runReader (preview (_LocationEvent . _1))) <-<
-  PP.filter ((== (Just 4829)) . runReader (preview (_LocationEvent . _1 . locationId))) <-<
+  PP.map (runReader (preview (_LocationEvent))) <-<
+  PP.filter ((== (Just 4829)) . runReader (preview (_1 . traverse . _LocationEvent . _1 . locationId))) <-<
+  scanZone <-<
   (parseServerEvents . loadServerEvents) "test/logs/little-bear-run.log"
 :}
 
