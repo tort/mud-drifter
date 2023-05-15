@@ -1,3 +1,13 @@
+:{
+:t (\(l, r) -> (l,) <$> r) =<< pure . fmap Control.Monad.sequence . fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
+  PP.toListM'
+    (PA.parsed zoneLine (loadServerEvents "test/logs/zone-ending.log"))
+:}
+
+fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )
+res <- fmap snd .  PP.toListM' $  PA.parsed (parseMobsInLocation) (loadServerEvents "test/logs/mobs-message.log" )
+toListM $ fromJust (res ^? _Left . _2)
+
 -- for some reason bear parsing does not happen
 runEffect $ Pipes.ByteString.stdout <-< PP.map (encodeUtf8 . (<> "\n") . unObjRef . Data.Maybe.fromJust) <-< PP.filter isJust <-< PP.map (preview (_LocationEvent . _3 . traverse)) <-< (parseServerEvents . loadServerEvents) "archive/server-input-log/genod-20230509_050445__20230509_051118.log"
 
@@ -9,6 +19,7 @@ fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . trav
   PP.filter ((== (Just 4829)) . runReader (preview (_1 . traverse . _LocationEvent . _1 . locationId))) <-<
   scanZone <-<
   (parseServerEvents . loadServerEvents) "test/logs/little-bear-run.log"
+
 :}
 
 (encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> loadCachedMobAliases) >>= LC8.writeFile "mob-aliases.list.json"

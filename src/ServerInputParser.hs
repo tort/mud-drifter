@@ -1,7 +1,4 @@
-module ServerInputParser ( serverInputParser
-                         , remoteInputParser
-                         , RemoteConsoleEvent(..)
-                         ) where
+module ServerInputParser where
 
 import Protolude hiding (Location, Down, Up, Dual, option, try)
 import Data.Functor
@@ -731,7 +728,7 @@ locationParser = do
       cs >> string "0;37m"
       C.endOfLine
   objects <- roomObjects "1;33m"
-  mobs <- roomObjects "1;31m"
+  mobs <- parseMobsInLocation
   clearColors
   zone <- parseZone 
   let location =
@@ -743,7 +740,7 @@ locationParser = do
       LocationEvent
         location
         (ObjRef <$> objects)
-        ((\mob -> ObjRef . fromMaybe mob . T.stripPrefix "(летит) " $ mob) <$> mobs)
+        mobs
         exits
         zone
   where
@@ -792,19 +789,40 @@ roomObjects colorCode = do cs
                            string colorCode
                            fmap (T.dropWhileEnd (== '\r') . T.strip) . T.lines . decodeUtf8 <$> takeTill (== telnetEscape)
 
+parseMobsInLocation :: A.Parser [ObjRef Mob InRoomDesc]
+parseMobsInLocation = cs *> string "1;31m" *> many' parseMob
+  where
+    parseMob =
+      (many' . string . encodeUtf8) "(летит) " *>
+      C.takeWhile notEndOfLineOrControl >>= \mob ->
+        C.endOfLine *> (pure . ObjRef . T.strip . decodeUtf8) mob
+    parseAffects =
+      (choice . fmap (string . encodeUtf8))
+        [ "...окружен воздушным, огненным, ледяным щитами"
+        , "...окружен ледяным щитом"
+        , "...окутан сверкающим коконом"
+        , "...светится ярким сиянием"
+        , "...серебристая аура"
+        , "...слеп"
+        , "...слепа"
+        ] *>
+      C.endOfLine
+
+notEndOfLineOrControl c = c /= '\r' && c /= '\n' && c /= 'ÿ' && c /= '\ESC'
+
 parseZone :: A.Parser (Maybe Text)
 parseZone = listToMaybe <$> many' zoneLine
-  where
-    zoneLine :: A.Parser Text
-    zoneLine =
-      C.endOfLine *>
-      C.takeWhile (\c -> c /= '(' && c /= '\r' && c /= '\n' && c /= 'ÿ') >>= \zoneName ->
-        C.char '(' *>
-        C.skipWhile (\c -> c /= ')' && c /= '\r' && c /= '\n' && c /= 'ÿ') *>
-        C.char ')' *>
-        C.char '.' *>
-        C.endOfLine *>
-        (pure . T.strip . decodeUtf8) zoneName
+
+zoneLine :: A.Parser Text
+zoneLine =
+  C.endOfLine *>
+  C.takeWhile (\c -> c /= '(' && notEndOfLineOrControl c) >>= \zoneName ->
+    C.char '(' *>
+    C.skipWhile (\c -> c /= ')' && notEndOfLineOrControl c) *>
+    C.char ')' *>
+    C.char '.' *>
+    C.endOfLine *>
+    (pure . T.strip . decodeUtf8) zoneName
 
 move :: A.Parser ServerEvent
 move = do
