@@ -790,13 +790,26 @@ roomObjects colorCode = do cs
                            fmap (T.dropWhileEnd (== '\r') . T.strip) . T.lines . decodeUtf8 <$> takeTill (== telnetEscape)
 
 parseMobsInLocation :: A.Parser [ObjRef Mob InRoomDesc]
-parseMobsInLocation = cs *> string "1;31m" *> many' parseMob
+parseMobsInLocation =
+  cs *> string "1;31m" *>
+  (fmap ObjRef .
+   L.filter
+     (\line ->
+        not $
+        (T.isSuffixOf " сражается с ВАМИ!") line ||
+        (T.isSuffixOf " отдыхает здесь.") line ||
+        (T.isSuffixOf " лежит здесь, при смерти.") line ||
+        (T.isSuffixOf " лежат здесь, при смерти.") line ||
+        (T.isSuffixOf " лежит здесь, в обмороке.") line ||
+        (T.isSuffixOf " лежат здесь, в обмороке.") line ||
+        (T.isSuffixOf " выдает чье-то присутствие.") line) <$>
+   many' parseMob)
   where
+    parseMob :: A.Parser Text
     parseMob =
       (many' . string . encodeUtf8) "(летит) " *>
       C.takeWhile notEndOfLineOrControl >>= \mob ->
-        C.endOfLine *> many' parseAffects *>
-        (pure . ObjRef . T.strip . decodeUtf8) mob
+        C.endOfLine *> many' parseAffects *> (pure . T.strip . decodeUtf8) mob
     parseAffects =
       (choice . fmap (string . encodeUtf8))
         [ "...окружен воздушным, огненным, ледяным щитами"
@@ -808,6 +821,7 @@ parseMobsInLocation = cs *> string "1;31m" *> many' parseMob
         , "...слепа"
         ] *>
       C.endOfLine
+  --nonMobs = 
 
 notEndOfLineOrControl c = c /= '\r' && c /= '\n' && c /= 'ÿ' && c /= '\ESC'
 
