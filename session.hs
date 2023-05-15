@@ -1,7 +1,7 @@
 :{
 :t (\(l, r) -> (l,) <$> r) =<< pure . fmap Control.Monad.sequence . fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
-    (PA.parsed zoneLine (loadServerEvents "test/logs/zone-ending.log"))
+    (PA.parsed parseMobsInLocation (loadServerEvents "test/logs/mobWithAura.log"))
 :}
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )

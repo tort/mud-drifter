@@ -216,6 +216,11 @@ generateCache =
     cacheMobsAliases mobsOnMap *> loadCachedMobAliases >>= \mobsAliases ->
       cacheLocations *> cacheMobData mobsAliases *> cacheDirections 
 
+generateAliases :: IO ()
+generateAliases =
+  cacheMobsOnMap *> loadCachedMobsOnMap >>= \mobsOnMap ->
+    cacheMobsAliases mobsOnMap
+
 cacheLocations :: IO ()
 cacheLocations =
   listFilesIn "archive/server-input-log/" >>=
