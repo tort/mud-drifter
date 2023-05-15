@@ -795,7 +795,8 @@ parseMobsInLocation = cs *> string "1;31m" *> many' parseMob
     parseMob =
       (many' . string . encodeUtf8) "(летит) " *>
       C.takeWhile notEndOfLineOrControl >>= \mob ->
-        C.endOfLine *> (pure . ObjRef . T.strip . decodeUtf8) mob
+        C.endOfLine *> many' parseAffects *>
+        (pure . ObjRef . T.strip . decodeUtf8) mob
     parseAffects =
       (choice . fmap (string . encodeUtf8))
         [ "...окружен воздушным, огненным, ледяным щитами"
