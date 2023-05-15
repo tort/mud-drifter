@@ -170,6 +170,42 @@ trackBash = forever awaitBash
         stand = await >>= \case PulseEvent -> yield (SendToServer "встать")
                                 evt -> yield evt >> stand
 
+type ZoneId = Text
+
+mapNominatives :: MonadIO m => Map (ObjRef Mob InRoomDesc) MobStats -> Pipe Event Event m ()
+mapNominatives knownMobs = PP.map mapEvt
+  where
+    knownNominatives :: Map (ObjRef Mob Nominative, Text) (ObjRef Mob InRoomDesc)
+    knownNominatives =
+      M.fromList .
+      (fmap) fromJust .
+      (fmap)
+        (\s ->
+          (\n z d -> ((n, z), d)) <$> (s ^. nameCases . nominative) <*> (s ^. zone) <*>
+          (s ^. nameCases . inRoomDesc)) .
+      M.elems $ knownMobs
+    mapEvt evt@(ServerEvent (LocationEvent location objects mobs exits (Just zone))) = ServerEvent $ LocationEvent location objects (fmap (updateNom zone) mobs) exits (Just zone)
+    mapEvt evt = evt
+    updateNom :: ZoneId -> ObjRef Mob InRoomDesc -> ObjRef Mob InRoomDesc
+    updateNom zone mob = fromMaybe mob . (fmap ObjRef . toInRoomDesc zone) . extractNominative . unObjRef $ mob
+    extractNominative :: Text -> Maybe Text
+    extractNominative mob
+      | T.isSuffixOf " сражается с ВАМИ!" mob = T.stripSuffix " сражается с ВАМИ!" $ mob
+      | T.isSuffixOf " отдыхает здесь." mob = T.stripSuffix " отдыхает здесь." $ mob
+      | otherwise = Just mob
+    toInRoomDesc :: ZoneId -> Maybe Text -> Maybe Text
+    toInRoomDesc zone mob =
+      mob >>= \m -> M.lookup (ObjRef m, zone) knownNominatives >>= pure . unObjRef
+      --fromMaybe mob $ (unObjRef <$> (M.lookup (ObjRef mob, zone) knownNominatives))
+      {-
+        (T.isSuffixOf " сражается с ВАМИ!") line ||
+        (T.isSuffixOf " отдыхает здесь.") line ||
+        (T.isSuffixOf " лежит здесь, при смерти.") line ||
+        (T.isSuffixOf " лежат здесь, при смерти.") line ||
+        (T.isSuffixOf " лежит здесь, в обмороке.") line ||
+        (T.isSuffixOf " лежат здесь, в обмороке.") line ||
+-}
+
 killEmAll :: World -> Pipe Event Event IO ()
 killEmAll world = forever lootAll >-> awaitTargets [] False
   where

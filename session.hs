@@ -1,5 +1,5 @@
 :{
-:t (\(l, r) -> (l,) <$> r) =<< pure . fmap Control.Monad.sequence . fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
+(\(l, r) -> (l,) <$> r) =<< pure . fmap Control.Monad.sequence . fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed parseMobsInLocation (loadServerEvents "test/logs/mobWithAura.log"))
 :}
@@ -32,7 +32,7 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
