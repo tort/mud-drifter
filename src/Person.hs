@@ -197,14 +197,6 @@ mapNominatives knownMobs = PP.map mapEvt
     toInRoomDesc zone mob =
       mob >>= \m -> M.lookup (ObjRef m, zone) knownNominatives >>= pure . unObjRef
       --fromMaybe mob $ (unObjRef <$> (M.lookup (ObjRef mob, zone) knownNominatives))
-      {-
-        (T.isSuffixOf " сражается с ВАМИ!") line ||
-        (T.isSuffixOf " отдыхает здесь.") line ||
-        (T.isSuffixOf " лежит здесь, при смерти.") line ||
-        (T.isSuffixOf " лежат здесь, при смерти.") line ||
-        (T.isSuffixOf " лежит здесь, в обмороке.") line ||
-        (T.isSuffixOf " лежат здесь, в обмороке.") line ||
--}
 
 killEmAll :: World -> Pipe Event Event IO ()
 killEmAll world = forever lootAll >-> awaitTargets [] False
@@ -247,6 +239,8 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
            in awaitTargets newMobs False
         evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
         evt@(ServerEvent PromptEvent {}) -> awaitTargets mobs False
+        evt@(ServerEvent (LocationEvent _ _ [] _ _)) ->
+          awaitTargets mobs False
         evt@(ServerEvent (LocationEvent _ _ mobs _ zone)) ->
           traverse_
             (\m ->

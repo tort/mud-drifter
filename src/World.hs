@@ -124,9 +124,18 @@ loadLogs files = F.foldl' (\evtPipe file -> evtPipe >> loadServerEvents file) (r
 extractObjects :: Monad m => (ServerEvent -> a) -> Pipe ServerEvent a m ()
 extractObjects getter = PP.filter (has _LocationEvent) >-> PP.map getter
 
+isNominativeMob :: ObjRef Mob InRoomDesc -> Bool
+isNominativeMob (ObjRef mob) = 
+        (T.isSuffixOf " сражается с ВАМИ!") mob ||
+        (T.isSuffixOf " отдыхает здесь.") mob ||
+        (T.isSuffixOf " лежит здесь, при смерти.") mob ||
+        (T.isSuffixOf " лежат здесь, при смерти.") mob ||
+        (T.isSuffixOf " лежит здесь, в обмороке.") mob ||
+        (T.isSuffixOf " лежат здесь, в обмороке.") mob
+
 extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map (Int) Int))
 extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _LocationEvent) <-< producer)
-  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _ _) = F.foldl (insertMob locId) acc (_mobs evt)
+  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _ _) = F.foldl (insertMob locId) acc ((L.filter isNominativeMob . _mobs) evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
         updateCount locId Nothing = Just (M.insert locId 1 M.empty)
         updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
