@@ -135,7 +135,7 @@ isNominativeMob (ObjRef mob) =
 
 extractDiscovered :: (Monad m) => Producer ServerEvent m () -> m (Map (ObjRef Mob InRoomDesc) (Map (Int) Int))
 extractDiscovered producer = PP.fold toMap M.empty identity (PP.filter (has _LocationEvent) <-< producer)
-  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _ _) = F.foldl (insertMob locId) acc ((L.filter isNominativeMob . _mobs) evt)
+  where toMap acc evt@(LocationEvent (Location locId _) _ mobs _ _) = F.foldl (insertMob locId) acc ((L.filter (not . isNominativeMob) . _mobs) evt)
         insertMob locId acc mob = M.alter (updateCount locId) mob acc
         updateCount locId Nothing = Just (M.insert locId 1 M.empty)
         updateCount locId (Just locToCountMap) = Just (M.alter plusOne locId locToCountMap)
