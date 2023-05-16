@@ -104,7 +104,7 @@ identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text (Maybe Text) -> Pi
 identifyNameCases knownMobs aliases =
   await >>= \case
     (ServerEvent l@(LocationEvent _ _ [mob] _ _)) ->
-      (lift . genericPrintT) l *>
+      --(lift . genericPrintT) l *>
       case (isKnown mob, getAlias mob) of
         (False, Just alias) ->
           (checkCases alias) *> identifyNameCases (S.insert mob knownMobs) aliases
@@ -187,7 +187,7 @@ mapNominatives knownMobs = PP.map mapEvt
     mapEvt evt@(ServerEvent (LocationEvent location objects mobs exits (Just zone))) = ServerEvent $ LocationEvent location objects (fmap (updateNom zone) mobs) exits (Just zone)
     mapEvt evt = evt
     updateNom :: ZoneId -> ObjRef Mob InRoomDesc -> ObjRef Mob InRoomDesc
-    updateNom zone mob = fromMaybe mob . (fmap ObjRef . toInRoomDesc zone) . extractNominative . unObjRef $ mob
+    updateNom zone mob = fromMaybe mob . (fmap ObjRef . toInRoomDesc zone) . extractNominative . T.toLower . unObjRef $ mob
     extractNominative :: Text -> Maybe Text
     extractNominative mob
       | T.isSuffixOf " сражается с ВАМИ!" mob = T.stripSuffix " сражается с ВАМИ!" $ mob
@@ -221,47 +221,56 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
             yield (SendToServer "полож все мешок")
           evt -> pure ()
     awaitTargets mobs inFight =
-      await >>= \case 
-          ServerEvent CantSeeTarget -> yield (SendToServer "смотр") *> awaitTargets mobs False
-          evt@(ServerEvent (MobWentOut mobNom)) -> do
-            liftIO (putStrLn ("MobWentOut " <> (unObjRef mobNom)))
-            let newMobs =
-                  case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
-                    Nothing -> mobs
-                    Just deadMob -> L.delete deadMob mobs
-             in awaitTargets newMobs inFight
-          evt@(ServerEvent (MobWentIn mobNom)) -> do
-            liftIO (putStrLn ("MobWentIn " <> (unObjRef mobNom)))
-            let newMobs =
-                  case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mobNom of
-                    Nothing -> mobs
-                    Just deadMob -> L.insert deadMob mobs
-             in awaitTargets newMobs inFight
-          evt@(ServerEvent (MobRipEvent mr)) -> do
-            let newMobs =
-                  case _inRoomDesc . _nameCases =<< (M.!?) (_nominativeToMob world) mr of
-                    Nothing -> mobs
-                    Just deadMob -> L.delete deadMob mobs
-             in awaitTargets newMobs False
-          evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
-          evt@(ServerEvent PromptEvent {}) -> awaitTargets mobs False
-          evt@(ServerEvent (LocationEvent _ _ mobs _ _)) ->
-            awaitTargets mobs inFight
-          PulseEvent ->
-            case (chooseTarget mobs, inFight) of
-              (Just mobAlias, False) -> do
-                yield
-                  (SendToServer $
-                   "убить " <> (unObjRef $ mobAlias))
-                awaitTargets mobs True
-              (_, True) -> awaitTargets mobs inFight
-              _ -> yield PulseEvent *> awaitTargets mobs inFight
-          evt -> awaitTargets mobs inFight
+      await >>= \case
+        ServerEvent CantSeeTarget ->
+          yield (SendToServer "смотр") *> awaitTargets mobs False
+        evt@(ServerEvent (MobWentOut mobNom)) -> do
+          let newMobs =
+                case _inRoomDesc . _nameCases =<<
+                     (M.!?) (_nominativeToMob world) mobNom of
+                  Nothing -> mobs
+                  Just deadMob -> L.delete deadMob mobs
+           in awaitTargets newMobs inFight
+        evt@(ServerEvent (MobWentIn mobNom)) -> do
+          let newMobs =
+                case _inRoomDesc . _nameCases =<<
+                     (M.!?) (_nominativeToMob world) mobNom of
+                  Nothing -> mobs
+                  Just deadMob -> L.insert deadMob mobs
+           in awaitTargets newMobs inFight
+        evt@(ServerEvent (MobRipEvent mr)) -> do
+          let newMobs =
+                case _inRoomDesc . _nameCases =<<
+                     (M.!?) (_nominativeToMob world) mr of
+                  Nothing -> mobs
+                  Just deadMob -> L.delete deadMob mobs
+           in awaitTargets newMobs False
+        evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
+        evt@(ServerEvent PromptEvent {}) -> awaitTargets mobs False
+        evt@(ServerEvent (LocationEvent _ _ mobs _ zone)) ->
+          traverse_
+            (\m ->
+               liftIO
+                 (putStrLn ("Zone: " <> showt zone <> "Target: " <> (unObjRef m))))
+            mobs *>
+          awaitTargets mobs inFight
+        PulseEvent ->
+          case (chooseTarget mobs, inFight) of
+            (Just mobAlias, False) -> do
+              yield (SendToServer $ "убить " <> (unObjRef $ mobAlias))
+              awaitTargets mobs True
+            (_, True) -> awaitTargets mobs inFight
+            _ -> yield PulseEvent *> awaitTargets mobs inFight
+        evt -> awaitTargets mobs inFight
     findAlias :: ObjRef Mob InRoomDesc -> Maybe (ObjRef Mob Alias, EverAttacked)
     findAlias mobRef =
-      (liftA2) (\l r -> (,) <$> l <*> r) (_alias . _nameCases) (_everAttacked) =<< M.lookup mobRef (_inRoomDescToMob world)
+      (liftA2) (\l r -> (,) <$> l <*> r) (_alias . _nameCases) (_everAttacked) =<<
+      M.lookup mobRef (_inRoomDescToMob world)
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
-    chooseTarget = fmap (fst) . join . find (\opt -> fmap snd opt == Just (EverAttacked(True))) . fmap findAlias
+    chooseTarget =
+      fmap (fst) .
+      join .
+      find (\opt -> fmap snd opt == Just (EverAttacked (True))) . fmap findAlias
 
 travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (Int)
 travelToMob world mobNom = pipe mobArea

@@ -159,6 +159,10 @@ mobWentIn = do
       , "приплыла"
       , "приплыло"
       , "приплыли"
+      , "прискакал"
+      , "прискакала"
+      , "прискакало"
+      , "прискакали"
       ]
 
 mobWentOut :: A.Parser ServerEvent
@@ -796,8 +800,6 @@ parseMobsInLocation =
    L.filter
      (\line ->
         not $
-        (T.isSuffixOf " сражается с ВАМИ!") line ||
-        (T.isSuffixOf " отдыхает здесь.") line ||
         (T.isSuffixOf " лежит здесь, при смерти.") line ||
         (T.isSuffixOf " лежат здесь, при смерти.") line ||
         (T.isSuffixOf " лежит здесь, в обмороке.") line ||

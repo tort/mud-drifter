@@ -32,7 +32,7 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZone >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 

@@ -313,6 +313,14 @@ nominativeToEverAttacked =
     getNominative :: Maybe ServerEvent -> Maybe (ObjRef Mob Nominative)
     getNominative = preview (traverse . _FightPromptEvent . _2)
 
+scanZoneEvent :: MonadIO m => Pipe Event (Maybe Event, Maybe Text) m ()
+scanZoneEvent = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (Nothing, Nothing) identity
+  where
+    action :: (Maybe Event, Maybe Text) -> Event -> (Maybe Event, Maybe Text)
+    action (_, _) evt@(ServerEvent (LocationEvent _ _ _ _ (Just zone))) = (Just evt, Just zone)
+    action (_, prevZone) (ServerEvent evt@(LocationEvent _ _ _ _ Nothing)) = (Just . ServerEvent $ evt & zone .~ prevZone, prevZone)
+    action (_, prevZone) e = (Just e, prevZone)
+
 scanZone :: MonadIO m => Pipe ServerEvent (Maybe ServerEvent, Maybe Text) m ()
 scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (Nothing, Nothing) identity
   where
