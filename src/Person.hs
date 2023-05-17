@@ -214,7 +214,8 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
           evt -> pure ()
     awaitTargets mobs inFight =
       await >>= \case
-        ServerEvent CantSeeTarget ->
+        ServerEvent e@CantSeeTarget ->
+          (liftIO . genericPrintT) e *>
           yield (SendToServer "смотр") *> awaitTargets mobs False
         evt@(ServerEvent (MobWentOut mobNom)) -> do
           let newMobs =
@@ -230,22 +231,27 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
                   Nothing -> mobs
                   Just deadMob -> L.insert deadMob mobs
            in awaitTargets newMobs inFight
-        evt@(ServerEvent (MobRipEvent mr)) -> do
+        evt@(ServerEvent e@(MobRipEvent mr)) -> do
+          (liftIO . genericPrintT) e
           let newMobs =
                 case _inRoomDesc . _nameCases =<<
                      (M.!?) (_nominativeToMob world) mr of
                   Nothing -> mobs
                   Just deadMob -> L.delete deadMob mobs
            in awaitTargets newMobs False
-        evt@(ServerEvent FightPromptEvent {}) -> awaitTargets mobs True
-        evt@(ServerEvent PromptEvent {}) -> awaitTargets mobs False
-        evt@(ServerEvent (LocationEvent _ _ [] _ _)) ->
+        evt@(ServerEvent e@FightPromptEvent {}) ->
+          (liftIO . genericPrintT) e *>
+          awaitTargets mobs True
+        evt@(ServerEvent e@PromptEvent {}) ->
+          (liftIO . genericPrintT) e *>
           awaitTargets mobs False
+        evt@(ServerEvent (LocationEvent _ _ [] _ _)) -> awaitTargets mobs False
         evt@(ServerEvent (LocationEvent _ _ mobs _ zone)) ->
           traverse_
             (\m ->
                liftIO
-                 (putStrLn ("Zone: " <> showt zone <> "Target: " <> (unObjRef m))))
+                 (putStrLn
+                    ("Zone: " <> showt zone <> "Target: " <> (unObjRef m))))
             mobs *>
           awaitTargets mobs inFight
         PulseEvent ->
