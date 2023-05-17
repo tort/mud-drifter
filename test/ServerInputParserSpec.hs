@@ -202,8 +202,8 @@ spec = describe "Parser" $ do
                                               (length $ filter (has _ShopListItemEvent) serverEventList) `shouldBe` 27
                                               (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
         it "parse prompt" $ do let log = "test/logs/rentLocation.log"
-                                              serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                                              (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
+                               serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
+                               (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
         it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
                                               log ~> serverInputParser `shouldParse` PromptEvent 143 101
         it "parse school entrance location" $ let location = Location 5000 "Комнаты отдыха"
