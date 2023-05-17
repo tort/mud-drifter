@@ -29,13 +29,13 @@ serverInputParser =
     , postWelcome
     , locationParser
     , move
+    , prompt
+    , fightPrompt
     , listEquipment
     , listInventory
     , itemStats
     , shopList
     , darkness
-    , prompt
-    , fightPrompt
     , obstacleEvent
     , cantGoDir
     , cantSeeTarget
@@ -1034,7 +1034,8 @@ prompt = do C.endOfLine
             ansiColor
             C.space
             exp <- C.decimal
-            string $ encodeUtf8 "о"
+            string $ encodeUtf8 "o"
+            --string $ encodeUtf8 "о"
             C.space
             string $ encodeUtf8 "Зауч:0"
             C.space
