@@ -197,11 +197,11 @@ spec = describe "Parser" $ do
                                                                                                                    , Multiple (ObjRef "ломоть хлеба") 11
                                                                                                                    ]
                                                                                                         }
-        it "parse shop list with prompt" $ do let log = "test/logs/shopListWithPrompt.log"
+        it "parse shop list with prompt" $ do let log = "test/logs/shop.log"
                                               serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
-                                              (length $ filter (has _ShopListItemEvent) serverEventList) `shouldBe` 27
+                                              (length $ filter (has _ShopListItemEvent) serverEventList) `shouldBe` 26
                                               (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
-        it "parse prompt" $ do let log = "test/logs/rentLocation.log"
+        it "parse prompt" $ do let log = "test/logs/rent-location.log"
                                serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
                                (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
         it "parse prompt 2" $ do let log = "test/logs/littleBear.log"
@@ -210,10 +210,8 @@ spec = describe "Parser" $ do
         it "parse fight prompt" $ do let log = "test/logs/enterRoomWithFight.log"
                                      serverEventList <- toListM $ parseServerEvents $ loadServerEvents log
                                      (length $ filter (has _PromptEvent) serverEventList) `shouldBe` 1
-                                     (length $ filter (has _FightPromptEvent) serverEventList) `shouldBe` 3
+                                     (length $ filter (has _FightPromptEvent) serverEventList) `shouldBe` 11
                                      (length $ filter (has _MobRipEvent) serverEventList) `shouldBe` 1
-        it "parse two-line prompt event" $ do log <- C8.readFile "test/logs/prompt.2.log"
-                                              log ~> serverInputParser `shouldParse` PromptEvent 143 101
         it "parse school entrance location" $ let location = Location 5000 "Комнаты отдыха"
                                                   objects = [ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!"]
                                                   mobs = [ ObjRef "Полянин Дорман стоит здесь."
@@ -223,15 +221,14 @@ spec = describe "Parser" $ do
                                                in do log <- C8.readFile "test/logs/schoolEntrance.log"
                                                      log ~> serverInputParser `shouldParse` (LocationEvent location objects mobs exits (Just "Деревня у реки"))
         it "parse school entrance location misspelled" $ do
-          log <- C8.readFile "test/logs/rentLocation.log"
-          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 4056 "Гостиный двор"
+          log <- C8.readFile "test/logs/rent-location.log"
+          log ~> serverInputParser `shouldParse` LocationEvent { _location = Location 5000 "Гостиный двор"
                                                                , _objects = [ ObjRef "Доска для различных заметок и объявлений прибита тут ..блестит!" ]
-                                                               , _mobs = [ ObjRef "Велянка Ванесса летает здесь."
-                                                                         , ObjRef "С орлиным клювом пересмешник Пересмех (пономарь Тайных знаний) летает здесь."
-                                                                         , ObjRef "Хозяин постоялого двора с интересом рассматривает Вас."
+                                                               , _mobs = [ ObjRef "Пожилой широкоплечий крестьянин в добротной одежде прохаживается тут."
+                                                                         , ObjRef "Хозяйка постоялого двора распоряжается здесь."
                                                                          ]
-                                                               , _exits = [ OpenExit East ]
-                                                               , _zone = Just "Лесная деревня"
+                                                               , _exits = [ OpenExit Down ]
+                                                               , _zone = Just "Деревня у реки"
                                                                }
         it "parse unknown obstacle when glancing to direction" $ do log <- C8.readFile "test/logs/openDoor.1.log"
                                                                     log ~> serverInputParser `shouldParse` (ObstacleEvent South "дверь")

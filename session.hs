@@ -1,7 +1,39 @@
+import Data.Maybe
+import qualified Pipes.Prelude as PP
+import qualified Pipes.Attoparsec as PA
+import qualified Data.Attoparsec.ByteString as A
+import qualified Data.Attoparsec.ByteString.Char8 as C
+
 :{
-(\(l, r) -> (l,) <$> r) =<< pure . fmap Control.Monad.sequence . fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
+(\(l, r) -> (l, ) <$> r) =<<
+  pure .
+  fmap Control.Monad.sequence .
+  fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
-    (PA.parsed parseMobsInLocation (loadServerEvents "test/logs/mobWithAura.log"))
+    (PA.parsed
+       (locationParser *> C.endOfLine *> ansiColor *> C.decimal *> C.char 'H' *>
+        ansiColor *>
+        C.space *>
+        ansiColor *>
+        C.decimal *>
+        C.char 'M' *>
+        ansiColor *>
+        C.space *>
+        C.decimal *>
+        (C.string . encodeUtf8) "o" 
+       )
+       (loadServerEvents "test/logs/littleBear.log"))
+:}
+
+:{
+(\(l, r) -> (l, ) <$> r) =<<
+  pure .
+  fmap Control.Monad.sequence .
+  fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
+  PP.toListM'
+    (PA.parsed
+       serverInputParser
+       (loadServerEvents "test/logs/enterRoomWithFight.log"))
 :}
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )
@@ -32,7 +64,11 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZone >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+import Data.Maybe
+import qualified Pipes.Prelude as PP
+import qualified Pipes.Attoparsec as PA
+
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 

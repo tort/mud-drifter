@@ -1060,7 +1060,7 @@ fightPrompt = do
             ansiColor
             C.space
             exp <- C.decimal
-            string $ encodeUtf8 "о"
+            string $ encodeUtf8 "o"
             C.space
             string $ encodeUtf8 "Зауч:0"
             C.space
