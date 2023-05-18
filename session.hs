@@ -3,6 +3,7 @@ import qualified Pipes.Prelude as PP
 import qualified Pipes.Attoparsec as PA
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Char8 as C
+import Text.Pretty.Simple
 
 :{
 (\(l, r) -> (l, ) <$> r) =<<
@@ -26,14 +27,25 @@ import qualified Data.Attoparsec.ByteString.Char8 as C
 :}
 
 :{
-(\(l, r) -> (l, ) <$> r) =<<
+ (\(l, r) -> (l, ) <$> r) =<<
   pure .
   fmap Control.Monad.sequence .
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
        serverInputParser
-       (loadServerEvents "test/logs/enterRoomWithFight.log"))
+       (loadServerEvents "archive/server-input-log/genod-20230518_005445__20230518_005956.log"))
+:}
+
+:{
+ (\(l, r) -> (l, ) <$> r) =<<
+  pure .
+  fmap Control.Monad.sequence .
+  fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
+  PP.toListM'
+    (PP.map (pShow) <-< PA.parsed
+       serverInputParser
+       (loadServerEvents "archive/server-input-log/genod-20230518_005445__20230518_005956.log"))
 :}
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )

@@ -414,106 +414,142 @@ myStats = do -- header begin
                      return mv
 
 hitEvent :: A.Parser ServerEvent
-hitEvent = do evt <- hit <|> miss
-              C.endOfLine
-              clearColors
-              return evt
-  where miss = do cs
-                  F.foldl1 (<|>) . fmap string $ ["0;33m", "0;31m"]
-                  evt <- choice [missHit1, missHit3]
-                  C.char '.'
-                  return evt
-        missHit1 = do attacker <- readWordsTillParser (standardCasesParser "промазал")
-                      string . encodeUtf8 $ ", когда"
-                      standardCasesParser "хотел"
-                      C.space
-                      dmgTypeU
-                      C.space
-                      target <- C.takeTill (== '.')
-                      return $ HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
-        missHit3 = do attacker <- readWordsTillParser (nonStandardCasesParser [ "попытался", "попыталась", "попыталось", "попытались" ])
-                      C.space
-                      dmgTypeU
-                      C.space
-                      target <- takeTill (\c -> c == _comma || C.isEndOfLine c)
-                      C.char ','
-                      m1 <|> m2 <|> m3
-                      return $ HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
-                        where m1 = do string . encodeUtf8 $ " но не "
-                                      standardCasesParser "рассчитал"
-                                      string . encodeUtf8 $ " и "
-                                      nonStandardCasesParser [ "промахнулся", "промахнулась", "промахнулось", "промахнулись" ]
-                              m2 = do string . encodeUtf8 $ " но "
-                                      nonStandardCasesParser ["его", "ее", "их"]
-                                      string . encodeUtf8 $ " удар не достиг цели"
-                              m3 = do string . encodeUtf8 $ " но "
-                                      nonStandardCasesParser [ "промахнулся", "промахнулась", "промахнулось", "промахнулись" ]
-        hit = do cs
-                 F.foldl1 (<|>) . fmap string $ ["1;33m", "1;31m"]
-                 attacker <- readWordsTillParser ((many' (dmgAmount >> C.space)) >> dmgType)
-                 C.space
-                 target <- choice [hit2, hit1]
-                 return $ HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
-        hit1 = do
-                  target <- C.takeTill (\c -> c == '.' || c == '!' || c == ',')
-                  c <- C.anyChar
-                  case c of '!' -> (string . encodeUtf8 $ " Теперь она никого не побеспокоит") >> return ()
-                            ',' -> (string . encodeUtf8 $ " расколов ") >> nonStandardCasesParser ["его", "ее", "их"] >> (string . encodeUtf8 $ " жизнь в щепки") >> return ()
-                            _ -> return ()
-                  return target
-        hit2 = do many' . string . encodeUtf8 $ "тело "
-                  target <- readWordsTillParser (string . encodeUtf8 $ "и ")
-                  nonStandardCasesParser ["она", "оно", "он"]
-                  C.space
-                  choice [h1, h2]
-                  C.char '.'
-                  return target
-                    where h1 = do standardCasesParser "упал"
-                                  C.space
-                                  string . encodeUtf8 $ "на землю замертво"
-                          h2 = do string . encodeUtf8 $ "с криком боли безжизненно "
-                                  standardCasesParser "упал"
-                                  string . encodeUtf8 $ " на землю"
-
-        dmgAmount = F.foldl1 (<|>) . fmap (string . encodeUtf8) $ [ "легонько"
-                                                                  , "слегка"
-                                                                  , "очень сильно"
-                                                                  , "чрезвычайно сильно"
-                                                                  , "сильно"
-                                                                  , "смертельно"
-                                                                  ]
-        standardCases base = fmap (base <>) ["а", "о", "и", ""]
-        standardCasesParser = F.foldl1 (<|>) . fmap (string . encodeUtf8) . standardCases
-        nonStandardCasesParser = choice . fmap (string . encodeUtf8)
-        dmgType = F.foldl1 (<|>) . fmap (string . encodeUtf8) . concat . fmap standardCases $ [ "сокрушил"
-                                                                                              , "ударил"
-                                                                                              , "рубанул"
-                                                                                              , "резанул"
-                                                                                              , "пырнул"
-                                                                                              , "огрел"
-                                                                                              , "сокрушил"
-                                                                                              , "уколол"
-                                                                                              , "пронзил"
-                                                                                              , "хлестнул"
-                                                                                              , "ткнул"
-                                                                                              , "ужалил"
-                                                                                              , "лягнул"
-                                                                                              ]
-
-        dmgTypeU = F.foldl1 (<|>) . fmap (string . encodeUtf8) $ [ "сокрушить"
-                                                                 , "ударить"
-                                                                 , "рубануть"
-                                                                 , "резануть"
-                                                                 , "пырнуть"
-                                                                 , "огреть"
-                                                                 , "сокрушить"
-                                                                 , "уколоть"
-                                                                 , "пронзить"
-                                                                 , "хлестнуть"
-                                                                 , "ткнуть"
-                                                                 , "ужалить"
-                                                                 , "лягнуть"
-                                                                 ]
+hitEvent = do
+  evt <- hit <|> miss
+  C.endOfLine
+  clearColors
+  return evt
+  where
+    miss = do
+      cs
+      choice . fmap string $ ["0;33m", "0;31m"]
+      evt <- choice [missHit1, missHit3]
+      C.char '.'
+      return evt
+    missHit1 = do
+      attacker <- readWordsTillParser (casesParser $ missWord2 ++ missWord1)
+      string . encodeUtf8 $ ", когда "
+      casesParser $
+        standardCases "хотел" ++ ["пытался", "пыталась", "пыталось", "пытались"]
+      C.space
+      dmgTypeU
+      C.space
+      target <- C.takeTill (== '.')
+      return $
+        HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
+    missHit3 = do
+      attacker <-
+        readWordsTillParser
+          (casesParser ["попытался", "попыталась", "попыталось", "попытались"])
+      C.space
+      dmgTypeU
+      C.space
+      target <- takeTill (\c -> c == _comma || C.isEndOfLine c)
+      C.char ','
+      m1 <|> m2 <|> m3
+      return $
+        HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
+      where
+        m1 = do
+          string . encodeUtf8 $ " но не "
+          (casesParser . standardCases) "рассчитал"
+          string . encodeUtf8 $ " и "
+          casesParser missWord1
+        m2 = do
+          string . encodeUtf8 $ " но "
+          casesParser ["его", "ее", "их"]
+          string . encodeUtf8 $ " удар не достиг цели"
+        m3 = do
+          string . encodeUtf8 $ " но "
+          casesParser missWord1
+    missWord1 = ["промахнулся", "промахнулась", "промахнулось", "промахнулись"]
+    missWord2 = standardCases "промазал"
+    hit = do
+      cs
+      F.foldl1 (<|>) . fmap string $ ["1;33m", "1;31m"]
+      attacker <-
+        readWordsTillParser ((many' (dmgAmount >> C.space)) >> dmgType)
+      C.space
+      target <- choice [hit2, hit1]
+      return $
+        HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
+    hit1 = do
+      target <- C.takeTill (\c -> c == '.' || c == '!' || c == ',')
+      c <- C.anyChar
+      case c of
+        '!' ->
+          (string . encodeUtf8 $ " Теперь она никого не побеспокоит") >>
+          return ()
+        ',' ->
+          (string . encodeUtf8 $ " расколов ") >>
+          casesParser ["его", "ее", "их"] >>
+          (string . encodeUtf8 $ " жизнь в щепки") >>
+          return ()
+        _ -> return ()
+      return target
+    hit2 = do
+      many' . string . encodeUtf8 $ "тело "
+      target <- readWordsTillParser (string . encodeUtf8 $ "и ")
+      casesParser ["она", "оно", "он"]
+      C.space
+      choice [h1, h2]
+      C.char '.'
+      return target
+      where
+        h1 = do
+          (casesParser . standardCases) "упал"
+          C.space
+          string . encodeUtf8 $ "на землю замертво"
+        h2 = do
+          string . encodeUtf8 $ "с криком боли безжизненно "
+          (casesParser . standardCases) "упал"
+          string . encodeUtf8 $ " на землю"
+    dmgAmount =
+      F.foldl1 (<|>) . fmap (string . encodeUtf8) $
+      [ "легонько"
+      , "слегка"
+      , "очень сильно"
+      , "чрезвычайно сильно"
+      , "сильно"
+      , "смертельно"
+      ]
+    standardCases base = fmap (base <>) ["а", "о", "и", ""]
+    casesParser = choice . fmap (string . encodeUtf8)
+    dmgType =
+      F.foldl1 (<|>) . fmap (string . encodeUtf8) . concat . fmap standardCases $
+      [ "сокрушил"
+      , "ударил"
+      , "рубанул"
+      , "резанул"
+      , "пырнул"
+      , "огрел"
+      , "сокрушил"
+      , "уколол"
+      , "пронзил"
+      , "хлестнул"
+      , "ткнул"
+      , "ужалил"
+      , "лягнул"
+      , "ободрал"
+      ]
+    dmgTypeU =
+      casesParser $
+      [ "сокрушить"
+      , "ударить"
+      , "рубануть"
+      , "резануть"
+      , "пырнуть"
+      , "огреть"
+      , "сокрушить"
+      , "уколоть"
+      , "пронзить"
+      , "хлестнуть"
+      , "ткнуть"
+      , "ужалить"
+      , "лягнуть"
+      , "ободрать"
+      ]
+  
 
 iHitMob :: A.Parser ServerEvent
 iHitMob = do cs >> string "1;33m"

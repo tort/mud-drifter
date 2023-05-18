@@ -43,6 +43,7 @@ import Data.Binary
 import Data.Binary.Get
 import Data.Aeson
 import Data.Aeson.Encode.Pretty
+import Text.Pretty.Simple
 
 data World = World { _worldMap :: WorldMap
                    , _locationEvents :: Set Location
@@ -540,3 +541,7 @@ dropLoopsFromPath = PP.fold onEvent M.empty identity indexedLocations
     producer =
       (lift $ openFile "evt.log" ReadMode) >>= \h ->
         PBS.fromHandle h >> (lift $ hClose h)
+
+pprint :: ServerEvent -> IO ()
+pprint (UnknownServerEvent bs) = (pPrint . ("UnknownServerEvent: " <> ) . decodeUtf8) bs
+pprint evt = pPrint evt
