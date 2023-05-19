@@ -1330,16 +1330,16 @@ stateParser stateTxt stateVal = do cs
                                    return stateVal
 
 unknownMessage :: A.Parser ServerEvent
-unknownMessage = takeTillEndOfLineOrGA >>= pure . UnknownServerEvent
+unknownMessage = many' (A.word8 _cr) *> takeTillEndOfLineOrGA >>= pure . UnknownServerEvent
 
-iacGA :: A.Parser Word8
+iacGA :: A.Parser ()
 iacGA = do iac
            ga
+           pure ()
 
 takeTillEndOfLineOrGA :: A.Parser ByteString
 takeTillEndOfLineOrGA = do txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
-                           eitherP C.endOfLine iacGA
-                           skipMany $ A.word8 _cr
+                           C.choice [C.endOfLine, iacGA]
                            return txt
 
 takeTillIACGA :: A.Parser B.ByteString
@@ -1347,7 +1347,7 @@ takeTillIACGA = do txt <- takeTill (== iacWord)
                    iacGA
                    return txt
 
-skipTillIACGA :: A.Parser Word8
+skipTillIACGA :: A.Parser ()
 skipTillIACGA = do skipWhile (/= iacWord)
                    iacGA
 
