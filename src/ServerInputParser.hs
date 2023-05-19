@@ -31,6 +31,7 @@ serverInputParser =
     , move
     , prompt
     , fightPrompt
+    {-
     , listEquipment
     , listInventory
     , itemStats
@@ -65,6 +66,7 @@ serverInputParser =
     , checkPrepositional
     , mobWentIn
     , mobWentOut
+-}
     , unknownMessage
     ]
 
@@ -1062,8 +1064,7 @@ direction = north <|> south <|> east <|> west <|> up <|> down
                   return Down
 
 prompt :: A.Parser ServerEvent
-prompt = do C.endOfLine
-            ansiColor
+prompt = do ansiColor
             hp <- C.decimal
             C.char 'H'
             ansiColor
@@ -1088,7 +1089,6 @@ prompt = do C.endOfLine
 
 fightPrompt :: A.Parser ServerEvent
 fightPrompt = do
-            C.endOfLine
             ansiColor
             hp <- C.decimal
             C.char 'H'

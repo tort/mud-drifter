@@ -34,13 +34,13 @@ import Text.Pretty.Simple
   PP.toListM'
     (PA.parsed
        serverInputParser
-       (loadServerEvents "archive/server-input-log/genod-20230518_005445__20230518_005956.log"))
+       (loadServerEvents "cleanup.log"))
 :}
 
 :{
  runEffect
  (PP.mapM_ (pprint) <-< PA.parsed
-       serverInputParser
+     (C.choice [codepagePrompt , loginPrompt , passwordPrompt , welcomePrompt , postWelcome, locationParser, prompt, fightPrompt, unknownMessage])
        (loadServerEvents "cleanup.log"))
 :}
 
