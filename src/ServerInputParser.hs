@@ -31,7 +31,18 @@ serverInputParser =
     , move
     , prompt
     , fightPrompt
+    , expUp
     {-
+    , hitEvent
+    , ripMob
+    , checkNominative
+    , checkGenitive
+    , checkAccusative
+    , checkDative
+    , checkInstrumental
+    , checkPrepositional
+    , mobWentIn
+    , mobWentOut
     , listEquipment
     , listInventory
     , itemStats
@@ -53,19 +64,8 @@ serverInputParser =
     , isNotHungry
     , isNotThirsty
     , examineContainer
-    , expUp
     , myStats
     , imBashed
-    , hitEvent
-    , ripMob
-    , checkNominative
-    , checkGenitive
-    , checkAccusative
-    , checkDative
-    , checkInstrumental
-    , checkPrepositional
-    , mobWentIn
-    , mobWentOut
 -}
     , unknownMessage
     ]
@@ -523,7 +523,7 @@ hitEvent = do
       , "смертельно"
       ]
     standardCases base = fmap (base <>) ["а", "о", "и", ""]
-    casesParser = choice . fmap (string . encodeUtf8)
+    casesParser = stringChoice
     dmgType =
       choice . fmap (string . encodeUtf8) . concat . fmap standardCases $
       [ "сокрушил"
@@ -611,9 +611,14 @@ expUp :: A.Parser ServerEvent
 expUp = do
   string $ encodeUtf8 "Ваш опыт повысился на "
   C.decimal
-  skipWhile (not . C.isEndOfLine)
+  C.space
+  stringChoice ["очков", "очко", "очка"]
+  C.char '.'
   C.endOfLine
   pure ExpUpEvent
+
+stringChoice :: [Text] -> A.Parser ByteString
+stringChoice = choice . fmap (string . encodeUtf8)
 
 ripMob :: A.Parser ServerEvent
 ripMob = do
