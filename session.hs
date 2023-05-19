@@ -38,14 +38,10 @@ import Text.Pretty.Simple
 :}
 
 :{
- (\(l, r) -> (l, ) <$> r) =<<
-  pure .
-  fmap Control.Monad.sequence .
-  fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
-  PP.toListM'
-    (PP.map (pShow) <-< PA.parsed
+ runEffect
+ (PP.mapM_ (pprint) <-< PA.parsed
        serverInputParser
-       (loadServerEvents "archive/server-input-log/genod-20230518_005445__20230518_005956.log"))
+       (loadServerEvents "cleanup.log"))
 :}
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )

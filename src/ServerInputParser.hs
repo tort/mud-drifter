@@ -423,10 +423,17 @@ hitEvent = do
     miss = do
       cs
       choice . fmap string $ ["0;33m", "0;31m"]
-      evt <- choice [missHit1, missHit3]
+      evt <- choice [miss1, miss2, miss3]
       C.char '.'
       return evt
-    missHit1 = do
+    miss1 = do
+      string . encodeUtf8 $ "Ваша рука не достигла "
+      target <-
+        readWordsTillParser
+          (string . encodeUtf8 $ "- нужно было лучше тренироваться")
+      return $
+        HitEvent (ObjRef . decodeUtf8 $ "Вы") (ObjRef . decodeUtf8 $ target)
+    miss2 = do
       attacker <- readWordsTillParser (casesParser $ missWord2 ++ missWord1)
       string . encodeUtf8 $ ", когда "
       casesParser $
@@ -437,31 +444,31 @@ hitEvent = do
       target <- C.takeTill (== '.')
       return $
         HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
-    missHit3 = do
+    miss3 = do
       attacker <-
         readWordsTillParser
           (casesParser ["попытался", "попыталась", "попыталось", "попытались"])
       C.space
       dmgTypeU
       C.space
-      target <- takeTill (\c -> c == _comma || C.isEndOfLine c)
-      C.char ','
-      m1 <|> m2 <|> m3
+      target <- readWordsTillParser $ choice [m1, m2, m3, m4]
+      --target <- takeTill (\c -> c == _comma || C.isEndOfLine c)
       return $
         HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
       where
         m1 = do
-          string . encodeUtf8 $ " но не "
+          string . encodeUtf8 $ ", но не "
           (casesParser . standardCases) "рассчитал"
           string . encodeUtf8 $ " и "
           casesParser missWord1
         m2 = do
-          string . encodeUtf8 $ " но "
+          string . encodeUtf8 $ ", но "
           casesParser ["его", "ее", "их"]
           string . encodeUtf8 $ " удар не достиг цели"
         m3 = do
-          string . encodeUtf8 $ " но "
+          string . encodeUtf8 $ ", но "
           casesParser missWord1
+        m4 = string . encodeUtf8 $ "- скорняк из него неважнецкий"
     missWord1 = ["промахнулся", "промахнулась", "промахнулось", "промахнулись"]
     missWord2 = standardCases "промазал"
     hit = do
