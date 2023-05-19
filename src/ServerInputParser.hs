@@ -32,15 +32,15 @@ serverInputParser =
     , prompt
     , fightPrompt
     , expUp
-    {-
-    , hitEvent
-    , ripMob
     , checkNominative
     , checkGenitive
     , checkAccusative
     , checkDative
     , checkInstrumental
     , checkPrepositional
+    {-
+    , hitEvent
+    , ripMob
     , mobWentIn
     , mobWentOut
     , listEquipment
