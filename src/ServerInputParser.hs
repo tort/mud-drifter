@@ -447,7 +447,7 @@ hitEvent = do
     miss3 = do
       attacker <-
         readWordsTillParser
-          (casesParser ["попытался", "попыталась", "попыталось", "попытались"])
+          (C.space *> casesParser ["попытался", "попыталась", "попыталось", "попытались"])
       C.space
       dmgTypeU
       C.space
@@ -466,9 +466,9 @@ hitEvent = do
           casesParser ["его", "ее", "их"]
           string . encodeUtf8 $ " удар не достиг цели"
         m3 = do
-          string . encodeUtf8 $ ", но "
+          string . encodeUtf8 $ " , но "
           casesParser missWord1
-        m4 = string . encodeUtf8 $ "- скорняк из него неважнецкий"
+        m4 = string . encodeUtf8 $ " - скорняк из него неважнецкий"
     missWord1 = ["промахнулся", "промахнулась", "промахнулось", "промахнулись"]
     missWord2 = standardCases "промазал"
     hit = do
@@ -939,10 +939,7 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
             return . PickItemEvent . ObjRef . decodeUtf8 $ itemAccusative
 
 readWord :: A.Parser ByteString
-readWord = do wrd <- takeTill (\x -> x == _period || x == _space || x == _cr || x == 10)
-              w8 <- A.anyWord8
-              if w8 == _space then return wrd
-                              else fail "space expected"
+readWord = takeTill (\x -> x == _period || x == _space || x == _cr || x == 10)
 
 readWordsTill :: Text -> A.Parser ByteString
 readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
@@ -1330,7 +1327,7 @@ stateParser stateTxt stateVal = do cs
                                    return stateVal
 
 unknownMessage :: A.Parser ServerEvent
-unknownMessage = many' (A.word8 _cr) *> takeTillEndOfLineOrGA >>= pure . UnknownServerEvent
+unknownMessage = takeTillEndOfLineOrGA >>= pure . UnknownServerEvent
 
 iacGA :: A.Parser ()
 iacGA = do iac
@@ -1338,9 +1335,7 @@ iacGA = do iac
            pure ()
 
 takeTillEndOfLineOrGA :: A.Parser ByteString
-takeTillEndOfLineOrGA = do txt <- takeTill (\w -> C.isEndOfLine w || w == iacWord)
-                           C.choice [C.endOfLine, iacGA]
-                           return txt
+takeTillEndOfLineOrGA = C8.pack <$> manyTill C.anyChar (choice [C.endOfLine, iacGA])
 
 takeTillIACGA :: A.Parser B.ByteString
 takeTillIACGA = do txt <- takeTill (== iacWord)

@@ -545,3 +545,8 @@ dropLoopsFromPath = PP.fold onEvent M.empty identity indexedLocations
 pprint :: ServerEvent -> IO ()
 pprint (UnknownServerEvent bs) = (pPrint . ("UnknownServerEvent: " <> ) . decodeUtf8) bs
 pprint evt = pPrint evt
+
+printLog file =
+  runEffect
+    (PP.mapM_ (pprint) <-<
+     PA.parsed serverInputParser (loadServerEvents file))
