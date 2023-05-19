@@ -6,42 +6,34 @@ import qualified Data.Attoparsec.ByteString.Char8 as C
 import Text.Pretty.Simple
 
 :{
-(\(l, r) -> (l, ) <$> r) =<<
-  pure .
-  fmap Control.Monad.sequence .
-  fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
-  PP.toListM'
-    (PA.parsed
-       (locationParser *> C.endOfLine *> ansiColor *> C.decimal *> C.char 'H' *>
-        ansiColor *>
-        C.space *>
-        ansiColor *>
-        C.decimal *>
-        C.char 'M' *>
-        ansiColor *>
-        C.space *>
-        C.decimal *>
-        (C.string . encodeUtf8) "o" 
-       )
-       (loadServerEvents "test/logs/littleBear.log"))
-:}
-
-:{
  (\(l, r) -> (l, ) <$> r) =<<
   pure .
   fmap Control.Monad.sequence .
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
-       serverInputParser
-       (loadServerEvents "cleanup.log"))
+       (locationParser *>
+        unknownMessage *>
+        prompt *>
+        cs *> (C.choice . fmap C.string) ["1;33m", "1;31m"] *>
+        readWordsTillParser (
+        C.many' (dmgAmount *> C.space) *>
+        dmgType *> C.space) *>
+        readWord *>
+        C.endOfLine *>
+        clearColors *>
+        C.endOfLine *>
+        fightPrompt
+        --readWordsTillParser (many dmgAmount *> C.space *> dmgType)
+       )
+       (loadServerEvents "test/logs/hit-series.log"))
 :}
 
 :{
  runEffect
  (PP.mapM_ (pprint) <-< PA.parsed
-     (C.choice [codepagePrompt , loginPrompt , passwordPrompt , welcomePrompt , postWelcome, locationParser, prompt, fightPrompt, unknownMessage])
-       (loadServerEvents "cleanup.log"))
+      (serverInputParser) 
+   (loadServerEvents "test/logs/hit-series.log"))
 :}
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )

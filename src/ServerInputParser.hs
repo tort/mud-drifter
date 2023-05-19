@@ -38,7 +38,7 @@ serverInputParser =
     , checkDative
     , checkInstrumental
     , checkPrepositional
-    --, hitEvent
+    , hitEvent
     {-
     , ripMob
     , mobWentIn
@@ -416,9 +416,8 @@ myStats = do -- header begin
                      return mv
 
 hitEvent :: A.Parser ServerEvent
-hitEvent
+hitEvent = do
   --evt <- hit <|> miss
- = do
   evt <- hit
   C.endOfLine
   clearColors
@@ -428,7 +427,7 @@ hitEvent
       cs
       choice . fmap string $ ["1;33m", "1;31m"]
       attacker <-
-        readWordsTillParser (C.space *> many' dmgAmount *> C.space *> dmgType *> C.space)
+        readWordsTillParser (C.many' (dmgAmount *> C.space) *> dmgType *> C.space)
       target <- C.takeTill (== '.')
       C.char '.'
       --target <- choice [hit2, hit1]
@@ -517,52 +516,56 @@ hitEvent
           string . encodeUtf8 $ "с криком боли безжизненно "
           (casesParser . standardCases) "упал"
           string . encodeUtf8 $ " на землю"
-    dmgAmount =
-      stringChoice
-        [ "легонько"
-        , "слегка"
-        , "очень сильно"
-        , "чрезвычайно сильно"
-        , "сильно"
-        , "смертельно"
-        ]
-    standardCases base = fmap (base <>) ["а", "о", "и", ""]
-    casesParser = stringChoice
-    dmgType =
-      stringChoice . concat . fmap standardCases $
-      [ "сокрушил"
-      , "ударил"
-      , "рубанул"
-      , "резанул"
-      , "пырнул"
-      , "огрел"
-      , "сокрушил"
-      , "уколол"
-      , "пронзил"
-      , "хлестнул"
-      , "ткнул"
-      , "ужалил"
-      , "лягнул"
-      , "ободрал"
-      ]
-    dmgTypeU =
-      casesParser $
-      [ "сокрушить"
-      , "ударить"
-      , "рубануть"
-      , "резануть"
-      , "пырнуть"
-      , "огреть"
-      , "сокрушить"
-      , "уколоть"
-      , "пронзить"
-      , "хлестнуть"
-      , "ткнуть"
-      , "ужалить"
-      , "лягнуть"
-      , "ободрать"
-      ]
+
+casesParser = stringChoice
+
+standardCases base = fmap (base <>) ["а", "о", "и", ""]
   
+dmgAmount =
+  stringChoice
+    [ "легонько"
+    , "слегка"
+    , "очень сильно"
+    , "чрезвычайно сильно"
+    , "сильно"
+    , "смертельно"
+    ]
+
+dmgType =
+  stringChoice . concat . fmap standardCases $
+  [ "сокрушил"
+  , "ударил"
+  , "рубанул"
+  , "резанул"
+  , "пырнул"
+  , "огрел"
+  , "сокрушил"
+  , "уколол"
+  , "пронзил"
+  , "хлестнул"
+  , "ткнул"
+  , "ужалил"
+  , "лягнул"
+  , "ободрал"
+  ]
+
+dmgTypeU =
+  casesParser $
+  [ "сокрушить"
+  , "ударить"
+  , "рубануть"
+  , "резануть"
+  , "пырнуть"
+  , "огреть"
+  , "сокрушить"
+  , "уколоть"
+  , "пронзить"
+  , "хлестнуть"
+  , "ткнуть"
+  , "ужалить"
+  , "лягнуть"
+  , "ободрать"
+  ]
 
 iHitMob :: A.Parser ServerEvent
 iHitMob = do cs >> string "1;33m"
@@ -864,8 +867,8 @@ parseMobsInLocation =
     parseMob :: A.Parser Text
     parseMob =
       (many' . string . encodeUtf8) "(летит) " *>
-      C.takeWhile notEndOfLineOrControl >>= \mob ->
-        C.endOfLine *> many' parseAffects *> (pure . T.strip . decodeUtf8) mob
+      choice [specialMob, ordinaryMob] >>= \mob ->
+        C.endOfLine *> many' parseAffects *> (pure . T.strip) mob
     parseAffects =
       (choice . fmap (string . encodeUtf8))
         [ "...окружен воздушным, огненным, ледяным щитами "
@@ -879,7 +882,19 @@ parseMobsInLocation =
         , "...слеп"
         ] *>
       C.endOfLine
-  --nonMobs = 
+    ordinaryMob :: A.Parser Text
+    ordinaryMob = decodeUtf8 <$> C.takeWhile notEndOfLineOrControl
+    specialMob :: A.Parser Text
+    specialMob = choice [bylata]
+    bylata :: A.Parser Text
+    bylata =
+      (string . encodeUtf8)
+        "Посланник Богов Былята был отправлен сюда для помощи " >>= \mob ->
+      cs *>
+      (string . encodeUtf8) "1;37mновичкам" *>
+      cs *>
+      string "1;31m." *>
+      (pure . decodeUtf8) mob
 
 notEndOfLineOrControl c = c /= '\r' && c /= '\n' && c /= 'ÿ' && c /= '\ESC'
 
@@ -950,15 +965,15 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
             return . PickItemEvent . ObjRef . decodeUtf8 $ itemAccusative
 
 readWord :: A.Parser ByteString
-readWord = takeTill (\x -> x == _period || x == _space || x == _cr || x == 10)
+readWord = takeTill crit >>= \bs -> A.skip crit *> pure bs
+  where crit = \x -> x == _period || x == _space || x == _cr || x == 10
 
 readWordsTill :: Text -> A.Parser ByteString
 readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
                        return $ C8.unwords wrds
 
 readWordsTillParser :: A.Parser a -> A.Parser ByteString
-readWordsTillParser parser = do wrds <- manyTill' readWord parser
-                                return $ C8.unwords wrds
+readWordsTillParser parser = C8.unwords <$> manyTill readWord parser
 
 mobGaveYouItem :: A.Parser ServerEvent
 mobGaveYouItem = do mob <- readWordsTill "дал"
@@ -1344,7 +1359,7 @@ iacGA = do iac
            pure ()
 
 takeTillEndOfLineOrGA :: A.Parser ByteString
-takeTillEndOfLineOrGA = C8.pack <$> manyTill C.anyChar (choice [C.endOfLine, iacGA]) >>= \bs -> many' (C.char '\r') *> pure bs
+takeTillEndOfLineOrGA = C8.pack <$> manyTill C.anyChar (choice [C.endOfLine, iacGA]) >>= \bs -> C.skipMany (C.char '\r') *> pure bs
 
 takeTillIACGA :: A.Parser B.ByteString
 takeTillIACGA = do txt <- takeTill (== iacWord)
