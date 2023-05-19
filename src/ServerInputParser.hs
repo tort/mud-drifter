@@ -523,7 +523,7 @@ hitEvent = do
     standardCases base = fmap (base <>) ["а", "о", "и", ""]
     casesParser = choice . fmap (string . encodeUtf8)
     dmgType =
-      F.foldl1 (<|>) . fmap (string . encodeUtf8) . concat . fmap standardCases $
+      choice . fmap (string . encodeUtf8) . concat . fmap standardCases $
       [ "сокрушил"
       , "ударил"
       , "рубанул"
