@@ -38,8 +38,8 @@ serverInputParser =
     , checkDative
     , checkInstrumental
     , checkPrepositional
+    --, hitEvent
     {-
-    , hitEvent
     , ripMob
     , mobWentIn
     , mobWentOut
@@ -416,12 +416,24 @@ myStats = do -- header begin
                      return mv
 
 hitEvent :: A.Parser ServerEvent
-hitEvent = do
-  evt <- hit <|> miss
+hitEvent
+  --evt <- hit <|> miss
+ = do
+  evt <- hit
   C.endOfLine
   clearColors
   return evt
   where
+    hit = do
+      cs
+      choice . fmap string $ ["1;33m", "1;31m"]
+      attacker <-
+        readWordsTillParser (C.space *> many' dmgAmount *> C.space *> dmgType *> C.space)
+      target <- C.takeTill (== '.')
+      C.char '.'
+      --target <- choice [hit2, hit1]
+      return $
+        HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
     miss = do
       cs
       choice . fmap string $ ["0;33m", "0;31m"]
@@ -449,7 +461,8 @@ hitEvent = do
     miss3 = do
       attacker <-
         readWordsTillParser
-          (C.space *> casesParser ["попытался", "попыталась", "попыталось", "попытались"])
+          (C.space *>
+           casesParser ["попытался", "попыталась", "попыталось", "попытались"])
       C.space
       dmgTypeU
       C.space
@@ -473,15 +486,6 @@ hitEvent = do
         m4 = string . encodeUtf8 $ " - скорняк из него неважнецкий"
     missWord1 = ["промахнулся", "промахнулась", "промахнулось", "промахнулись"]
     missWord2 = standardCases "промазал"
-    hit = do
-      cs
-      F.foldl1 (<|>) . fmap string $ ["1;33m", "1;31m"]
-      attacker <-
-        readWordsTillParser ((many' (dmgAmount >> C.space)) >> dmgType)
-      C.space
-      target <- choice [hit2, hit1]
-      return $
-        HitEvent (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
     hit1 = do
       target <- C.takeTill (\c -> c == '.' || c == '!' || c == ',')
       c <- C.anyChar
@@ -514,18 +518,18 @@ hitEvent = do
           (casesParser . standardCases) "упал"
           string . encodeUtf8 $ " на землю"
     dmgAmount =
-      F.foldl1 (<|>) . fmap (string . encodeUtf8) $
-      [ "легонько"
-      , "слегка"
-      , "очень сильно"
-      , "чрезвычайно сильно"
-      , "сильно"
-      , "смертельно"
-      ]
+      stringChoice
+        [ "легонько"
+        , "слегка"
+        , "очень сильно"
+        , "чрезвычайно сильно"
+        , "сильно"
+        , "смертельно"
+        ]
     standardCases base = fmap (base <>) ["а", "о", "и", ""]
     casesParser = stringChoice
     dmgType =
-      choice . fmap (string . encodeUtf8) . concat . fmap standardCases $
+      stringChoice . concat . fmap standardCases $
       [ "сокрушил"
       , "ударил"
       , "рубанул"
@@ -952,7 +956,7 @@ readWordsTill :: Text -> A.Parser ByteString
 readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
                        return $ C8.unwords wrds
 
-readWordsTillParser :: A.Parser ByteString -> A.Parser ByteString
+readWordsTillParser :: A.Parser a -> A.Parser ByteString
 readWordsTillParser parser = do wrds <- manyTill' readWord parser
                                 return $ C8.unwords wrds
 
@@ -1340,7 +1344,7 @@ iacGA = do iac
            pure ()
 
 takeTillEndOfLineOrGA :: A.Parser ByteString
-takeTillEndOfLineOrGA = C8.pack <$> manyTill C.anyChar (choice [C.endOfLine, iacGA])
+takeTillEndOfLineOrGA = C8.pack <$> manyTill C.anyChar (choice [C.endOfLine, iacGA]) >>= \bs -> many' (C.char '\r') *> pure bs
 
 takeTillIACGA :: A.Parser B.ByteString
 takeTillIACGA = do txt <- takeTill (== iacWord)
