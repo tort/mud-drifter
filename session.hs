@@ -12,28 +12,15 @@ import Text.Pretty.Simple
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
-       (locationParser *>
-        unknownMessage *>
-        prompt *>
-        cs *> (C.choice . fmap C.string) ["1;33m", "1;31m"] *>
-        readWordsTillParser (
-        C.many' (dmgAmount *> C.space) *>
-        dmgType *> C.space) *>
-        readWord *>
-        C.endOfLine *>
-        clearColors *>
-        C.endOfLine *>
-        fightPrompt
-        --readWordsTillParser (many dmgAmount *> C.space *> dmgType)
-       )
-       (loadServerEvents "test/logs/hit-series.log"))
+       (fightPrompt *> unknownMessage)
+       (loadServerEvents "test/logs/final-blow-1.log"))
 :}
 
 :{
  runEffect
  (PP.mapM_ (pprint) <-< PA.parsed
       (serverInputParser) 
-   (loadServerEvents "test/logs/hit-series.log"))
+   (loadServerEvents "test/logs/rent-location.log"))
 :}
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )

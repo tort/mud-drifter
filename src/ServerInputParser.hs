@@ -38,7 +38,8 @@ serverInputParser =
     , checkDative
     , checkInstrumental
     , checkPrepositional
-    , hitEvent
+    , finalBlowGenitive
+    --, hitEvent
     {-
     , ripMob
     , mobWentIn
@@ -415,14 +416,23 @@ myStats = do -- header begin
                      C.endOfLine
                      return mv
 
+finalBlowGenitive :: A.Parser ServerEvent
+finalBlowGenitive =
+  cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
+  readWordsTillParser ((stringChoice . standardCases) "выбил") >>= \attacker ->
+    (string . encodeUtf8) " остатки жизни из " *>
+    readWordsTillParser (string . encodeUtf8 $ "своим мощным ударом.") >>= \target ->
+      C.endOfLine *> clearColors *> (pure . (uncurry FinalBlowGenitive) . bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8)) (attacker, target)
+
 hitEvent :: A.Parser ServerEvent
 hitEvent = do
   --evt <- hit <|> miss
-  evt <- hit
+  evt <- choice [hit]
   C.endOfLine
   clearColors
   return evt
   where
+    finalBlow2 = string . encodeUtf8 $ "Вы нанесли "--"клопу прекрасный удар - после этого ему уже не встать."
     hit = do
       cs
       choice . fmap string $ ["1;33m", "1;31m"]
@@ -631,16 +641,13 @@ ripMob :: A.Parser ServerEvent
 ripMob = do
   many' clearColors
   cs >> string "1;33m"
-  choice [hit1, hit2]
+  --choice [hit1, hit2]
   skipWhile (not . C.isEndOfLine)
   C.endOfLine
   clearColors
   partial <- manyTill' C.anyChar (string $ encodeUtf8 "душа медленно подымается в небеса.")
   C.endOfLine
   pure . MobRipEvent . ObjRef . T.toLower . L.head . T.splitOn " мертв" . fst . T.breakOnEnd "мертв" . decodeUtf8 . C8.pack $ partial
-  where
-    hit1 = string . encodeUtf8 $ "Вы выбили остатки жизни из"-- блохи своим мощным ударом."
-    hit2 = string . encodeUtf8 $ "Вы нанесли "--"клопу прекрасный удар - после этого ему уже не встать."
 
 isNotThirsty :: A.Parser ServerEvent
 isNotThirsty = isFull <|> isOverFull >> return NotThirsty
@@ -965,8 +972,14 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
             return . PickItemEvent . ObjRef . decodeUtf8 $ itemAccusative
 
 readWord :: A.Parser ByteString
-readWord = takeTill crit >>= \bs -> A.skip crit *> pure bs
-  where crit = \x -> x == _period || x == _space || x == _cr || x == 10
+readWord =
+  takeTill crit >>= \bs ->
+    A.anyWord8 >>= \w8 ->
+      if w8 == _space
+        then return bs
+        else fail "space expected"
+  where
+    crit = \x -> x == _period || x == _space || x == _cr || x == 10
 
 readWordsTill :: Text -> A.Parser ByteString
 readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
