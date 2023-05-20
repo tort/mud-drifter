@@ -38,8 +38,8 @@ serverInputParser =
     , checkDative
     , checkInstrumental
     , checkPrepositional
-    , finalBlowGenitive
-    , finalBlowDative
+    , hitEventGenitive
+    , hitEventDative
     --, hitEvent
     {-
     , ripMob
@@ -417,20 +417,33 @@ myStats = do -- header begin
                      C.endOfLine
                      return mv
 
-finalBlowGenitive :: A.Parser ServerEvent
-finalBlowGenitive =
-  cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
-  readWordsTillParser ((stringChoice . standardCases) "выбил") >>= \attacker ->
-    (string . encodeUtf8) " остатки жизни из " *>
-    readWordsTillParser (string . encodeUtf8 $ "своим мощным ударом.") >>= \target ->
-      C.endOfLine *> clearColors *>
-      (pure .
-       (uncurry FinalBlowGenitive) .
-       bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
-        (attacker, target)
+hitEventGenitive :: A.Parser ServerEvent
+hitEventGenitive = choice [finalBlow, hit]
+  where
+    finalBlow =
+      cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
+      readWordsTillParser ((stringChoice . standardCases) "выбил") >>= \attacker ->
+        (string . encodeUtf8) " остатки жизни из " *>
+        readWordsTillParser (string . encodeUtf8 $ "своим мощным ударом.") >>= \target ->
+          C.endOfLine *> clearColors *>
+          (pure .
+           (uncurry HitEventGenitive) .
+           bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
+            (attacker, target)
+    hit = do
+      cs
+      choice . fmap string $ ["1;33m", "1;31m"]
+      attacker <-
+        readWordsTillParser (C.many' (dmgAmount *> C.space) *> dmgType *> C.space)
+      target <- C.takeTill (== '.')
+      C.char '.'
+      C.endOfLine
+      clearColors
+      return $
+        HitEventGenitive (ObjRef . decodeUtf8 $ attacker) (ObjRef . decodeUtf8 $ target)
 
-finalBlowDative :: A.Parser ServerEvent
-finalBlowDative =
+hitEventDative :: A.Parser ServerEvent
+hitEventDative =
   cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
   readWordsTillParser (stringChoice ["нанесли", "нанесла", "нанесло", "нанес"]) >>= \attacker ->
     readWordsTillParser
@@ -439,7 +452,7 @@ finalBlowDative =
        (string . encodeUtf8) " уже не встать.") >>= \target ->
       C.endOfLine *> clearColors *>
       (pure .
-       (uncurry FinalBlowDative) .
+       (uncurry HitEventDative) .
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
 
@@ -451,7 +464,6 @@ hitEvent = do
   clearColors
   return evt
   where
-    finalBlow2 = string . encodeUtf8 $ "Вы нанесли "--"клопу прекрасный удар - после этого ему уже не встать."
     hit = do
       cs
       choice . fmap string $ ["1;33m", "1;31m"]
