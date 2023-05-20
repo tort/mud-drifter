@@ -39,6 +39,7 @@ serverInputParser =
     , checkInstrumental
     , checkPrepositional
     , finalBlowGenitive
+    , finalBlowDative
     --, hitEvent
     {-
     , ripMob
@@ -422,7 +423,25 @@ finalBlowGenitive =
   readWordsTillParser ((stringChoice . standardCases) "выбил") >>= \attacker ->
     (string . encodeUtf8) " остатки жизни из " *>
     readWordsTillParser (string . encodeUtf8 $ "своим мощным ударом.") >>= \target ->
-      C.endOfLine *> clearColors *> (pure . (uncurry FinalBlowGenitive) . bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8)) (attacker, target)
+      C.endOfLine *> clearColors *>
+      (pure .
+       (uncurry FinalBlowGenitive) .
+       bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
+        (attacker, target)
+
+finalBlowDative :: A.Parser ServerEvent
+finalBlowDative =
+  cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
+  readWordsTillParser (stringChoice ["нанесли", "нанесла", "нанесло", "нанес"]) >>= \attacker ->
+    readWordsTillParser
+      ((string . encodeUtf8) "прекрасный удар - после этого " *>
+       stringChoice ["ему", "ей", "им"] *>
+       (string . encodeUtf8) " уже не встать.") >>= \target ->
+      C.endOfLine *> clearColors *>
+      (pure .
+       (uncurry FinalBlowDative) .
+       bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
+        (attacker, target)
 
 hitEvent :: A.Parser ServerEvent
 hitEvent = do
