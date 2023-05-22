@@ -41,10 +41,9 @@ serverInputParser =
     , hitEventGenitive
     , hitEventDative
     , missEventNominative
-
+    , ripMob
     --, hitEvent
     {-
-    , ripMob
     , mobWentIn
     , mobWentOut
     , listEquipment
@@ -447,9 +446,9 @@ hitEventGenitive = choice [hit, finalBlow]
 hitEventDative :: A.Parser ServerEvent
 hitEventDative =
   cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
-  readWordsTillParser (stringChoice ["нанесли", "нанесла", "нанесло", "нанес"]) >>= \attacker ->
+  readWordsTillParser (C.space *> stringChoice ["нанесли", "нанесла", "нанесло", "нанес"] *> C.space) >>= \attacker ->
     readWordsTillParser
-      ((string . encodeUtf8) "прекрасный удар - после этого " *>
+      ((string . encodeUtf8) " прекрасный удар - после этого " *>
        stringChoice ["ему", "ей", "им"] *>
        (string . encodeUtf8) " уже не встать.") >>= \target ->
       C.endOfLine *> clearColors *>
@@ -708,16 +707,16 @@ stringChoice :: [Text] -> A.Parser ByteString
 stringChoice = choice . fmap (string . encodeUtf8)
 
 ripMob :: A.Parser ServerEvent
-ripMob = do
-  many' clearColors
-  cs >> string "1;33m"
-  --choice [hit1, hit2]
-  skipWhile (not . C.isEndOfLine)
-  C.endOfLine
-  clearColors
-  partial <- manyTill' C.anyChar (string $ encodeUtf8 "душа медленно подымается в небеса.")
-  C.endOfLine
-  pure . MobRipEvent . ObjRef . T.toLower . L.head . T.splitOn " мертв" . fst . T.breakOnEnd "мертв" . decodeUtf8 . C8.pack $ partial
+ripMob =
+  MobRipEvent . ObjRef . T.toLower . decodeUtf8 <$>
+  readWordsTillParser
+    (C.space *> stringChoice ["мертва", "мертво", "мертвы", "мертв"] *>
+     C.char ',' *>
+     C.space *>
+     stringChoice ["его", "ее", "их"] *>
+     C.space *>
+     (string . encodeUtf8) "душа медленно подымается в небеса." *>
+     C.endOfLine)
 
 isNotThirsty :: A.Parser ServerEvent
 isNotThirsty = isFull <|> isOverFull >> return NotThirsty
