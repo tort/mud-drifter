@@ -460,23 +460,24 @@ hitEventDative =
 
 missEventNominative :: A.Parser ServerEvent
 missEventNominative =
-  cs *> string "0;31m" *>
+  cs *> (choice . fmap string) ["0;31m", "0;33m"] *>
   readWordsTillParser
     (choice [variant1, variant2] *>
      C.space *>
      dmgTypeU *>
      C.space) >>= \attacker ->
-    readWordsTillParser (choice [ending1, ending2, ending3, ending4]) >>= \target ->
+    readWordsTillParser (choice [ending1, ending2, ending4, ending5, ending3]) >>= \target ->
       C.endOfLine *> clearColors *>
       (pure .
        (uncurry MissEventNominative) .
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
   where
-    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2] *> C.char '.' *> pure ()
+    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3] *> C.char '.' *> pure ()
     ending2 = (string . encodeUtf8) " - скорняк из " *> stringChoice ["него", "нее", "них"] *> (string . encodeUtf8) " неважнецкий." *> pure ()
     ending3 = C.char '.' *> pure ()
     ending4 = (string . encodeUtf8) ". Ну " *> stringChoice ["его", "ее", "их"] *> (string . encodeUtf8) " с такими шутками." *> pure ()
+    ending5 = (string . encodeUtf8) " - неудачно." *> pure ()
     miss1 =
           (string . encodeUtf8) "лишь громко " *>
           (stringChoice . standardCases) "клацнул" *>
@@ -484,6 +485,8 @@ missEventNominative =
     miss2 =
           stringChoice
             ["промахнулось", "промахнулась", "промахнулись", "промахнулся"]
+    miss3 = 
+          (stringChoice . standardCases) "поймал" *> (string . encodeUtf8) " зубами лишь воздух"
     variant1 = C.space *> stringChoice (fmap ("по"<>) attempted)
     variant2 = C.space *> miss2 *> (string . encodeUtf8) ", когда " *> stringChoice attempted
     attempted = ["пытался", "пыталась", "пыталось", "пытались"]
