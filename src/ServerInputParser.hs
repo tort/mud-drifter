@@ -40,6 +40,8 @@ serverInputParser =
     , checkPrepositional
     , hitEventGenitive
     , hitEventDative
+    , missEventNominative
+
     --, hitEvent
     {-
     , ripMob
@@ -418,13 +420,13 @@ myStats = do -- header begin
                      return mv
 
 hitEventGenitive :: A.Parser ServerEvent
-hitEventGenitive = choice [finalBlow, hit]
+hitEventGenitive = choice [hit, finalBlow]
   where
     finalBlow =
       cs *> (choice . fmap string) ["1;33m", "1;31m"] *>
-      readWordsTillParser ((stringChoice . standardCases) "выбил") >>= \attacker ->
+      readWordsTillParser (C.space *> (stringChoice . standardCases) "выбил") >>= \attacker ->
         (string . encodeUtf8) " остатки жизни из " *>
-        readWordsTillParser (string . encodeUtf8 $ "своим мощным ударом.") >>= \target ->
+        readWordsTillParser (string . encodeUtf8 $ " своим мощным ударом.") >>= \target ->
           C.endOfLine *> clearColors *>
           (pure .
            (uncurry HitEventGenitive) .
@@ -434,7 +436,7 @@ hitEventGenitive = choice [finalBlow, hit]
       cs
       choice . fmap string $ ["1;33m", "1;31m"]
       attacker <-
-        readWordsTillParser (C.many' (dmgAmount *> C.space) *> dmgType *> C.space)
+        readWordsTillParser (C.space *> C.many' (dmgAmount *> C.space) *> dmgType *> C.space)
       target <- C.takeTill (== '.')
       C.char '.'
       C.endOfLine
@@ -455,6 +457,32 @@ hitEventDative =
        (uncurry HitEventDative) .
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
+
+missEventNominative :: A.Parser ServerEvent
+missEventNominative =
+  cs *> string "0;31m" *>
+  readWordsTillParser
+    (stringChoice ["попытался", "попыталась", "попыталось", "попытались"] *>
+     C.space *>
+     dmgTypeU *>
+     C.space) >>= \attacker ->
+    readWordsTillParser (choice [ending1, ending2]) >>= \target ->
+      C.char '.' *>
+      C.endOfLine *> clearColors *>
+      (pure .
+       (uncurry MissEventNominative) .
+       bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
+        (attacker, target)
+  where
+    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2]
+    ending2 = (string . encodeUtf8) " - скорняк из " *> stringChoice ["него", "нее", "них"] *> " неважнецкий"
+    miss1 =
+          (string . encodeUtf8) "лишь громко " *>
+          (stringChoice . standardCases) "клацнул" *>
+          (string . encodeUtf8) " зубами"
+    miss2 =
+          stringChoice
+            ["промахнулось", "промахнулась", "промахнулись", "промахнулся"]
 
 hitEvent :: A.Parser ServerEvent
 hitEvent = do
@@ -502,7 +530,7 @@ hitEvent = do
       attacker <-
         readWordsTillParser
           (C.space *>
-           casesParser ["попытался", "попыталась", "попыталось", "попытались"])
+           stringChoice ["попытался", "попыталась", "попыталось", "попытались"])
       C.space
       dmgTypeU
       C.space
@@ -588,6 +616,7 @@ dmgType =
   , "ужалил"
   , "лягнул"
   , "ободрал"
+  , "укусил"
   ]
 
 dmgTypeU =
@@ -606,6 +635,7 @@ dmgTypeU =
   , "ужалить"
   , "лягнуть"
   , "ободрать"
+  , "укусить"
   ]
 
 iHitMob :: A.Parser ServerEvent
@@ -1005,19 +1035,28 @@ pickUp = do string $ encodeUtf8 "Вы подняли"
 readWord :: A.Parser ByteString
 readWord =
   takeTill crit >>= \bs ->
-    A.anyWord8 >>= \w8 ->
-      if w8 == _space
-        then return bs
-        else fail "space expected"
+      A.anyWord8 >>= \w8 ->
+        if w8 == _space || w8 == _comma || w8 == _period
+          then pure bs
+          else fail "space expected"
   where
-    crit = \x -> x == _period || x == _space || x == _cr || x == 10
+    crit =
+      \x -> x == _period || x == _space || x == _comma || x == _cr || x == 10
 
 readWordsTill :: Text -> A.Parser ByteString
 readWordsTill str = do wrds <- manyTill' readWord (string $ encodeUtf8 str)
                        return $ C8.unwords wrds
 
 readWordsTillParser :: A.Parser a -> A.Parser ByteString
-readWordsTillParser parser = C8.unwords <$> manyTill readWord parser
+readWordsTillParser parser = C8.pack <$> manyTill wordChars parser
+  where
+    wordChars =
+      C.anyChar >>= \case
+        ',' -> fail "non-word char"
+        '.' -> fail "non-word char"
+        '\n' -> fail "non-word char"
+        '\r' -> fail "non-word char"
+        c -> pure c
 
 mobGaveYouItem :: A.Parser ServerEvent
 mobGaveYouItem = do mob <- readWordsTill "дал"

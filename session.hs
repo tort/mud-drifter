@@ -6,14 +6,35 @@ import qualified Data.Attoparsec.ByteString.Char8 as C
 import Text.Pretty.Simple
 
 :{
- (\(l, r) -> (l, ) <$> r) =<<
+ putStrLn . (L.!! 0) . fromJust . snd =<< (\(l, r) -> (l, ) <$> r) =<<
   pure .
   fmap Control.Monad.sequence .
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
-       (fightPrompt *> unknownMessage)
-       (loadServerEvents "test/logs/final-blow-1.log"))
+    (
+      cs *> C.string "0;31m" *>
+      readWordsTillParser
+      (stringChoice ["попытался", "попыталась", "попыталось", "попытались"] *>
+      C.space *>
+      dmgTypeU *>
+      C.space) *>
+      readWordsTillParser (C.string . encodeUtf8 $ ", но ")
+    )
+       (loadServerEvents "test/logs/miss-1.log"))
+:}
+
+:{
+ putStrLn . (L.!! 0) . fromJust . snd =<< (\(l, r) -> (l, ) <$> r) =<<
+  pure .
+  fmap Control.Monad.sequence .
+  fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
+  PP.toListM'
+    (PA.parsed
+    (
+      serverInputParser
+    )
+       (loadServerEvents "test/logs/hit-1.log"))
 :}
 
 :{

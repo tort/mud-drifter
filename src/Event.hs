@@ -193,6 +193,7 @@ data ServerEvent = CodepagePrompt
                  | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
                  | HitEventGenitive (ObjRef Mob Nominative) (ObjRef Mob Genitive)
                  | HitEventDative (ObjRef Mob Nominative) (ObjRef Mob Dative)
+                 | MissEventNominative (ObjRef Mob Nominative) (ObjRef Mob Accusative)
                  | EndOfLogEvent
                  deriving (Eq, Generic, Ord, Show)
 
