@@ -41,6 +41,7 @@ serverInputParser =
     , hitEventGenitive
     , hitEventDative
     , missEventNominative
+    , missEventGenitive
     , ripMob
     , mobWentIn
     , mobWentOut
@@ -456,6 +457,18 @@ hitEventDative =
        (uncurry HitEventDative) .
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
+
+missEventGenitive :: A.Parser ServerEvent
+missEventGenitive =
+  cs *> (choice . fmap string) ["0;31m", "0;33m"] *>
+  (string . encodeUtf8) "Ваша рука не достигла " *>
+  readWordsTillParser
+    ((string . encodeUtf8) " - нужно было лучше тренироваться.") >>= \target ->
+    C.endOfLine *> clearColors *>
+    (pure .
+     (uncurry MissEventGenitive) .
+     bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
+      ("Вы", target)
 
 missEventNominative :: A.Parser ServerEvent
 missEventNominative =
