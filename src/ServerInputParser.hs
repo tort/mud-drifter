@@ -472,7 +472,7 @@ missEventNominative =
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
   where
-    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3, miss4] *> C.char '.' *> pure ()
+    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3, miss4, miss5] *> C.char '.' *> pure ()
     ending2 = (string . encodeUtf8) " - скорняк из " *> stringChoice ["него", "нее", "них"] *> (string . encodeUtf8) " неважнецкий." *> pure ()
     ending3 = C.char '.' *> pure ()
     ending4 = (string . encodeUtf8) ". Ну " *> hisHer *> (string . encodeUtf8) " с такими шутками." *> pure ()
@@ -487,6 +487,7 @@ missEventNominative =
     miss3 = 
           (stringChoice . standardCases) "поймал" *> (string . encodeUtf8) " зубами лишь воздух"
     miss4 = hisHer *> (string . encodeUtf8) " удар не достиг цели"
+    miss5 = hisHer *> (string . encodeUtf8) " старания не достигли цели"
     variant1 = C.space *> stringChoice (fmap ("по"<>) attempted)
     variant2 = C.space *> miss2 *> (string . encodeUtf8) ", когда " *> stringChoice attempted
     attempted = ["пытался", "пыталась", "пыталось", "пытались"]
@@ -626,6 +627,7 @@ dmgType =
   , "ободрал"
   , "укусил"
   , "оцарапал"
+  , "клюнул"
   ]
 
 dmgTypeU =
@@ -646,6 +648,7 @@ dmgTypeU =
   , "ободрать"
   , "укусить"
   , "оцарапать"
+  , "клюнуть"
   ]
 
 iHitMob :: A.Parser ServerEvent
