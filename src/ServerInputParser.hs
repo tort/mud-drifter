@@ -478,10 +478,7 @@ missEventNominative :: A.Parser ServerEvent
 missEventNominative =
   cs *> (choice . fmap string) ["0;31m", "0;33m"] *>
   readWordsTillParser
-    (choice [variant1, variant2] *>
-     C.space *>
-     dmgTypeU *>
-     C.space) >>= \attacker ->
+    (choice [variant1, variant2] *> C.space *> dmgTypeU *> C.space) >>= \attacker ->
     readWordsTillParser (choice [ending1, ending2, ending4, ending5, ending3]) >>= \target ->
       C.endOfLine *> clearColors *>
       (pure .
@@ -489,24 +486,41 @@ missEventNominative =
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
   where
-    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3, miss4, miss5] *> C.char '.' *> pure ()
-    ending2 = (string . encodeUtf8) " - скорняк из " *> stringChoice ["него", "нее", "них"] *> (string . encodeUtf8) " неважнецкий." *> pure ()
+    ending1 =
+      (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3, miss4] *>
+      C.char '.' *>
+      pure ()
+    ending2 =
+      (string . encodeUtf8) " - скорняк из " *>
+      stringChoice ["него", "нее", "них"] *>
+      (string . encodeUtf8) " неважнецкий." *>
+      pure ()
     ending3 = C.char '.' *> pure ()
-    ending4 = (string . encodeUtf8) ". Ну " *> hisHer *> (string . encodeUtf8) " с такими шутками." *> pure ()
+    ending4 =
+      (string . encodeUtf8) ". Ну " *> hisHer *>
+      (string . encodeUtf8) " с такими шутками." *>
+      pure ()
     ending5 = (string . encodeUtf8) " - неудачно." *> pure ()
     miss1 =
-          (string . encodeUtf8) "лишь громко " *>
-          (stringChoice . standardCases) "клацнул" *>
-          (string . encodeUtf8) " зубами"
+      (string . encodeUtf8) "лишь громко " *>
+      (stringChoice . standardCases) "клацнул" *>
+      (string . encodeUtf8) " зубами"
     miss2 =
-          stringChoice
-            ["промахнулось", "промахнулась", "промахнулись", "промахнулся"]
-    miss3 = 
-          (stringChoice . standardCases) "поймал" *> (string . encodeUtf8) " зубами лишь воздух"
-    miss4 = hisHer *> (string . encodeUtf8) " удар не достиг цели"
-    miss5 = hisHer *> (string . encodeUtf8) " старания не достигли цели"
-    variant1 = C.space *> stringChoice (fmap ("по"<>) attempted)
-    variant2 = C.space *> miss2 *> (string . encodeUtf8) ", когда " *> stringChoice attempted
+      stringChoice
+        ["промахнулось", "промахнулась", "промахнулись", "промахнулся"]
+    miss3 =
+      (stringChoice . standardCases) "поймал" *>
+      (string . encodeUtf8) " зубами лишь воздух"
+    miss4 =
+      hisHer *> (string . encodeUtf8) *> C.space *>
+      stringChoice ["удар", "старания", "стрела"] *>
+      (string . encodeUtf8) " не " *>
+      stringChoice ["достигла", "достигло", "достигли", "достиг"] *>
+      (string . encodeUtf8) " цели"
+    variant1 = C.space *> stringChoice (fmap ("по" <>) attempted)
+    variant2 =
+      C.space *> miss2 *> (string . encodeUtf8) ", когда " *>
+      stringChoice attempted
     attempted = ["пытался", "пыталась", "пыталось", "пытались"]
     hisHer = stringChoice ["его", "ее", "их"]
 
@@ -645,6 +659,7 @@ dmgType =
   , "укусил"
   , "оцарапал"
   , "клюнул"
+  , "подстрелил"
   ]
 
 dmgTypeU =
@@ -666,6 +681,7 @@ dmgTypeU =
   , "укусить"
   , "оцарапать"
   , "клюнуть"
+  , "подстрелить"
   ]
 
 iHitMob :: A.Parser ServerEvent
@@ -732,13 +748,20 @@ ripMob :: A.Parser ServerEvent
 ripMob =
   MobRipEvent . ObjRef . T.toLower . decodeUtf8 <$>
   readWordsTillParser
-    (C.space *> stringChoice ["мертва", "мертво", "мертвы", "мертв"] *>
-     C.char ',' *>
-     C.space *>
-     stringChoice ["его", "ее", "их"] *>
-     C.space *>
-     (string . encodeUtf8) "душа медленно подымается в небеса." *>
-     C.endOfLine)
+    (C.space *> choice [rip1, rip2] *> C.char '.' *> C.endOfLine)
+  where
+    rip1 =
+      stringChoice ["мертва", "мертво", "мертвы", "мертв"] *> C.char ',' *>
+      C.space *>
+      stringChoice ["его", "ее", "их"] *>
+      C.space *>
+      (string . encodeUtf8) "душа медленно подымается в небеса"
+    rip2 =
+      stringChoice ["вспыхнуло", "вспыхнула", "вспыхнули", "вспыхнул"] *>
+      (string . encodeUtf8) " и " *>
+      stringChoice ["рассыпался", "рассыпалось", "рассыпалась", "рассыпались"] *>
+      (string . encodeUtf8) " в прах"
+    --rip3 = stringChoice ["исчезло", "исчезла", "исчезли", "исчез"] *> (string . encodeUtf8) " в ослепительной вспышке"
 
 isNotThirsty :: A.Parser ServerEvent
 isNotThirsty = isFull <|> isOverFull >> return NotThirsty
