@@ -42,6 +42,7 @@ serverInputParser =
     , hitEventDative
     , missEventNominative
     , missEventGenitive
+    , castNominative
     , ripMob
     , mobWentIn
     , mobWentOut
@@ -462,6 +463,20 @@ hitEventDative =
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
 
+castNominative :: A.Parser ServerEvent
+castNominative =
+  readWordsTillParser
+    ((string . encodeUtf8) " издал непонятный звук." *> C.endOfLine) *>
+  cs *>
+  (choice . fmap string) ["1;31m", "1;33m"] *>
+  (string . encodeUtf8) "Кислота, которой " *>
+  (stringChoice . standardCases) "плеснул" *>
+  C.space *>
+  readWordsTillParser ((string . encodeUtf8) ", покрыла вас с головы до пят.") >>= \attacker ->
+  C.endOfLine *>
+  clearColors *>
+  pure (CastNominative (ObjRef . decodeUtf8 $ attacker) (ObjRef "вас"))
+
 missEventGenitive :: A.Parser ServerEvent
 missEventGenitive =
   cs *> (choice . fmap string) ["0;31m", "0;33m"] *> choice [miss1, miss2] >>= \target ->
@@ -657,6 +672,7 @@ dmgType =
   , "сокрушил"
   , "уколол"
   , "пронзил"
+  , "проткнул"
   , "хлестнул"
   , "ткнул"
   , "ужалил"
@@ -679,6 +695,7 @@ dmgTypeU =
   , "сокрушить"
   , "уколоть"
   , "пронзить"
+  , "проткнуть"
   , "хлестнуть"
   , "ткнуть"
   , "ужалить"
