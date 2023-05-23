@@ -42,10 +42,10 @@ serverInputParser =
     , hitEventDative
     , missEventNominative
     , ripMob
-    --, hitEvent
-    {-
     , mobWentIn
     , mobWentOut
+    --, hitEvent
+    {-
     , listEquipment
     , listInventory
     , itemStats
@@ -132,7 +132,7 @@ checkPrepositional = do cs >> string "1;30m"
 
 mobWentIn :: A.Parser ServerEvent
 mobWentIn = do
-  mob <- readWordsTillParser arrived
+  mob <- readWordsTillParser (C.space *> arrived)
   C.space
   froms
   C.char '.'
@@ -172,7 +172,7 @@ mobWentIn = do
 
 mobWentOut :: A.Parser ServerEvent
 mobWentOut = do
-  mob <- readWordsTillParser arrived
+  mob <- readWordsTillParser (C.space *> arrived)
   C.space
   tos
   C.char '.'
@@ -472,10 +472,10 @@ missEventNominative =
        bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
         (attacker, target)
   where
-    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3] *> C.char '.' *> pure ()
+    ending1 = (string . encodeUtf8) ", но " *> choice [miss1, miss2, miss3, miss4] *> C.char '.' *> pure ()
     ending2 = (string . encodeUtf8) " - скорняк из " *> stringChoice ["него", "нее", "них"] *> (string . encodeUtf8) " неважнецкий." *> pure ()
     ending3 = C.char '.' *> pure ()
-    ending4 = (string . encodeUtf8) ". Ну " *> stringChoice ["его", "ее", "их"] *> (string . encodeUtf8) " с такими шутками." *> pure ()
+    ending4 = (string . encodeUtf8) ". Ну " *> hisHer *> (string . encodeUtf8) " с такими шутками." *> pure ()
     ending5 = (string . encodeUtf8) " - неудачно." *> pure ()
     miss1 =
           (string . encodeUtf8) "лишь громко " *>
@@ -486,9 +486,11 @@ missEventNominative =
             ["промахнулось", "промахнулась", "промахнулись", "промахнулся"]
     miss3 = 
           (stringChoice . standardCases) "поймал" *> (string . encodeUtf8) " зубами лишь воздух"
+    miss4 = hisHer *> (string . encodeUtf8) " удар не достиг цели"
     variant1 = C.space *> stringChoice (fmap ("по"<>) attempted)
     variant2 = C.space *> miss2 *> (string . encodeUtf8) ", когда " *> stringChoice attempted
     attempted = ["пытался", "пыталась", "пыталось", "пытались"]
+    hisHer = stringChoice ["его", "ее", "их"]
 
 hitEvent :: A.Parser ServerEvent
 hitEvent = do
