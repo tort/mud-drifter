@@ -205,6 +205,10 @@ mobWentOut = do
       , "уплыла"
       , "уплыло"
       , "уплыли"
+      , "сбежала"
+      , "сбежало"
+      , "сбежали"
+      , "сбежал"
       ]
 
 codepagePrompt :: A.Parser ServerEvent
