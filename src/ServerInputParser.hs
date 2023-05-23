@@ -464,22 +464,27 @@ hitEventDative =
 
 missEventGenitive :: A.Parser ServerEvent
 missEventGenitive =
-  cs *> (choice . fmap string) ["0;31m", "0;33m"] *>
-  (string . encodeUtf8) "Ваша рука не достигла " *>
-  readWordsTillParser
-    ((string . encodeUtf8) " - нужно было лучше тренироваться.") >>= \target ->
-    C.endOfLine *> clearColors *>
+  cs *> (choice . fmap string) ["0;31m", "0;33m"] *> choice [miss1, miss2] >>= \target ->
+    C.char '.' *> C.endOfLine *> clearColors *>
     (pure .
      (uncurry MissEventGenitive) .
-     bimap (ObjRef . decodeUtf8) (ObjRef . decodeUtf8))
+     bimap (ObjRef) (ObjRef . decodeUtf8))
       ("Вы", target)
+  where
+    miss1 =
+      (string . encodeUtf8) "Ваша рука не достигла " *>
+      readWordsTillParser
+        ((string . encodeUtf8) " - нужно было лучше тренироваться")
+    miss2 =
+      (string . encodeUtf8) "Вы избежали попытки " *>
+      readWordsTillParser (C.space *> dmgTypeU *> (string . encodeUtf8) " вас")
 
 missEventNominative :: A.Parser ServerEvent
 missEventNominative =
   cs *> (choice . fmap string) ["0;31m", "0;33m"] *>
   readWordsTillParser
     (choice [variant1, variant2] *> C.space *> dmgTypeU *> C.space) >>= \attacker ->
-    readWordsTillParser (choice [ending1, ending2, ending4, ending5, ending3]) >>= \target ->
+    readWordsTillParser (choice [ending1, ending2, ending4, ending5, ending3, ending6]) >>= \target ->
       C.endOfLine *> clearColors *>
       (pure .
        (uncurry MissEventNominative) .
@@ -501,6 +506,7 @@ missEventNominative =
       (string . encodeUtf8) " с такими шутками." *>
       pure ()
     ending5 = (string . encodeUtf8) " - неудачно." *> pure ()
+    ending6 = (string . encodeUtf8) " удар в спину, но вы заметили " *> hisHer *> C.char '.' *> pure ()
     miss1 =
       (string . encodeUtf8) "лишь громко " *>
       (stringChoice . standardCases) "клацнул" *>
@@ -512,7 +518,7 @@ missEventNominative =
       (stringChoice . standardCases) "поймал" *>
       (string . encodeUtf8) " зубами лишь воздух"
     miss4 =
-      hisHer *> (string . encodeUtf8) *> C.space *>
+      hisHer *> C.space *>
       stringChoice ["удар", "старания", "стрела"] *>
       (string . encodeUtf8) " не " *>
       stringChoice ["достигла", "достигло", "достигли", "достиг"] *>
@@ -682,6 +688,7 @@ dmgTypeU =
   , "оцарапать"
   , "клюнуть"
   , "подстрелить"
+  , "нанести"
   ]
 
 iHitMob :: A.Parser ServerEvent
