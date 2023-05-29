@@ -53,25 +53,6 @@ showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nod
 findTravelPath :: Int -> Int -> WorldMap -> Maybe Path
 findTravelPath (fromId) (toId) worldMap = (SP.sp fromId toId worldMap)
 
-printItems :: Text -> Map ServerEvent (Map (Int) Int) -> Text
-printItems subName itemsOnMap = (render . filterEvents) itemsOnMap
-  where render mobs = M.foldMapWithKey renderMob mobs
-        renderMob evt locToCountMap = renderEvent evt <> "\n" <> (renderLocs locToCountMap)
-        renderLocs locToCountMap = mconcat $ showAssoc <$> (M.assocs locToCountMap)
-        showAssoc (locId, count) = "\t" <> (showt locId) <> ": " <> show count <> "\n"
-        filterEvents = M.filterWithKey (\mobRoomDesc a -> filterEvent mobRoomDesc)
-        filterEvent (ItemInTheRoom (ObjRef text)) = T.isInfixOf subName (T.toLower text)
-        filterEvent (LootItem (ObjRef item) (ObjRef mob)) = T.isInfixOf subName (T.toLower item)
-        filterEvent (TakeFromContainer (ObjRef item) (ObjRef container)) = T.isInfixOf subName (T.toLower item)
-        filterEvent (MobGaveYouItem (ObjRef mob) (ObjRef item)) = T.isInfixOf subName (T.toLower item)
-        renderEvent (ItemInTheRoom (ObjRef text)) = text
-        renderEvent (LootItem (ObjRef item) (ObjRef mob)) = "Вы взяли " <> item <> " из трупа " <> mob
-        renderEvent (TakeFromContainer (ObjRef item) (ObjRef container)) = "Вы взяли " <> item <> " из " <> container
-        renderEvent (MobGaveYouItem (ObjRef mob) (ObjRef item)) = mob <> " дал вам " <> item
-
-printLocations :: Text -> World -> IO ()
-printLocations substr world = mapM_ genericPrintT $ locationsBy substr world
-
 printMobsByRegex :: World -> Text -> IO ()
 printMobsByRegex world regex = mapM_ genericPrintT $ L.filter (\(ObjRef t) -> T.isInfixOf regex $ T.toLower t) $ M.keys $ _inRoomDescToMobOnMap world
 

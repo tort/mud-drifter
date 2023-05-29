@@ -1,3 +1,21 @@
+world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
+genod = Person { personName = "генод"
+               , personPassword = "каркасный"
+               , residence = MudServer "bylins.su" 4000
+               }
+g <- initPerson genod
+g & run $ login
+
+findTravelPath 6212 6000 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
+
+import Data.Maybe
+import qualified Pipes.Prelude as PP
+import qualified Pipes.Attoparsec as PA
+
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+
 import Data.Maybe
 import qualified Pipes.Prelude as PP
 import qualified Pipes.Attoparsec as PA
@@ -12,28 +30,18 @@ import Text.Pretty.Simple
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
-    (
-      cs *> C.string "0;31m" *>
-      readWordsTillParser
-      (stringChoice ["попытался", "попыталась", "попыталось", "попытались"] *>
-      C.space *>
-      dmgTypeU *>
-      C.space) *>
-      readWordsTillParser (C.string . encodeUtf8 $ ", но ")
-    )
+    (hitEventGenitive)
        (loadServerEvents "test/logs/miss-1.log"))
 :}
 
 :{
- putStrLn . (L.!! 0) . fromJust . snd =<< (\(l, r) -> (l, ) <$> r) =<<
+ (\(l, r) -> (l, ) <$> r) =<<
   pure .
   fmap Control.Monad.sequence .
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
-    (
-      serverInputParser
-    )
+    (hitEventGenitive) 
        (loadServerEvents "test/logs/hit-1.log"))
 :}
 
@@ -48,9 +56,6 @@ fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColo
 res <- fmap snd .  PP.toListM' $  PA.parsed (parseMobsInLocation) (loadServerEvents "test/logs/mobs-message.log" )
 toListM $ fromJust (res ^? _Left . _2)
 
--- for some reason bear parsing does not happen
-runEffect $ Pipes.ByteString.stdout <-< PP.map (encodeUtf8 . (<> "\n") . unObjRef . Data.Maybe.fromJust) <-< PP.filter isJust <-< PP.map (preview (_LocationEvent . _3 . traverse)) <-< (parseServerEvents . loadServerEvents) "archive/server-input-log/genod-20230509_050445__20230509_051118.log"
-
 fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . traverse))) <-< PP.filter (has (_LocationEvent . _5 . _Just)) <-< serverLogEventsProducer
 
 :{
@@ -64,26 +69,9 @@ fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . trav
 
 (encodePretty @([(Text , Maybe Text)]) . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList <$> loadCachedMobAliases) >>= LC8.writeFile "mob-aliases.list.json"
 
-world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
-genod = Person { personName = "генод"
-               , personPassword = "каркасный"
-               , residence = MudServer "bylins.su" 4000
-               }
-g <- initPerson genod
-g & run $ login
-
-import Data.Maybe
-import qualified Pipes.Prelude as PP
-import qualified Pipes.Attoparsec as PA
-
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
-
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap
-
-traverse TIO.putStrLn $ (\inOut objref objcase -> [st|instance #{inOut} (ObjRef #{objref} #{objcase})|]) <$> ["ToJSON", "FromJSON"] <*> ["Mob", "Item"] <*> ["InRoomDesc", "Genitive", "Accusative", "Dative", "Instrumental", "Prepositional", "Alias"]
 
 :set -XLambdaCase
 :set -XDataKinds
@@ -134,43 +122,6 @@ let rentLocation = "5000"
 :}
 
 stack test --file-watch
-
-(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter isCheckCaseEvt >-> PP.mapM_ (putStrLn . showt))
-
-(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _MobRipEvent) >-> PP.mapM_ (putStrLn . showt . (\(MobRipEvent bs) -> bs)))
-
-(pure . pure $ "/home/tort/mud-drifter/archive/server-input-log/genod-20211203_094805__20211203_095525.log" ) >>= \files -> runEffect ((parseServerEvents . loadLogs $ files) >-> PP.filter (has _UnknownServerEvent) >-> PP.mapM_ (putStrLn . (\(UnknownServerEvent bs) -> bs)))
-
--- parse binary event log, filter, print
-runEffect $ evtLogProducer "evt.log" >-> PP.filter (has $ _ServerEvent . _TakeFromContainer) >-> printEvents
-
-:{
--- reverse file
-(PP.fold' (\acc item -> item : acc) [] identity (evtLogProducer "evt.log")) >>=
-  pure . fst >>= \events ->
-  withFile "evt.reversed" WriteMode $ \h -> runEffect (Pipes.each events >-> serverInteractions >-> PBS.toHandle h)
-:}
-
--- print reversed
-runEffect $ evtLogProducer "evt.reversed" >-> PP.filter (has $ _ServerEvent . _TakeFromContainer) >-> printEvents
-
-(PP.fold' onEvent (FindTarget, []) identity (evtLogProducer "evt.reversed")) >>= pure . snd . fst >>= traverse_ printEvent
-
-data State = FindTarget | FindEnd deriving (Eq, Show)
-
-:{
-onEvent :: (State, [Event]) -> Event -> (State, [Event])
-onEvent (FindTarget, acc) evt@(ServerEvent locEvt@LocationEvent{})
-  | (_locationId . _location $ locEvt) == LocationId 5103 = (FindEnd, evt:acc)
-onEvent (FindTarget, acc) _ = (FindTarget, acc)
-onEvent (FindEnd, acc) evt
-  | has (_ServerEvent . _LocationEvent) evt = (FindTarget, evt:acc)
-onEvent (FindEnd, acc) evt = (FindEnd, evt:acc)
-:}
-
--- find target event chains
-PP.fold' (evtLogProducer "evt.reversed")
-
 
 g & run $ PP.print
 
