@@ -6,11 +6,11 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
-findTravelPath 6212 6000 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
+findTravelPath 6212 6049 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6212" world)
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6212" world)
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
@@ -44,12 +44,7 @@ import Pipes.Lift
        (loadServerEvents "test/logs/hit-1.log"))
 :}
 
-:{
- runEffect
- (PP.mapM_ (pprint) <-< PA.parsed
-      (serverInputParser) 
-   (loadServerEvents "test/logs/rent-location.log"))
-:}
+runEffect (PP.mapM_ (pprint) <-< PA.parsed (serverInputParser) (loadServerEvents "test/logs/rent-location.log"))
 
 fmap fst .  PP.toListM' $  PA.parsed (parseMobsInLocation >>= \mobs -> clearColors *> pure mobs ) (loadServerEvents "test/logs/mobs-message.log" )
 res <- fmap snd .  PP.toListM' $  PA.parsed (parseMobsInLocation) (loadServerEvents "test/logs/mobs-message.log" )

@@ -184,30 +184,42 @@ trackBash = forever awaitBash
 
 type ZoneId = Text
 
-mapNominatives :: MonadIO m => Map (ObjRef Mob InRoomDesc) MobStats -> Pipe Event Event m ()
-mapNominatives knownMobs = PP.map mapEvt
+mapNominatives :: MonadIO m => Map (ObjRef Mob InRoomDesc) MobStats -> Map Int ZonedLocation -> Pipe Event Event m ()
+mapNominatives knownMobs locations = PP.map mapEvt
   where
-    knownNominatives :: Map (ObjRef Mob Nominative, Text) (ObjRef Mob InRoomDesc)
+    knownNominatives ::
+         Map (ObjRef Mob Nominative, Text) (ObjRef Mob InRoomDesc)
     knownNominatives =
-      M.fromList .
-      (fmap) fromJust .
+      M.fromList . (fmap) fromJust .
       (fmap)
         (\s ->
-          (\n z d -> ((n, z), d)) <$> (s ^. nameCases . nominative) <*> (s ^. zone) <*>
-          (s ^. nameCases . inRoomDesc)) .
-      M.elems $ knownMobs
-    mapEvt evt@(ServerEvent (LocationEvent location objects mobs exits (Just zone))) = ServerEvent $ LocationEvent location objects (fmap (updateNom zone) mobs) exits (Just zone)
+           (\n z d -> ((n, z), d)) <$> (s ^. nameCases . nominative) <*>
+           (s ^. zone) <*>
+           (s ^. nameCases . inRoomDesc)) .
+      M.elems $
+      knownMobs
+    mapEvt evt@(ServerEvent (LocationEvent l@(Location locId title) objects mobs exits zone)) =
+      ServerEvent $
+      LocationEvent l objects (fmap (updateNom (M.lookup locId locations)) mobs) exits zone
     mapEvt evt = evt
-    updateNom :: ZoneId -> ObjRef Mob InRoomDesc -> ObjRef Mob InRoomDesc
-    updateNom zone mob = fromMaybe mob . (fmap ObjRef . toInRoomDesc zone) . extractNominative . T.toLower . unObjRef $ mob
+    updateNom :: Maybe ZonedLocation -> ObjRef Mob InRoomDesc -> ObjRef Mob InRoomDesc
+    updateNom Nothing mob = mob
+    updateNom (Just (ZonedLocation _ zone)) mob =
+      fromMaybe mob . (fmap ObjRef . toInRoomDesc zone) . extractNominative .
+      T.toLower .
+      unObjRef $
+      mob
     extractNominative :: Text -> Maybe Text
     extractNominative mob
-      | T.isSuffixOf " сражается с ВАМИ!" mob = T.stripSuffix " сражается с ВАМИ!" $ mob
-      | T.isSuffixOf " отдыхает здесь." mob = T.stripSuffix " отдыхает здесь." $ mob
+      | T.isSuffixOf " сражается с ВАМИ!" mob =
+        T.stripSuffix " сражается с ВАМИ!" $ mob
+      | T.isSuffixOf " отдыхает здесь." mob =
+        T.stripSuffix " отдыхает здесь." $ mob
       | otherwise = Just mob
     toInRoomDesc :: ZoneId -> Maybe Text -> Maybe Text
     toInRoomDesc zone mob =
-      mob >>= \m -> M.lookup (ObjRef m, zone) knownNominatives >>= pure . unObjRef
+      mob >>= \m ->
+        M.lookup (ObjRef m, zone) knownNominatives >>= pure . unObjRef
       --fromMaybe mob $ (unObjRef <$> (M.lookup (ObjRef mob, zone) knownNominatives))
 
 killEmAll :: World -> Pipe Event Event IO ()
