@@ -39,6 +39,13 @@ data Location =
   deriving (Ord, Generic, Show)
   deriving TextShow  via FromGeneric  Location
 
+data ZonedLocation =
+  ZonedLocation
+    { _zloc :: Location
+    , _zone :: Text
+    }
+  deriving (Eq, Generic, Show)
+
 instance Eq Location where
   left == right = _locationId left == _locationId right
 
@@ -105,6 +112,8 @@ instance FromJSON (ObjRef Item Prepositional)
 instance FromJSON (ObjRef Item Alias)
 instance ToJSON Location
 instance FromJSON Location
+instance ToJSON ZonedLocation
+instance FromJSON ZonedLocation
 instance ToJSON MobStats
 instance FromJSON MobStats
 instance ToJSON (NameCases Mob)
@@ -330,6 +339,7 @@ makeFieldsNoPrefix ''RoomDir
 makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
 makeFieldsNoPrefix ''MobStats
+makeFieldsNoPrefix ''ZonedLocation
 
 makeLenses ''NameCases
 

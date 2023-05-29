@@ -1,8 +1,11 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE KindSignatures #-}
 
 module World where
 
@@ -46,7 +49,7 @@ import Data.Aeson.Encode.Pretty
 import Text.Pretty.Simple
 
 data World = World { _worldMap :: WorldMap
-                   , _locationEvents :: Set Location
+                   , _locationEvents :: Map Int (ZonedLocation)
                    , _directions :: Directions
                    , _obstaclesOnMap :: Map (Int, RoomDir) Text
                    , _questActions :: Map (Int, Int) [Event]
@@ -112,7 +115,7 @@ showLocs locs = encodeUtf8 $ renderMsg locs
 
 locsByRegex :: World -> Text -> [Location]
 locsByRegex world regex = S.toList $ S.filter (T.isInfixOf regex . T.toLower . (\l -> l^.locationTitle)) locs
-  where locs = _locationEvents world
+  where locs =  S.fromList . fmap (_zloc) . M.elems $ (_locationEvents world)
 
 loadServerEvents :: MonadIO m => FilePath -> Producer ByteString m ()
 loadServerEvents file = openfile >>= \h -> PBS.fromHandle h >> closefile h
@@ -163,10 +166,24 @@ discoverItems producer = foldToMap (producer >-> filterMapDiscoveries >-> scanEv
         plusOne (Just x) = Just (x + 1)
 
 
-extractLocs :: Monad m => Producer ServerEvent m () -> m (Set Location)
+extractLocs :: Monad m => Producer ServerEvent m () -> m (Set (Location))
 extractLocs serverEvtProducer = PP.fold toSet S.empty identity $ locationEvents
   where toSet acc item = S.insert item acc
         locationEvents = serverEvtProducer >-> PP.filter (has _LocationEvent) >-> PP.map _location
+
+extractLocZones :: Monad m => Producer ServerEvent m () -> m (Map Int (ZonedLocation))
+extractLocZones serverEvtProducer =
+  PP.fold toMap M.empty identity $ locationEvents serverEvtProducer
+  where
+    toMap acc (Just l@(Location id title), Just v) = M.insert id (ZonedLocation l v) acc
+    toMap acc (k, v) = acc
+    locationEvents serverEvtProducer =
+      serverEvtProducer >-> scanZone >-> PP.map (fromJust . fst) >->
+      PP.map
+        (liftA2
+           (,)
+           (preview (_LocationEvent . _1))
+           (preview (_LocationEvent . _5 . traverse)))
 
 extractItemStats :: Monad m => Producer ServerEvent m () -> Producer ItemStats m ()
 extractItemStats serverEvtProducer = serverEvtProducer >-> PP.filter (has _ItemStatsEvent) >-> PP.map (\(ItemStatsEvent item) -> item)
@@ -234,7 +251,7 @@ generateAliases =
 cacheLocations :: IO ()
 cacheLocations =
   listFilesIn "archive/server-input-log/" >>=
-  extractLocs . parseServerEvents . loadLogs >>=
+  extractLocZones . parseServerEvents . loadLogs >>=
   LC8.writeFile cacheLocationsFile . encodePretty . toJSON
 
 cacheMobData :: Map Text (Maybe Text) -> IO ()
@@ -263,7 +280,7 @@ cacheMobsAliases mobsOnMap =
 loadCachedMobData :: IO (Map (ObjRef Mob InRoomDesc) MobStats)
 loadCachedMobData = fmap fromJust . decodeFileStrict $ cacheMobsDataFile
 
-loadCachedLocations :: IO (Set Location)
+loadCachedLocations :: IO (Map Int ZonedLocation)
 loadCachedLocations = fmap fromJust . decodeFileStrict $ cacheLocationsFile
 
 loadCachedDirections :: IO (Map (Int, Int) RoomDir)
@@ -290,7 +307,7 @@ loadWorld currentDir customMobProperties = do
   questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- pure M.empty--obstaclesOnMap
   mobsData <- loadCachedMobData
-  let worldMap = buildMap locationEvents directions
+  let worldMap = buildMap (S.fromList . fmap (_zloc) . M.elems $ locationEvents) directions
    in return World { _worldMap = worldMap
                    , _locationEvents = locationEvents
                    , _directions = directions
@@ -331,7 +348,7 @@ scanZoneEvent = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan acti
     action (_, prevZone) (ServerEvent evt@(LocationEvent _ _ _ _ Nothing)) = (Just . ServerEvent $ evt & zone .~ prevZone, prevZone)
     action (_, prevZone) e = (Just e, prevZone)
 
-scanZone :: MonadIO m => Pipe ServerEvent (Maybe ServerEvent, Maybe Text) m ()
+scanZone :: Monad m => Pipe ServerEvent (Maybe ServerEvent, Maybe Text) m ()
 scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (Nothing, Nothing) identity
   where
     action :: (Maybe ServerEvent, Maybe Text) -> ServerEvent -> (Maybe ServerEvent, Maybe Text)
@@ -351,8 +368,7 @@ inRoomDescToMobCase mobAliases everAttackedMobs =
    PP.filter allCasesWindow <-<
    scanWindow 7 <-<
    PP.filter isCheckCaseEvt <-<
-   PP.map (fromJust . fst) <-<
-   scanZone <-<
+   PP.map (fromJust . fst) <-< scanZone <-<
    archiveToServerEvents)
   where
     ifEverAttacked :: Maybe (ObjRef Mob Nominative) -> Maybe Text -> Maybe EverAttacked
@@ -422,9 +438,9 @@ parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
 buildMap :: Set Location -> Directions -> Gr () Int
-buildMap locationEvents directions = mkGraph nodes edges
+buildMap locations directions = mkGraph nodes edges
   where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . fmap (\(l, r) -> (l, r)) $ M.keys directions
-        nodes = (\(Location (locId) _) -> (locId, ())) <$> (S.toList locationEvents)
+        nodes = (\(Location (locId) _) -> (locId, ())) <$> (S.toList locations)
         aheadEdge (fromId, toId) = (fromId, toId, 1)
         reverseEdge (fromId, toId) = (toId, fromId, 1)
 
