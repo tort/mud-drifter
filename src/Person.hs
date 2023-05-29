@@ -60,6 +60,21 @@ run (outChan, inChan) task =
           (void (liftIO . atomically . PC.send outChan $ evt))
         _ -> pure ()
 
+runSubtask :: (MonadIO m, Show a) => (Output Event, Output Event, Input Event) -> Pipe Event Event m a -> m ()
+runSubtask (outChan, outPulse, inChan) task =
+  runEffect $ fromInput inChan >-> (task >>= print) >-> sendOutput
+  where
+    sendOutput =
+      forever $
+      await >>= \case
+        PulseEvent -> 
+          (void (liftIO . atomically . PC.send outPulse $ PulseEvent))
+        evt@SendToServer {} ->
+          (void (liftIO . atomically . PC.send outChan $ evt))
+        evt@SendOnPulse {} ->
+          (void (liftIO . atomically . PC.send outChan $ evt))
+        _ -> pure ()
+
 runE :: (MonadIO m, Show a) => (Output Event, Input Event) -> Pipe Event Event (ExceptT Text m) a -> m ()
 runE person task = run person (runExceptP task)
 
@@ -75,14 +90,12 @@ initPerson person = do
     print "connected"
     (outToRemoteConsoleBox, inToRemoteConsoleBox, sealToRemoteConsoleBox) <- spawn' $ newest 100
     let commonOutput = outToRemoteConsoleBox `mappend` outToServerInputParserBox `mappend` outToLoggerBox
-        emitPulseEvery = atomically $ void (PC.send (fst toDrifterBox) PulseEvent)
     async $ runRemoteConsole (outToExecutorBox <> outToBinaryLoggerBox, inToRemoteConsoleBox)
     async $ runEffect $ fromInput inToServerBox >-> toSocket sock
     async $ runEffect $ fromInput inToExecutorBox >-> commandExecutor >-> toOutput outToServerBox >> liftIO (print "executor pipe finished")
     async $ runEffect $ parseServerEvents (fromInput inToServerInputParserBox) >-> PP.map ServerEvent >-> toOutput (fst toDrifterBox <> outToBinaryLoggerBox) *> lift (print "server parser finished")
     async $ runServerInputLogger inToLoggerBox
     async $ runBinaryLogger inToBinaryLoggerBox
-    repeatedTimer emitPulseEvery (sDelay 1)
     runEffect $ fromSocket sock (2^15) >-> toOutput commonOutput >> liftIO (print "remote connection closed") >> liftIO (atomically sealToBinaryLoggerBox)
     performGC
     print "disconnected"
@@ -147,7 +160,6 @@ travelToLoc substr world = action findLocation
       liftIO (putStrLn ("travelling to " <> showt locTo)) >>
       travelAction locTo
     action _ =
-      liftIO (printLocations substr world) >>
       lift (throwError "multiple locations found")
     travelAction to =
       findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _ _) ->
@@ -334,17 +346,17 @@ runTwo :: (Output Event, Input Event) -> Pipe Event Event IO () -> Pipe Event Ev
 runTwo person@(personOut, personIn) task1 task2 =
   spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
     spawn' (newest 100) >>= \(subtaskOut2, subtaskIn2, seal2) ->
-      (async $
-       run (personOut, subtaskIn1) task1 >>
-       print "subtask1 finished" >>
-       (atomically seal1) >>
-       (atomically seal2)) >>
-      (async $
-       run (personOut, subtaskIn2) task2 >>
-       print "subtask2 finished" >>
-       (atomically seal1) >>
-       (atomically seal2)) >>
-      (runEffect $
-       fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
-       print "read finished") >>
-      pure ()
+      repeatedTimer (emitPulseEvery subtaskOut1) (sDelay 1) >>= \timer ->
+        (async $
+         runSubtask (personOut, subtaskOut2, subtaskIn1) task1 >>
+         print "subtask1 finished" >>
+         (atomically seal1) *> (atomically seal2) *> (stopTimer timer)) *>
+        (async $
+         run (personOut, subtaskIn2) task2 >> print "subtask2 finished" >>
+         (atomically seal1) *> (atomically seal2) *> (stopTimer timer)) *>
+        (runEffect $
+         fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
+         print "read finished") *>
+        pure ()
+  where
+    emitPulseEvery out = atomically $ void (PC.send out PulseEvent)

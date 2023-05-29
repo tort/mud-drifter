@@ -8,11 +8,9 @@ g & run $ login
 
 findTravelPath 6212 6000 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
-import Data.Maybe
-import qualified Pipes.Prelude as PP
-import qualified Pipes.Attoparsec as PA
-
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6212" world)
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
@@ -22,6 +20,7 @@ import qualified Pipes.Attoparsec as PA
 import qualified Data.Attoparsec.ByteString as A
 import qualified Data.Attoparsec.ByteString.Char8 as C
 import Text.Pretty.Simple
+import Pipes.Lift
 
 :{
  putStrLn . (L.!! 0) . fromJust . snd =<< (\(l, r) -> (l, ) <$> r) =<<

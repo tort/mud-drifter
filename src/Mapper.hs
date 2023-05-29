@@ -3,9 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Mapper ( printItems
-              , printLocations
-              , locationsBy
+module Mapper (locationsBy
               , findLocationsBy
               , findTravelPath
               , showPath
