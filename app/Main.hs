@@ -1,6 +1,6 @@
 module Main where
 
-import Protolude hiding (Location, Down, Up, Left, Right, Dual)
+import Protolude hiding (Location, Down, Up, Left, Right, Dual, to)
 import qualified Data.Text as T
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
