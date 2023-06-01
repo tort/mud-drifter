@@ -574,7 +574,7 @@ mobAlias i = view (ix i) . itoList  <$> loadCachedMobAliases
 
 findMobData subst =
   T.intercalate "\n" .
-  fmap render .
+  fmap renderMob .
   chunksOf 4 .
   toListOf
     (traversed .
@@ -593,6 +593,6 @@ findMobData subst =
         , alias . traversed . to unObjRef
         ]
 
-render [i, r, n, a] = i <> "\t" <> r <> "\n\t" <> n <> "\n\t" <> a
+renderMob [i, r, n, a] = i <> "\t" <> r <> "\n\t" <> n <> "\n\t" <> a
 
 mobData i = view (ix i) . toList  <$> loadCachedMobData
