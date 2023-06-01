@@ -570,5 +570,25 @@ printLog file =
 findMobAlias substr = L.filter (T.isInfixOf substr . T.toLower . fst . snd) . zip [0..] . itoList  <$> loadCachedMobAliases
 mobAlias i = view (ix i) . itoList  <$> loadCachedMobAliases
 
-findMobData subst = toListOf (traversed . filtered (T.isInfixOf subst . view (_2 . nameCases . inRoomDesc . traversed . to unObjRef))) . zip [0..] . toList <$> loadCachedMobData
+findMobData subst =
+  toListOf
+    (traversed .
+     filtered
+       (anyOf traversed (T.isInfixOf subst) .
+        toListOf
+          (_2 .
+           nameCases .
+           (mconcat
+              [ inRoomDesc . traversed . to unObjRef
+              , nominative . traversed . to unObjRef
+              , genitive . traversed . to unObjRef
+              , accusative . traversed . to unObjRef
+              , dative . traversed . to unObjRef
+              , instrumental . traversed . to unObjRef
+              , prepositional . traversed . to unObjRef
+              , alias . traversed . to unObjRef
+              ])))) .
+  zip [0 ..] . toList <$>
+  loadCachedMobData
+
 mobData i = view (ix i) . toList  <$> loadCachedMobData
