@@ -255,14 +255,14 @@ instance Semigroup (ObjRef a b) where
   left <> right = left
 
 
-data NameCases (a :: ObjType) = NameCases { _inRoomDesc :: Maybe (ObjRef a InRoomDesc)
-                                          , _nominative :: Maybe (ObjRef a Nominative)
-                                          , _genitive :: Maybe (ObjRef a Genitive)
-                                          , _accusative :: Maybe (ObjRef a Accusative)
-                                          , _dative :: Maybe (ObjRef a Dative)
-                                          , _instrumental :: Maybe (ObjRef a Instrumental)
-                                          , _prepositional :: Maybe (ObjRef a Prepositional)
-                                          , _alias :: Maybe (ObjRef a Alias)
+data NameCases (a :: ObjType) = NameCases { _inRoomDesc :: ObjRef a InRoomDesc
+                                          , _nominative :: ObjRef a Nominative
+                                          , _genitive :: ObjRef a Genitive
+                                          , _accusative :: ObjRef a Accusative
+                                          , _dative :: ObjRef a Dative
+                                          , _instrumental :: ObjRef a Instrumental
+                                          , _prepositional :: ObjRef a Prepositional
+                                          , _alias :: ObjRef a Alias
                                           } deriving (Eq, Ord, Show, Generic)
 
 instance Semigroup (NameCases a) where
@@ -276,17 +276,6 @@ instance Semigroup (NameCases a) where
                             , _alias = _alias left <> _alias right
                             }
 
-instance Monoid (NameCases a) where
-  mempty = NameCases { _inRoomDesc = Nothing
-                     , _nominative = Nothing
-                     , _genitive = Nothing
-                     , _accusative = Nothing
-                     , _dative = Nothing
-                     , _instrumental = Nothing
-                     , _prepositional = Nothing
-                     , _alias = Nothing
-                     }
-
 newtype EverAttacked = EverAttacked Bool deriving (Eq, Ord, Show, Generic)
 
 instance Semigroup EverAttacked where
@@ -294,7 +283,7 @@ instance Semigroup EverAttacked where
 
 data MobStats = MobStats { _nameCases :: NameCases Mob
                          , _everAttacked :: Maybe (EverAttacked)
-                         , _zone :: Maybe Text
+                         , _zone :: Text
                          } deriving (Eq, Ord, Generic, Show)
 
   --showt v = T.intercalate "\n" . ((\f -> (maybe "" showt . unObjRef . f) v) <$> [_inRoomDesc, _nominative, _genitive, _accusative, _dative, _instrumental, _prepositional])
@@ -303,12 +292,6 @@ instance Semigroup MobStats where
   left <> right = MobStats { _nameCases = _nameCases left <> _nameCases right
                            , _everAttacked = _everAttacked left <> _everAttacked right
                            }
-
-instance Monoid MobStats where
-  mempty = MobStats { _nameCases = mempty
-                    , _everAttacked = mempty
-                    , _zone = mempty
-                    }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
 

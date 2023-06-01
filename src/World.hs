@@ -241,9 +241,10 @@ cacheMobAliasFile = "cache/mobs-aliases.json"
 
 generateCache :: IO ()
 generateCache =
-  cacheMobsOnMap *> loadCachedMobsOnMap >>= \mobsOnMap ->
-    cacheMobsAliases mobsOnMap *> loadCachedMobAliases >>= \mobsAliases ->
-      cacheLocations *> cacheMobData mobsAliases *> cacheDirections 
+  cacheLocations *> loadCachedLocations >>= \locations ->
+    cacheDirections *> cacheMobsOnMap *> loadCachedMobsOnMap >>= \mobsOnMap ->
+      cacheMobsAliases mobsOnMap *> loadCachedMobAliases >>= \mobsAliases ->
+        cacheMobData mobsAliases locations
 
 generateAliases :: IO ()
 generateAliases =
@@ -256,9 +257,9 @@ cacheLocations =
   extractLocZones . parseServerEvents . loadLogs >>=
   LC8.writeFile cacheLocationsFile . encodePretty . toJSON
 
-cacheMobData :: Map Text (Maybe Text) -> IO ()
-cacheMobData mobsAliases =
-  mobsData mobsAliases >>= LC8.writeFile cacheMobsDataFile . encodePretty . toJSON
+cacheMobData :: Map Text Text -> Map Int ZonedLocation -> IO ()
+cacheMobData mobsAliases locations =
+  mobsData mobsAliases locations >>= LC8.writeFile cacheMobsDataFile . encodePretty . toJSON
 
 cacheDirections :: IO ()
 cacheDirections =
@@ -274,7 +275,7 @@ cacheMobsOnMap =
 
 cacheMobsAliases :: Map (ObjRef 'Mob 'InRoomDesc) (Map Int Int) -> IO ()
 cacheMobsAliases mobsOnMap =
-  (M.union <$> loadCachedMobAliases <*> allMobs) >>= LC8.writeFile cacheMobAliasFile . encodePretty @[(Text , Maybe Text)] . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList
+  (M.union <$> loadCachedRawMobAliases <*> allMobs) >>= LC8.writeFile cacheMobAliasFile . encodePretty @[(Text , Maybe Text)] . L.sortBy (\l r -> compare (snd l) (snd r)) . M.toList
   where
     allMobs :: IO (Map Text (Maybe Text))
     allMobs = M.fromList . fmap ((, Nothing) . unObjRef) . M.keys <$> (pure mobsOnMap)
@@ -291,11 +292,11 @@ loadCachedDirections = fmap fromJust . decodeFileStrict $ cacheDirectionsFile
 loadCachedMobsOnMap :: IO (Map (ObjRef Mob InRoomDesc) (Map (Int) Int))
 loadCachedMobsOnMap = fmap fromJust . decodeFileStrict $ cacheMobsOnMapFile
 
-loadCachedMobAliases :: IO (Map Text (Maybe Text))
-loadCachedMobAliases = M.fromList <$> load
-  where
-    load :: IO [(Text, Maybe Text)]
-    load = fmap fromJust . decodeFileStrict $ cacheMobAliasFile
+loadCachedMobAliases :: IO (Map Text Text)
+loadCachedMobAliases = M.map (fromJust) . M.filter isJust <$> loadCachedRawMobAliases
+
+loadCachedRawMobAliases :: IO (Map Text (Maybe Text))
+loadCachedRawMobAliases = fmap (M.fromList . fromJust) . decodeFileStrict @[(Text, Maybe Text)] $ cacheMobAliasFile
 
 loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
 loadWorld currentDir customMobProperties = do
@@ -325,10 +326,10 @@ loadWorld currentDir customMobProperties = do
 archiveToServerEvents :: Producer ServerEvent IO ()
 archiveToServerEvents = (liftIO $ listFilesIn ("." ++ "/" ++ serverLogDir)) >>= (parseServerEvents . loadLogs)
 
-groupByCase :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> [MobStats] -> Map (ObjRef Mob b) MobStats
-groupByCase getter = M.fromList . fmap (\stats -> (fromJust . getter . _nameCases $ stats, stats)) . L.filter (isJust . getter . _nameCases)
+groupByCase :: (NameCases Mob -> ObjRef Mob b) -> [MobStats] -> Map (ObjRef Mob b) MobStats
+groupByCase getter = M.fromList . fmap (\stats -> (getter . _nameCases $ stats, stats))
 
-regroupTo :: (NameCases Mob -> Maybe (ObjRef Mob b)) -> Map (ObjRef Mob a) MobStats -> Map (ObjRef Mob b) MobStats
+regroupTo :: (NameCases Mob -> ObjRef Mob b) -> Map (ObjRef Mob a) MobStats -> Map (ObjRef Mob b) MobStats
 regroupTo getter = groupByCase getter . fmap snd . M.toList
 
 nominativeToEverAttacked :: IO [(ObjRef Mob Nominative, Text)]
@@ -358,42 +359,45 @@ scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (N
     action (_, prevZone) evt@(LocationEvent _ _ _ _ Nothing) = (Just $ evt & zone .~ prevZone, prevZone)
     action (_, prevZone) e = (Just e, prevZone)
 
-inRoomDescToMobCase :: Map Text (Maybe Text) -> Set (ObjRef Mob Nominative, Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
-inRoomDescToMobCase mobAliases everAttackedMobs =
+inRoomDescToMobCase :: Map Text Text -> Map Int ZonedLocation -> Set (ObjRef Mob Nominative, Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
+inRoomDescToMobCase mobAliases locations everAttackedMobs =
   groupByCase _inRoomDesc <$>
   (PP.toListM $
    PP.map
-     (\p@(nc, z) ->
-        mempty & nameCases .~ nc & zone .~ z &
-        everAttacked .~ (ifEverAttacked (nc ^. nominative) z)) <-<
+     (\p@(nc, locId) ->
+        mempty & nameCases .~ nc &
+        zone .~ (locations ^. at locId . traversed . zone ) &
+        everAttacked .~
+        (ifEverAttacked
+           (nc ^. nominative)
+           (locations ^. at locId . traversed . zone))) <-<
    PP.map windowToCases <-<
    PP.filter allCasesWindow <-<
    scanWindow 7 <-<
    PP.filter isCheckCaseEvt <-<
-   PP.map (fromJust . fst) <-< scanZone <-<
    archiveToServerEvents)
   where
-    ifEverAttacked :: Maybe (ObjRef Mob Nominative) -> Maybe Text -> Maybe EverAttacked
-    ifEverAttacked (Just nominative) (Just zone) =
+    ifEverAttacked ::
+         (ObjRef Mob Nominative) -> Text -> Maybe EverAttacked
+    ifEverAttacked (nominative) (zone) =
       if S.member (nominative, zone) everAttackedMobs
         then Just (EverAttacked True)
         else Nothing
     ifEverAttacked _ _ = Nothing
-    windowToCases :: [ServerEvent] -> (NameCases Mob, Maybe Text)
-    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent _ _ [mob] _ zone] =
+    windowToCases :: [ServerEvent] -> (NameCases Mob, Int)
+    windowToCases [CheckPrepositional prep, CheckInstrumental instr, CheckDative dat, CheckAccusative acc, CheckGenitive gen, CheckNominative nom, LocationEvent (Location locId _) _ [mob] _ _] =
       let nc =
             NameCases
-              { _inRoomDesc = Just mob
-              , _nominative = Just nom
-              , _genitive = Just gen
-              , _accusative = Just acc
-              , _dative = Just dat
-              , _instrumental = Just instr
-              , _prepositional = Just prep
-              , _alias =
-                  fmap ObjRef . join . M.lookup (unObjRef mob) $ mobAliases
+              { _inRoomDesc = mob
+              , _nominative = nom
+              , _genitive = gen
+              , _accusative = acc
+              , _dative = dat
+              , _instrumental = instr
+              , _prepositional = prep
+              , _alias = mobAliases ^. at (unObjRef mob) . traversed . to ObjRef
               }
-       in (nc, zone)
+       in (nc, locId)
     allCasesWindow [prep, instr, dat, acc, gen, nom, (LocationEvent _ _ [mob] _ _)] =
       has _CheckNominative nom &&
       has _CheckGenitive gen &&
@@ -416,13 +420,8 @@ inRoomDescToMobCase mobAliases everAttackedMobs =
       has _CheckInstrumental evt || has _CheckPrepositional evt
     defaultAlias = T.intercalate "." . T.words
 
-mobsData :: Map Text (Maybe Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
-mobsData mobsAliases = S.fromList <$> nominativeToEverAttacked >>= inRoomDescToMobCase mobsAliases
-{-
-  (M.unionWith (<>) <$> nominativeToMobCase <*> nominativeToEverAttacked)
-  where
-    nominativeToMobCase = inRoomDescToMobCase mobsAliases
--}
+mobsData :: Map Text Text -> Map Int ZonedLocation -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
+mobsData mobsAliases locations = S.fromList <$> nominativeToEverAttacked >>= inRoomDescToMobCase mobsAliases locations
 
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
@@ -588,11 +587,11 @@ findMobData subst =
       _2 .
       nameCases .
       mconcat
-        [ inRoomDesc . traversed . to unObjRef
-        , nominative . traversed . to unObjRef
-        , alias . traversed . to unObjRef
+        [ inRoomDesc . to unObjRef
+        , nominative . to unObjRef
+        , alias . to unObjRef
         ]
 
 renderMob [i, r, n, a] = i <> "\t" <> r <> "\n\t" <> n <> "\n\t" <> a
 
-mobData i = view (ix i) . toList  <$> loadCachedMobData
+mobData i = toListOf (ix i) . toList  <$> loadCachedMobData
