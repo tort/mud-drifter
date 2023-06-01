@@ -69,6 +69,8 @@ library:
                 , aeson-pretty
                 , lens-aeson
                 , pretty-simple
+                , streaming
+                , split
                 ]
 
 executables:

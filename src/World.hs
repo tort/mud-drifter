@@ -47,6 +47,8 @@ import Data.Binary.Get
 import Data.Aeson
 import Data.Aeson.Encode.Pretty
 import Text.Pretty.Simple
+import Text.Shakespeare.Text
+import Data.List.Split
 
 data World = World { _worldMap :: WorldMap
                    , _locationEvents :: Map Int (ZonedLocation)
@@ -571,24 +573,26 @@ findMobAlias substr = L.filter (T.isInfixOf substr . T.toLower . fst . snd) . zi
 mobAlias i = view (ix i) . itoList  <$> loadCachedMobAliases
 
 findMobData subst =
+  T.intercalate "\n" .
+  fmap render .
+  chunksOf 4 .
   toListOf
     (traversed .
-     filtered
-       (anyOf traversed (T.isInfixOf subst) .
-        toListOf
-          (_2 .
-           nameCases .
-           (mconcat
-              [ inRoomDesc . traversed . to unObjRef
-              , nominative . traversed . to unObjRef
-              , genitive . traversed . to unObjRef
-              , accusative . traversed . to unObjRef
-              , dative . traversed . to unObjRef
-              , instrumental . traversed . to unObjRef
-              , prepositional . traversed . to unObjRef
-              , alias . traversed . to unObjRef
-              ])))) .
-  zip [0 ..] . toList <$>
-  loadCachedMobData
+     filtered (anyOf traversed (T.isInfixOf subst) . toListOf (mobFields)) .
+     renderFields) .
+  zip @Int [0 ..] . toList <$>
+  loadCachedMobData >>= putStrLn
+  where
+    renderFields = (_1 . to showt) <> mobFields
+    mobFields =
+      _2 .
+      nameCases .
+      mconcat
+        [ inRoomDesc . traversed . to unObjRef
+        , nominative . traversed . to unObjRef
+        , alias . traversed . to unObjRef
+        ]
+
+render [i, r, n, a] = [st|#{i}: #{r}|] <> "\n\t" <> n <> "\n\t" <> a
 
 mobData i = view (ix i) . toList  <$> loadCachedMobData
