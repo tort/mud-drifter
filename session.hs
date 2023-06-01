@@ -1,16 +1,24 @@
+
+:{
 world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
                }
 g <- initPerson genod
+:}
+
 g & run $ login
 
 findTravelPath 6212 6049 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
-loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6212" world)
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6049" world)
+
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToMob world (ObjRef "рогатый жук") *> pure ())
+
+runE g $ travelToMob world (ObjRef "Рогатый жук воинственно водит усами здесь.")
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 

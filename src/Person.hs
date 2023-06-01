@@ -354,6 +354,11 @@ runZone world startFrom = travelToLoc startFrom world *>
   where path = zonePath world startFrom
 -}
 
+printBuffered :: IO () -> IO ()
+printBuffered io =
+  hGetBuffering stdout >>= \bmode ->
+    hSetBuffering stdout LineBuffering *> io *> hSetBuffering stdout bmode
+
 runTwo :: (Output Event, Input Event) -> Pipe Event Event IO () -> Pipe Event Event IO () -> IO ()
 runTwo person@(personOut, personIn) task1 task2 =
   spawn' (newest 100) >>= \(subtaskOut1, subtaskIn1, seal1) ->
@@ -361,14 +366,14 @@ runTwo person@(personOut, personIn) task1 task2 =
       repeatedTimer (emitPulseEvery subtaskOut1) (sDelay 1) >>= \timer ->
         (async $
          runSubtask (personOut, subtaskOut2, subtaskIn1) task1 >>
-         print "subtask1 finished" >>
-         (atomically seal1) *> (atomically seal2) *> (stopTimer timer)) *>
+         (atomically seal1) *> (atomically seal2) *> printBuffered (print "subtask1 finished")) *>
         (async $
-         run (personOut, subtaskIn2) task2 >> print "subtask2 finished" >>
-         (atomically seal1) *> (atomically seal2) *> (stopTimer timer)) *>
+         run (personOut, subtaskIn2) task2 >>
+         (atomically seal1) *> (atomically seal2) *> printBuffered (print "subtask2 finished")) *>
         (runEffect $
          fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2) >>
          print "read finished") *>
+        stopTimer timer *>
         pure ()
   where
     emitPulseEvery out = atomically $ void (PC.send out PulseEvent)
