@@ -593,6 +593,6 @@ findMobData subst =
         , alias . traversed . to unObjRef
         ]
 
-render [i, r, n, a] = [st|#{i}: #{r}|] <> "\n\t" <> n <> "\n\t" <> a
+render [i, r, n, a] = i <> "\t" <> r <> "\n\t" <> n <> "\n\t" <> a
 
 mobData i = view (ix i) . toList  <$> loadCachedMobData
