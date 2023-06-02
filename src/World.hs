@@ -571,6 +571,19 @@ findMobData subst =
         , alias . to unObjRef
         ]
 
+findLocation subst =
+  T.intercalate "\n" .
+  fmap renderLocation .
+  M.elems . M.filter (T.isInfixOf subst . _locationTitle . _zloc) <$>
+  loadCachedLocations >>=
+  putStrLn
+
 renderMob [i, r, n, a] = i <> "\t" <> r <> "\n\t" <> n <> "\n\t" <> a
+
+renderLocation :: ZonedLocation -> Text
+renderLocation loc = showt id <> "\t" <> z <> "\t" <> title
+  where id = loc ^. zloc . locationId
+        title = loc ^. zloc . locationTitle
+        z = loc ^. zone
 
 mobData i = toListOf (ix i) . toList  <$> loadCachedMobData
