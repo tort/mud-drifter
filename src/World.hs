@@ -375,17 +375,20 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
         else Nothing
     ifEverAttacked _ _ = Nothing
     windowToCases :: [ServerEvent] -> Maybe MobStats
-    windowToCases [prep, instr, dat, acc, gen, nom, LocationEvent (Location locId _) _ [mob] _ _] =
+    windowToCases [prep, instr, dat, acc, gen, nom, loc {-LocationEvent (Location locId _) _ [mob] _ _-}] =
       MobStats <$>
-      (NameCases <$> Nothing <*> (nom ^? _CheckNominative) <*>
+      (NameCases <$> (loc ^. mobs . to singleMob) <*> (nom ^? _CheckNominative) <*>
        (gen ^? _CheckGenitive) <*>
        (acc ^? _CheckAccusative) <*>
        (dat ^? _CheckDative) <*>
        (instr ^? _CheckInstrumental) <*>
        (prep ^? _CheckPrepositional) <*>
-       (mobAliases ^? at (unObjRef mob) . traversed . to ObjRef)) <*>
+       (loc ^. mobs . to singleMob >>= \m -> mobAliases ^? at (unObjRef m) . traversed . to ObjRef)) <*>
       Nothing <*>
-      (locations ^? at locId . traversed . zone)
+      (loc ^? _LocationEvent . _1 . locationId >>= \locId -> locations ^? at locId . traversed . zone)
+    singleMob [] = Nothing
+    singleMob [mob] = Just mob
+    singleMob _ = Nothing
     scanWindow n = PP.scan toWindow [] identity
       where
         toWindow acc event
