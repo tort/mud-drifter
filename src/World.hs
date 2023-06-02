@@ -362,16 +362,13 @@ scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (N
 inRoomDescToMobCase :: Map Text Text -> Map Int ZonedLocation -> Set (ObjRef Mob Nominative, Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
 inRoomDescToMobCase mobAliases locations everAttackedMobs =
   groupByCase _inRoomDesc <$>
-  (PP.toListM $
-   PP.map (fromJust) <-<
-   PP.filter (isJust) <-<
+  (PP.toListM $ PP.map (fromJust) <-< PP.filter (isJust) <-<
    PP.map windowToCases <-<
    scanWindow 7 <-<
    PP.filter isCheckCaseEvt <-<
    archiveToServerEvents)
   where
-    ifEverAttacked ::
-         (ObjRef Mob Nominative) -> Text -> Maybe EverAttacked
+    ifEverAttacked :: (ObjRef Mob Nominative) -> Text -> Maybe EverAttacked
     ifEverAttacked (nominative) (zone) =
       if S.member (nominative, zone) everAttackedMobs
         then Just (EverAttacked True)
@@ -379,17 +376,16 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
     ifEverAttacked _ _ = Nothing
     windowToCases :: [ServerEvent] -> Maybe MobStats
     windowToCases [prep, instr, dat, acc, gen, nom, LocationEvent (Location locId _) _ [mob] _ _] =
-      MobStats <$> 
-      (NameCases <$> mconcat
-      [ Nothing
-      , nom ^? _CheckNominative . to unObjRef . to ObjRef
-      , gen ^? _CheckGenitive . to unObjRef . to ObjRef
-      , acc ^? _CheckAccusative . to unObjRef . to ObjRef
-      , dat ^? _CheckDative . to unObjRef . to ObjRef
-      , instr ^? _CheckInstrumental . to unObjRef . to ObjRef
-      , prep ^? _CheckPrepositional . to unObjRef . to ObjRef
-      , mobAliases ^? at (unObjRef mob) . traversed . to ObjRef
-      ]) <*> Nothing <*> (locations ^? at locId . zone)
+      MobStats <$>
+      (NameCases <$> Nothing <*> (nom ^? _CheckNominative) <*>
+       (gen ^? _CheckGenitive) <*>
+       (acc ^? _CheckAccusative) <*>
+       (dat ^? _CheckDative) <*>
+       (instr ^? _CheckInstrumental) <*>
+       (prep ^? _CheckPrepositional) <*>
+       (mobAliases ^? at (unObjRef mob) . traversed . to ObjRef)) <*>
+      Nothing <*>
+      (locations ^? at locId . traversed . zone)
     scanWindow n = PP.scan toWindow [] identity
       where
         toWindow acc event
@@ -397,11 +393,11 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
           | otherwise = event : take (n - 1) acc
     isCheckCaseEvt evt = has _LocationEvent evt || isCaseEvt evt
     isCaseEvt evt =
-      has _CheckNominative evt ||
-      has _CheckGenitive evt ||
+      has _CheckNominative evt || has _CheckGenitive evt ||
       has _CheckAccusative evt ||
       has _CheckDative evt ||
-      has _CheckInstrumental evt || has _CheckPrepositional evt
+      has _CheckInstrumental evt ||
+      has _CheckPrepositional evt
     defaultAlias = T.intercalate "." . T.words
 
 mobsData :: Map Text Text -> Map Int ZonedLocation -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
