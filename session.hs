@@ -1,22 +1,57 @@
 
-:{
 world <- loadWorld "/Users/tort/workspace/mud-drifter/" M.empty
+
+:{
 genod = Person { personName = "генод"
                , personPassword = "каркасный"
                , residence = MudServer "bylins.su" 4000
                }
-g <- initPerson genod
 :}
 
+g <- initPerson genod
 g & run $ login
+
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ wellQuest world *> pure ())
+
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> (g & run $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases))
 
 findTravelPath 6212 6049 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
 
-loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6049" world)
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6049" world *> pure ())
 
-loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToMob world (ObjRef "рогатый жук") *> pure ())
+g & runE $ travelToLoc "6039" world 
+
+:{
+let wellQuest world =
+      travelToMob world (ObjRef "рогатый жук") *>
+      ddo "уб жук" *>
+      travelToLoc "6201" world *>
+      ddo "откр две" *>
+      travelToLoc "6233" world *>
+      ddo "отпер ящ" *>
+      waitMsg "Вы отперли ящик и открыли его." *>
+        ddo "взять все ящ" *>
+        travelToLoc "6219" world *>
+        ddo "отпер дверь" *>
+        ddo "откр дверь" *>
+        travelToLoc "6226" world *>
+        ddo "уб агресс" *>
+        travelToLoc "6236" world *>
+        ddo "держ ведро" *>
+        ddo "набрать воды в ведро" *>
+        travelToLoc "6039" world *>
+        ddo "прод все.улит" *>
+        travelToLoc "6049" world 
+    waitMsg msg = await >>= \case
+      ServerEvent (UnknownServerEvent txt) -> if C8.isInfixOf msg txt then pure () else waitMsg txt
+      _ -> waitMsg msg
+:}
+ 
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ wellQuest *> pure ())
+
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToMob world (ObjRef "агрессивная плесень") *> pure ())
 
 runE g $ travelToMob world (ObjRef "Рогатый жук воинственно водит усами здесь.")
 

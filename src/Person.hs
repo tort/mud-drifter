@@ -113,7 +113,7 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
 ddo :: Monad m => Text -> Pipe Event Event m ()
 ddo = Pipes.yield . SendToServer
 checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
-identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text (Maybe Text) -> Pipe Event Event IO ()
+identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text Text -> Pipe Event Event IO ()
 identifyNameCases knownMobs aliases =
   await >>= \case
     (ServerEvent l@(LocationEvent _ _ [mob] _ _)) ->
@@ -122,10 +122,11 @@ identifyNameCases knownMobs aliases =
         (False, Just alias) ->
           (checkCases alias) *> identifyNameCases (S.insert mob knownMobs) aliases
         _ -> identifyNameCases knownMobs aliases
+    PulseEvent -> yield PulseEvent *> identifyNameCases knownMobs aliases
     _ -> identifyNameCases knownMobs aliases
   where
     isKnown mob = S.member mob knownMobs
-    getAlias mob = join . M.lookup (unObjRef mob) $ aliases
+    getAlias mob = M.lookup (unObjRef mob) $ aliases
 
 findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
 findCurrentLoc = yield (SendToServer "смотреть") >> go
@@ -369,5 +370,28 @@ runTwo person@(personOut, personIn) task1 task2 =
          print "read finished") *>
         stopTimer timer *>
         pure ()
+  where
+    emitPulseEvery out = atomically $ void (PC.send out PulseEvent)
+
+runThree :: (Output Event, Input Event) -> Pipe Event Event IO () -> Pipe Event Event IO () -> Pipe Event Event IO () -> IO ()
+runThree person@(personOut, personIn) task1 task2 task3 =
+  spawn' (newest 10) >>= \(subtaskOut1, subtaskIn1, seal1) ->
+    spawn' (newest 10) >>= \(subtaskOut2, subtaskIn2, seal2) ->
+      spawn' (newest 10) >>= \(subtaskOut3, subtaskIn3, seal3) ->
+        repeatedTimer (emitPulseEvery subtaskOut1) (sDelay 1) >>= \timer ->
+          (async $
+          runSubtask (personOut, subtaskOut2, subtaskIn1) task1 >>
+          (atomically seal1) *> (atomically seal2) *> (atomically seal3) *> printBuffered (print "subtask1 finished")) *>
+          (async $
+          runSubtask (personOut, subtaskOut3, subtaskIn2) task2 >>
+          (atomically seal1) *> (atomically seal2) *> (atomically seal3) *> printBuffered (print "subtask2 finished")) *>
+          (async $
+          run (personOut, subtaskIn3) task3 >>
+          (atomically seal1) *> (atomically seal2) *> (atomically seal3) *> printBuffered (print "subtask3 finished")) *>
+          (runEffect $
+          fromInput personIn >-> toOutput (subtaskOut1 <> subtaskOut2 <> subtaskOut3) >>
+          print "read finished") *>
+          stopTimer timer *>
+          pure ()
   where
     emitPulseEvery out = atomically $ void (PC.send out PulseEvent)
