@@ -44,9 +44,9 @@ serverInputParser =
     , missEventGenitive
     , castNominative
     , ripMob
+    , cantSeeTarget
     , mobWentIn
     , mobWentOut
-    --, hitEvent
     {-
     , listEquipment
     , listInventory
@@ -55,7 +55,6 @@ serverInputParser =
     , darkness
     , obstacleEvent
     , cantGoDir
-    , cantSeeTarget
     , darkInDirection
     , glanceDir
     , pickUp

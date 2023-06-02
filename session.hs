@@ -11,17 +11,27 @@ genod = Person { personName = "генод"
 g <- initPerson genod
 g & run $ login
 
+-- run quest
 loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ wellQuest world *> pure ())
 
+-- roam
+loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
+
+-- explore
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> (g & run $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases))
 
 findTravelPath 6212 6049 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
-loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
-
+-- goto rent
 loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6049" world *> pure ())
 
-g & runE $ travelToLoc "6039" world 
+import Data.Maybe
+import qualified Pipes.Prelude as PP
+import qualified Pipes.Attoparsec as PA
+import qualified Data.Attoparsec.ByteString as A
+import qualified Data.Attoparsec.ByteString.Char8 as C
+import Text.Pretty.Simple
+import Pipes.Lift
 
 :{
 let wellQuest world =
@@ -47,6 +57,7 @@ let wellQuest world =
     waitMsg msg = await >>= \case
       ServerEvent (UnknownServerEvent txt) -> if C8.isInfixOf msg txt then pure () else waitMsg txt
       _ -> waitMsg msg
+    rent = ddo "постой" *> ddo "0"
 :}
  
 loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ wellQuest *> pure ())
@@ -56,14 +67,6 @@ loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCached
 runE g $ travelToMob world (ObjRef "Рогатый жук воинственно водит усами здесь.")
 
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
-
-import Data.Maybe
-import qualified Pipes.Prelude as PP
-import qualified Pipes.Attoparsec as PA
-import qualified Data.Attoparsec.ByteString as A
-import qualified Data.Attoparsec.ByteString.Char8 as C
-import Text.Pretty.Simple
-import Pipes.Lift
 
 :{
  putStrLn . (L.!! 0) . fromJust . snd =<< (\(l, r) -> (l, ) <$> r) =<<
