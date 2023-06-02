@@ -282,16 +282,11 @@ instance Semigroup EverAttacked where
   (EverAttacked left) <> (EverAttacked right) = EverAttacked $ left || right
 
 data MobStats = MobStats { _nameCases :: NameCases Mob
-                         , _everAttacked :: Maybe (EverAttacked)
+                         , _everAttacked :: Bool
                          , _zone :: Text
                          } deriving (Eq, Ord, Generic, Show)
 
   --showt v = T.intercalate "\n" . ((\f -> (maybe "" showt . unObjRef . f) v) <$> [_inRoomDesc, _nominative, _genitive, _accusative, _dative, _instrumental, _prepositional])
-
-instance Semigroup MobStats where
-  left <> right = MobStats { _nameCases = _nameCases left <> _nameCases right
-                           , _everAttacked = _everAttacked left <> _everAttacked right
-                           }
 
 type MobRoomDesc = ObjRef Mob InRoomDesc
 

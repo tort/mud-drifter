@@ -368,12 +368,6 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
    PP.filter isCheckCaseEvt <-<
    archiveToServerEvents)
   where
-    ifEverAttacked :: (ObjRef Mob Nominative) -> Text -> Maybe EverAttacked
-    ifEverAttacked (nominative) (zone) =
-      if S.member (nominative, zone) everAttackedMobs
-        then Just (EverAttacked True)
-        else Nothing
-    ifEverAttacked _ _ = Nothing
     windowToCases :: [ServerEvent] -> Maybe MobStats
     windowToCases [prep, instr, dat, acc, gen, nom, loc {-LocationEvent (Location locId _) _ [mob] _ _-}] =
       (loc ^? _LocationEvent . _1 . locationId >>= \locId -> locations ^? at locId . traversed . zone) >>= \zone ->
@@ -385,7 +379,7 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
        (instr ^? _CheckInstrumental) <*>
        (prep ^? _CheckPrepositional) <*>
        (loc ^. mobs . to singleMob >>= \m -> mobAliases ^? at (unObjRef m) . traversed . to ObjRef)) <*>
-      (nom ^? _CheckNominative >>= \nom -> everAttackedMobs ^. contains (nom, zone)) <*>
+      (nom ^? _CheckNominative >>= \nom -> everAttackedMobs ^? contains (nom, zone)) <*>
       (Just zone)
     singleMob [] = Nothing
     singleMob [mob] = Just mob
