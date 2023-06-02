@@ -376,6 +376,7 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
     ifEverAttacked _ _ = Nothing
     windowToCases :: [ServerEvent] -> Maybe MobStats
     windowToCases [prep, instr, dat, acc, gen, nom, loc {-LocationEvent (Location locId _) _ [mob] _ _-}] =
+      (loc ^? _LocationEvent . _1 . locationId >>= \locId -> locations ^? at locId . traversed . zone) >>= \zone ->
       MobStats <$>
       (NameCases <$> (loc ^. mobs . to singleMob) <*> (nom ^? _CheckNominative) <*>
        (gen ^? _CheckGenitive) <*>
@@ -384,8 +385,8 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
        (instr ^? _CheckInstrumental) <*>
        (prep ^? _CheckPrepositional) <*>
        (loc ^. mobs . to singleMob >>= \m -> mobAliases ^? at (unObjRef m) . traversed . to ObjRef)) <*>
-      Nothing <*>
-      (loc ^? _LocationEvent . _1 . locationId >>= \locId -> locations ^? at locId . traversed . zone)
+      (nom ^? _CheckNominative >>= \nom -> everAttackedMobs ^. contains (nom, zone)) <*>
+      (Just zone)
     singleMob [] = Nothing
     singleMob [mob] = Just mob
     singleMob _ = Nothing
