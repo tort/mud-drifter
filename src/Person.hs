@@ -2,7 +2,7 @@
 
 module Person where
 
-import Protolude hiding (yield, Location, Down, Up, Left, Right, Dual)
+import Protolude hiding (yield, Location, Down, Up, Left, Right, Dual, to)
 import qualified Data.Text as T
 import qualified Data.Set as S
 import qualified Data.Map.Strict as M
@@ -192,10 +192,8 @@ mapNominatives knownMobs locations = PP.map mapEvt
     knownNominatives =
       M.fromList . (fmap) fromJust .
       (fmap)
-        (\s ->
-           (\n z d -> ((n, z), d)) <$> (s ^. nameCases . nominative) <*>
-           (s ^. zone) <*>
-           (s ^. nameCases . inRoomDesc)) .
+        (\s -> Just ((s ^. nameCases . nominative, s ^. zone), s ^. nameCases . inRoomDesc)
+           ) .
       M.elems $
       knownMobs
     mapEvt evt@(ServerEvent (LocationEvent l@(Location locId title) objects mobs exits zone)) =
@@ -243,14 +241,14 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
           yield (SendToServer "смотр") *> awaitTargets mobs False
         evt@(ServerEvent (MobWentOut mobNom)) -> do
           let newMobs =
-                case _inRoomDesc . _nameCases =<<
+                case pure . _inRoomDesc . _nameCases =<<
                      (M.!?) (_nominativeToMob world) mobNom of
                   Nothing -> mobs
                   Just deadMob -> L.delete deadMob mobs
            in awaitTargets newMobs inFight
         evt@(ServerEvent (MobWentIn mobNom)) -> do
           let newMobs =
-                case _inRoomDesc . _nameCases =<<
+                case pure . _inRoomDesc . _nameCases =<<
                      (M.!?) (_nominativeToMob world) mobNom of
                   Nothing -> mobs
                   Just deadMob -> L.insert deadMob mobs
@@ -258,7 +256,7 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
         evt@(ServerEvent e@(MobRipEvent mr)) -> do
           (liftIO . genericPrintT) e
           let newMobs =
-                case _inRoomDesc . _nameCases =<<
+                case pure . _inRoomDesc . _nameCases =<<
                      (M.!?) (_nominativeToMob world) mr of
                   Nothing -> mobs
                   Just deadMob -> L.delete deadMob mobs
@@ -286,20 +284,16 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
             (_, True) -> awaitTargets mobs inFight
             _ -> yield PulseEvent *> awaitTargets mobs inFight
         evt -> awaitTargets mobs inFight
-    findAlias :: ObjRef Mob InRoomDesc -> Maybe (ObjRef Mob Alias, EverAttacked)
+    findAlias :: ObjRef Mob InRoomDesc -> Maybe (ObjRef Mob Alias, Bool)
     findAlias mobRef =
-      (liftA2) (\l r -> (,) <$> l <*> r) (_alias . _nameCases) (_everAttacked) =<<
-      M.lookup mobRef (_inRoomDescToMob world)
+      liftA2 (,) (_alias . _nameCases) (_everAttacked) <$> M.lookup mobRef (_inRoomDescToMob world)
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
-    chooseTarget =
-      fmap (fst) .
-      join .
-      find (\opt -> fmap snd opt == Just (EverAttacked (True))) . fmap findAlias
+    chooseTarget = preview (traversed . to findAlias . traversed . _1)
 
 travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (Int)
 travelToMob world mobNom = pipe mobArea
   where mobArea :: Maybe (Map (Int) Int)
-        mobArea = (_inRoomDescToMobOnMap world M.!?) =<< _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
+        mobArea = (_inRoomDescToMobOnMap world M.!?) =<< pure . _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
         pipe (Just area)
           | M.size area < 1 = lift $ throwError "no habitation found"
           | M.size area > 1 = lift $ throwError "multiple habitation locations found"
