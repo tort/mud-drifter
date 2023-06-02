@@ -369,7 +369,7 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
    archiveToServerEvents)
   where
     windowToCases :: [ServerEvent] -> Maybe MobStats
-    windowToCases [prep, instr, dat, acc, gen, nom, loc {-LocationEvent (Location locId _) _ [mob] _ _-}] =
+    windowToCases [prep, instr, dat, acc, gen, nom, loc] =
       (loc ^? _LocationEvent . _1 . locationId >>= \locId -> locations ^? at locId . traversed . zone) >>= \zone ->
       MobStats <$>
       (NameCases <$> (loc ^. mobs . to singleMob) <*> (nom ^? _CheckNominative) <*>
@@ -381,6 +381,7 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
        (loc ^. mobs . to singleMob >>= \m -> mobAliases ^? at (unObjRef m) . traversed . to ObjRef)) <*>
       (nom ^? _CheckNominative >>= \nom -> everAttackedMobs ^? contains (nom, zone)) <*>
       (Just zone)
+    windowToCases _ = Nothing
     singleMob [] = Nothing
     singleMob [mob] = Just mob
     singleMob _ = Nothing

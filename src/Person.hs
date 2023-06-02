@@ -288,7 +288,7 @@ killEmAll world = forever lootAll >-> awaitTargets [] False
     findAlias mobRef =
       liftA2 (,) (_alias . _nameCases) (_everAttacked) <$> M.lookup mobRef (_inRoomDescToMob world)
     chooseTarget :: [ObjRef Mob InRoomDesc] -> Maybe (ObjRef Mob Alias)
-    chooseTarget = preview (traversed . to findAlias . traversed . _1)
+    chooseTarget = preview (traversed . to findAlias . traversed . filtered (view _2) . _1)
 
 travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (Int)
 travelToMob world mobNom = pipe mobArea
