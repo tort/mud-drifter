@@ -20,7 +20,7 @@ loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo 
 -- explore
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> (g & run $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases))
 
-findTravelPath 6212 6049 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
+findTravelPath 6049 5000 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
 -- goto rent
 loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6049" world *> pure ())
@@ -112,54 +112,6 @@ fmap L.nub $ PP.toListM $ PP.map (runReader (preview (_LocationEvent . _5 . trav
 
 -- calculate unidentified mobs
 mobsToIdentify <- (\im dm -> M.keys dm L.\\ M.keys im) <$> loadCachedMobData <*> loadCachedMobsOnMap
-
-:set -XLambdaCase
-:set -XDataKinds
-import TextShow
-import Pipes.Lift
-import Data.Map.Strict ((!))
-import qualified Data.Map.Strict as M
-import qualified Data.List as L
-import qualified Data.Set as S
-import qualified Data.Text as T
-import qualified Pipes.Prelude as PP
-import Control.Lens
-import Person
-import World
-import Event
-import Mapper
-import Logger
-import qualified Pipes.ByteString as PBS
-
-:{
-let rentLocation = "5000"
-    bankLocation = "5032"
-    chestLocation = "5114"
-    tavernLoc = "6000"
-    wellLoc = "6035"
-    abandonedHouseEntrance = 5100
-    holdCandle = "держать свечка"
-    unholdCandle = "снять свечка"
-    takeAllFromChest = "взять все ящик"
-    ddo :: Monad m => Text -> Pipe Event Event m ()
-    ddo = yield . SendToServer
-    checkCases mob = yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
-    mobStats :: Text -> Text -> (ObjRef Mob InRoomDesc, MobStats)
-    mobStats desc alias = (ObjRef desc, nameCases .~ cases $ mempty)
-      where cases = inRoomDesc ?~ (ObjRef desc) $ mempty
-    hardcodedProperties :: Map (ObjRef Mob InRoomDesc) MobStats
-    hardcodedProperties = M.fromList [ mobStats "Серая мышь юркнула здесь." "мышь.серая"
-                                     , mobStats "(летит) Веселая пчелка собирает пыльцу." "пчела"
-                                     , mobStats "Мышь-полевка быстро бежит к своей норке." "мышка"
-                                     , mobStats "(летит) Большой рой комаров мешает тут Мише." "рой.комар"
-                                     , mobStats "Речная крыса прошмыгнула у Ваших ног." "ондатра"
-                                     , mobStats "Небольшая безногая ящерица проскользнула у Ваших ног." "медянка"
-                                     , mobStats "(летит) Маленький воробей летает здесь." "воробей"
-                                     , mobStats "Огородник-работяга ухаживает за огородом." "огородник"
-                                     , mobStats "Мышь-полевка бегает здесь." "полевка"
-                                     , mobStats "Большой дикий бык величаво пережевывает траву здесь." "бык"
-                                     ]
-:}
 
 stack test --file-watch
 
