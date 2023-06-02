@@ -238,8 +238,7 @@ killEmAll world = forever lootAll >-> awaitTargets [] False 0
     awaitTargets mobs inFight killAttempts =
       await >>= \case
         ServerEvent e@CantSeeTarget ->
-          (liftIO . genericPrintT) e *> yield (SendToServer "смотр") *>
-          awaitTargets mobs False killAttempts
+          yield (SendToServer "смотр") *> awaitTargets mobs False killAttempts
         evt@(ServerEvent (MobWentOut mobNom)) -> do
           let newMobs =
                 case pure . _inRoomDesc . _nameCases =<<
@@ -255,25 +254,18 @@ killEmAll world = forever lootAll >-> awaitTargets [] False 0
                   Just deadMob -> L.insert deadMob mobs
            in awaitTargets newMobs inFight killAttempts
         evt@(ServerEvent e@(MobRipEvent mr)) -> do
-          (liftIO . genericPrintT) e
           let newMobs =
                 case pure . _inRoomDesc . _nameCases =<<
                      (M.!?) (_nominativeToMob world) mr of
                   Nothing -> mobs
                   Just deadMob -> L.delete deadMob mobs
            in awaitTargets newMobs False killAttempts
-        evt@(ServerEvent e@FightPromptEvent {}) ->
-          (liftIO . genericPrintT) e *> awaitTargets mobs True 0
+        evt@(ServerEvent e@FightPromptEvent {}) -> awaitTargets mobs True 0
         evt@(ServerEvent e@PromptEvent {}) ->
-          (liftIO . genericPrintT) e *> awaitTargets mobs False killAttempts
-        evt@(ServerEvent (LocationEvent _ _ [] _ _)) -> awaitTargets [] False killAttempts
+          awaitTargets mobs False killAttempts
+        evt@(ServerEvent (LocationEvent _ _ [] _ _)) ->
+          awaitTargets [] False killAttempts
         evt@(ServerEvent (LocationEvent _ _ lmobs _ zone)) ->
-          traverse_
-            (\m ->
-               liftIO
-                 (putStrLn
-                    ("Zone: " <> showt zone <> "Target: " <> (unObjRef m))))
-            lmobs *>
           awaitTargets lmobs inFight killAttempts
         PulseEvent ->
           case (chooseTarget mobs, inFight) of
