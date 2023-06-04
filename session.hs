@@ -12,7 +12,7 @@ g <- initPerson genod
 g & run $ login
 
 -- run quest
-loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP . runReader world $ Quest.oldBoots *> Quest.whiteSpider *> Quest.fisherman *> Quest.well *>  travelToLoc "5000" *> pure ())
+loadWorld >>= \world -> loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ Quest.oldBoots world *> Quest.whiteSpider world *> Quest.fisherman world *> Quest.well world *>  travelToLoc "5000" world *> pure ())
 
 -- roam
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)

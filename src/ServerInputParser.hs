@@ -881,6 +881,8 @@ postWelcome = do
     A.count 4 skipLine
     return PostWelcome
 
+
+
 glanceDir :: A.Parser ServerEvent
 glanceDir = do cs >> "0;33m"
                dir <- direction

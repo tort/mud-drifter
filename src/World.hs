@@ -53,10 +53,6 @@ import Data.List.Split
 data World = World { _worldMap :: WorldMap
                    , _locationEvents :: Map Int (ZonedLocation)
                    , _directions :: Directions
-                   , _obstaclesOnMap :: Map (Int, RoomDir) Text
-                   , _questActions :: Map (Int, Int) [Event]
-                   , _itemsOnMap :: Map ServerEvent (Map (Int) Int)
-                   , _itemStats :: [ItemStats]
                    , _inRoomDescToMobOnMap :: Map (ObjRef Mob InRoomDesc) (Map (Int) Int)
                    , _inRoomDescToMob :: Map (ObjRef Mob InRoomDesc) MobStats
                    , _nominativeToMob :: Map (ObjRef Mob Nominative) MobStats
@@ -298,27 +294,17 @@ loadCachedMobAliases = M.map (fromJust) . M.filter isJust <$> loadCachedRawMobAl
 loadCachedRawMobAliases :: IO (Map Text (Maybe Text))
 loadCachedRawMobAliases = fmap (M.fromList . fromJust) . decodeFileStrict @[(Text, Maybe Text)] $ cacheMobAliasFile
 
-loadWorld :: FilePath -> Map (ObjRef Mob InRoomDesc) MobStats -> IO World
-loadWorld currentDir customMobProperties = do
-  serverLogFiles <- listFilesIn (currentDir ++ "/" ++ serverLogDir)
-  evtLogFiles <- listFilesIn (currentDir ++ "/" ++ evtLogDir)
+loadWorld :: IO World
+loadWorld = do
   directions <- loadCachedDirections
   locationEvents <- loadCachedLocations
-  itemsStats <- pure []--PP.toListM $ (extractItemStats . parseServerEvents . loadLogs) serverLogFiles
-  itemsOnMap <- pure M.empty--(discoverItems . parseServerEvents . loadLogs) serverLogFiles
   mobsOnMap <- loadCachedMobsOnMap
-  questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
-  obstaclesOnMap <- pure M.empty--obstaclesOnMap
   mobsData <- loadCachedMobData
   let worldMap = buildMap (S.fromList . fmap (_zloc) . M.elems $ locationEvents) ((M.keys (travelActions @IO)) <> (M.keys directions))
    in return World { _worldMap = worldMap
                    , _locationEvents = locationEvents
                    , _directions = directions
-                   , _itemsOnMap = itemsOnMap
-                   , _obstaclesOnMap = obstaclesOnMap
-                   , _itemStats = itemsStats
                    , _inRoomDescToMobOnMap = mobsOnMap
-                   , _questActions = questActions
                    , _inRoomDescToMob = mobsData
                    , _nominativeToMob = regroupTo _nominative mobsData
                    }
@@ -402,6 +388,7 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
 mobsData :: Map Text Text -> Map Int ZonedLocation -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
 mobsData mobsAliases locations = S.fromList <$> nominativeToEverAttacked >>= inRoomDescToMobCase mobsAliases locations
 
+{-
 printWorldStats :: World -> Producer Event IO ()
 printWorldStats world = yield $ ConsoleOutput worldStats
   where worldStats = encodeUtf8 $ locationEventsStats <> directionsStats <> items <> itemsStats <> mobs
@@ -410,6 +397,7 @@ printWorldStats world = yield $ ConsoleOutput worldStats
         items = (show . length . _itemsOnMap) world <> " предметов найдено\n"
         itemsStats = (show . length . _itemStats) world <> " предметов опознано\n"
         mobs = (show . length . _inRoomDescToMobOnMap) world <> " мобов найдено\n"
+-}
 
 parseServerEvents :: MonadIO m => Producer ByteString m () -> Producer ServerEvent m ()
 parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
@@ -436,6 +424,7 @@ zoneMap world anyZoneLocId = mkGraph nodes edges
     dirInZone (lid, rid) = isInZone lid && isInZone rid
     isInZone locId = (div locId 100) == (div anyZoneLocId 100)
 
+{-
 openObstacle :: MonadIO m => World -> ServerEvent -> RoomDir -> Pipe Event Event m ()
 openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exits locEvt)
                                              then findObstacleName >>= removeObstacle
@@ -450,6 +439,7 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
         obstaclesOnMap = _obstaclesOnMap world
         removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> genericShowt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
+-}
 
 binarizeServerLog :: IO ()
 binarizeServerLog =
@@ -551,6 +541,7 @@ travelActions = M.fromList [ ((6201, 6202), ddo "откр дверца" *> ddo "
                            , ((5028, 5027), ddo "откр ворота" *> ddo "юг")
                            , ((5027, 5028), ddo "откр ворота" *> ddo "север")
                            , ((5102, 5107), ddo "откр дверь" *> ddo "север")
+                           , ((5102, 5103), ddo "откр дверь" *> ddo "юг")
                            , ((6219, 6223), ddo "отпер дверь" *> ddo "откр дверь" *> ddo "юг")
                            , ((6053, 5054), ddo "держ свеч" *> ddo "дать 14 кун след" *> ddo "сн свеч")
                            , ((5054, 6053), ddo "держ свеч" *> ddo "дать 14 кун след" *> ddo "сн свеч")
