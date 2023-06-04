@@ -110,8 +110,6 @@ login = await >>= \case (ServerEvent CodepagePrompt) -> yield (SendToServer "5")
                         (ServerEvent WelcomePrompt) -> yield (SendToServer "")
                         _ -> login
 
-ddo :: Monad m => Text -> Pipe Event Event m ()
-ddo = Pipes.yield . SendToServer
 checkCases mob = Pipes.yield (SendToServer "смотр") *> (mapM_ (ddo) . fmap (<> " " <> mob) $ ["благословить", "думать", "бояться", "бухать", "хваст", "указать"])
 identifyNameCases :: Set (ObjRef Mob InRoomDesc) ->  Map Text Text -> Pipe Event Event IO ()
 identifyNameCases knownMobs aliases =
@@ -128,45 +126,7 @@ identifyNameCases knownMobs aliases =
     isKnown mob = S.member mob knownMobs
     getAlias mob = M.lookup (unObjRef mob) $ aliases
 
-findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
-findCurrentLoc = yield (SendToServer "смотреть") >> go
-  where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
-                             evt -> yield evt >> go
 
-travel :: MonadIO m => [Int] -> World -> Pipe Event Event (ExceptT Text m) ()
-travel path world = waitMove path False
-  where
-    waitMove [] _ = lift $ throwError "path lost"
-    waitMove [_] _ = pure ()
-    waitMove remainingPath@(from:to:xs) inAction =
-      await >>= \evt -> do
-      yield evt
-      case evt of
-        (ServerEvent newLoc@LocationEvent {}) ->
-          waitMove
-            (dropWhile (/= (_locationId $ _location newLoc)) remainingPath)
-            False
-        PulseEvent ->
-          if not inAction
-            then travelAction world from to >> waitMove remainingPath True
-            else waitMove remainingPath inAction
-        _ -> waitMove remainingPath inAction
-
-travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ()
-travelToLoc substr world = action findLocation
-  where
-    findLocation = findLocationsBy substr world
-    action [] = lift $ throwError "no matching locations found"
-    action [locTo] =
-      liftIO (putStrLn ("travelling to " <> showt locTo)) >>
-      travelAction locTo
-    action _ =
-      lift (throwError "multiple locations found")
-    travelAction to =
-      findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _ _) ->
-        case findTravelPath from to (_worldMap world) of
-          (Just path) -> travel path world
-          Nothing -> lift $ throwError "no path found"
 
 cover :: MonadIO m => World -> Pipe Event Event m ServerEvent
 cover world = trackBash >-> awaitFightBegin
@@ -285,10 +245,10 @@ killEmAll world = forever lootAll >-> awaitTargets [] False 0
     chooseTarget =
       preview (traversed . to findAlias . traversed . filtered (view _2) . _1)
 
-travelToMob :: MonadIO m => World -> ObjRef Mob Nominative -> Pipe Event Event (ExceptT Text m) (Int)
+travelToMob :: MonadIO m => World -> ObjRef Mob InRoomDesc -> Pipe Event Event (ExceptT Text m) (Int)
 travelToMob world mobNom = pipe mobArea
   where mobArea :: Maybe (Map (Int) Int)
-        mobArea = (_inRoomDescToMobOnMap world M.!?) =<< pure . _inRoomDesc . _nameCases =<< M.lookup mobNom (_nominativeToMob world)
+        mobArea = (_inRoomDescToMobOnMap world M.!?) =<< pure mobNom
         pipe (Just area)
           | M.size area < 1 = lift $ throwError "no habitation found"
           | M.size area > 1 = lift $ throwError "multiple habitation locations found"
@@ -389,3 +349,59 @@ runThree person@(personOut, personIn) task1 task2 task3 =
           pure ()
   where
     emitPulseEvery out = atomically $ void (PC.send out PulseEvent)
+
+
+waitMsg msg = await >>= \case
+  ServerEvent (UnknownServerEvent txt) -> if C8.isInfixOf msg txt then pure () else waitMsg txt
+  _ -> waitMsg msg
+
+
+travelAction :: MonadIO m => World -> Int -> Int -> Maybe (Pipe Event Event m ())
+travelAction world from to =
+  customTransition <|> transition 
+  where
+    customTransition :: MonadIO m => Maybe (Pipe Event Event m ())
+    customTransition = travelActions ^. at (from, to)
+    transition :: MonadIO m => Maybe (Pipe Event Event m ())
+    transition = ddo . genericShowt <$> (_directions world) ^. at (from, to)
+
+travel :: MonadIO m => [Int] -> World -> Pipe Event Event (ExceptT Text m) ()
+travel path world = waitMove path False
+  where
+    waitMove [] _ = lift $ throwError "path lost"
+    waitMove [_] _ = pure ()
+    waitMove remainingPath@(from:to:xs) inAction =
+      await >>= 
+      \case 
+        (ServerEvent newLoc@LocationEvent {}) ->
+          waitMove
+            (dropWhile (/= (_locationId $ _location newLoc)) remainingPath)
+            False
+        PulseEvent ->
+          if not inAction
+            then
+              case travelAction world from to of Nothing -> lift $ throwError "unknown transition"
+                                                 Just p -> p >> waitMove remainingPath True
+            else yield PulseEvent *> waitMove remainingPath inAction
+        _ -> waitMove remainingPath inAction
+
+travelToLoc :: MonadIO m => Text -> World -> Pipe Event Event (ExceptT Text m) ()
+travelToLoc substr world = action findLocation
+  where
+    findLocation = findLocationsBy substr world
+    action [] = lift $ throwError "no matching locations found"
+    action [locTo] =
+      liftIO (putStrLn ("travelling to " <> showt locTo)) >>
+      travelAction locTo
+    action _ =
+      lift (throwError "multiple locations found")
+    travelAction to =
+      findCurrentLoc >>= \currLocEvt@(LocationEvent (Event.Location from _) _ _ _ _) ->
+        case findTravelPath from to (_worldMap world) of
+          (Just path) -> travel path world
+          Nothing -> lift $ throwError "no path found"
+
+findCurrentLoc :: MonadIO m => Pipe Event Event m ServerEvent
+findCurrentLoc = yield (SendToServer "смотреть") >> go
+  where go = await >>= \case evt@(ServerEvent locEvt@LocationEvent{}) -> yield evt >> return locEvt
+                             evt -> yield evt >> go

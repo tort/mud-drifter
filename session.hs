@@ -12,7 +12,7 @@ g <- initPerson genod
 g & run $ login
 
 -- run quest
-loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ wellQuest world *> pure ())
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP . runReader world $ Quest.oldBoots *> Quest.whiteSpider *> Quest.fisherman *> Quest.well *>  travelToLoc "5000" *> pure ())
 
 -- roam
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (scanZoneEvent >-> PP.map (fromJust . fst) >-> mapNominatives knownMobs >-> killEmAll world >> pure ()) (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases)
@@ -20,45 +20,15 @@ loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo 
 -- explore
 loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> (g & run $ (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases))
 
+g & run $ yield (SendToServer "постой") >> yield (SendToServer "0")
+
 findTravelPath 6049 5000 <$> liftA2 buildMap loadCachedLocations loadCachedDirections
 
--- goto rent
-loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "6049" world *> pure ())
+-- travel covered
+loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runThree g (identifyNameCases (S.fromList . M.keys $ knownMobs) aliases) (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ travelToLoc "5000" world *> pure ())
 
-import Data.Maybe
-import qualified Pipes.Prelude as PP
-import qualified Pipes.Attoparsec as PA
-import qualified Data.Attoparsec.ByteString as A
-import qualified Data.Attoparsec.ByteString.Char8 as C
-import Text.Pretty.Simple
-import Pipes.Lift
-
-:{
-let wellQuest world =
-      travelToMob world (ObjRef "рогатый жук") *>
-      ddo "уб жук" *>
-      travelToLoc "6201" world *>
-      ddo "откр две" *>
-      travelToLoc "6233" world *>
-      ddo "отпер ящ" *>
-      waitMsg "Вы отперли ящик и открыли его." *>
-        ddo "взять все ящ" *>
-        travelToLoc "6219" world *>
-        ddo "отпер дверь" *>
-        ddo "откр дверь" *>
-        travelToLoc "6226" world *>
-        ddo "уб агресс" *>
-        travelToLoc "6236" world *>
-        ddo "держ ведро" *>
-        ddo "набрать воды в ведро" *>
-        travelToLoc "6039" world *>
-        ddo "прод все.улит" *>
-        travelToLoc "6049" world 
-    waitMsg msg = await >>= \case
-      ServerEvent (UnknownServerEvent txt) -> if C8.isInfixOf msg txt then pure () else waitMsg txt
-      _ -> waitMsg msg
-    rent = ddo "постой" *> ddo "0"
-:}
+ 
+rent = ddo "постой" *> ddo "0"
  
 loadCachedLocations >>= \locs -> loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> runTwo g (mapNominatives knownMobs locs >-> killEmAll world >> pure ()) (fmap (fromRight ()) . runExceptP $ wellQuest *> pure ())
 
@@ -119,13 +89,6 @@ g & run $ PP.print
 
 g & run $ yield (SendToServer "постой") >> yield (SendToServer "0")
 
-:{
-runE g $
-  travelToLoc bankLocation world >>
-  questWhiteSpider world >>
-  travelToLoc rentLocation world
-:}
-
 g & run $ forever await
 
 g & runE $ eatTillFull >> drinkTillFull
@@ -147,8 +110,6 @@ runE g $ travelToLoc bankLocation world >> travelToLoc "5100" world >> (killEmAl
 g & runE $ travelToLoc bankLocation world
 
 g & runE $ travelToLoc rentLocation world
-
-  >> yield (SendToServer "постой") >> yield (SendToServer "0")
 
 run g $ testParTasks world g
 

@@ -310,7 +310,7 @@ loadWorld currentDir customMobProperties = do
   questActions <- pure M.empty--(obstacleActions . binEvtLogParser . loadLogs) evtLogFiles
   obstaclesOnMap <- pure M.empty--obstaclesOnMap
   mobsData <- loadCachedMobData
-  let worldMap = buildMap (S.fromList . fmap (_zloc) . M.elems $ locationEvents) directions
+  let worldMap = buildMap (S.fromList . fmap (_zloc) . M.elems $ locationEvents) ((M.keys (travelActions @IO)) <> (M.keys directions))
    in return World { _worldMap = worldMap
                    , _locationEvents = locationEvents
                    , _directions = directions
@@ -417,9 +417,9 @@ parseServerEvents src = PA.parsed serverInputParser src >>= onEndOrError
         onEndOrError (Left (err, producer)) = (liftIO $ print "error when parsing") >> (yield $ ParseError $ errDesc err)
         errDesc (ParsingError ctxts msg) = "error: " <> C8.pack msg <> C8.pack (concat ctxts) <> "\n"
 
-buildMap :: Set Location -> Directions -> Gr () Int
+buildMap :: Set Location -> [(Int, Int)] -> Gr () Int
 buildMap locations directions = mkGraph nodes edges
-  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . fmap (\(l, r) -> (l, r)) $ M.keys directions
+  where edges = concat . fmap (\d -> [aheadEdge d, reverseEdge d]) . fmap (\(l, r) -> (l, r)) $ directions
         nodes = (\(Location (locId) _) -> (locId, ())) <$> (S.toList locations)
         aheadEdge (fromId, toId) = (fromId, toId, 1)
         reverseEdge (fromId, toId) = (toId, fromId, 1)
@@ -436,22 +436,6 @@ zoneMap world anyZoneLocId = mkGraph nodes edges
     dirInZone (lid, rid) = isInZone lid && isInZone rid
     isInZone locId = (div locId 100) == (div anyZoneLocId 100)
 
-travelActions :: Monad m => Map (Int, Int) (Pipe Event Event m ServerEvent)
-travelActions = M.fromList [ ((5104, 5117), setupLadder)
-                           , ((5052, 4064), payOldGipsy)
-                           , ((4064, 5052), payYoungGipsy)
-                           ]
-
-{-
-directionActions :: Monad m => World -> Map (LocationId, LocationId) RoomDir
-directionActions world = M.fromList $ directionVertexes <$> (S.toList $ _directions world)
-  where directionVertexes (Direction from to dir) = ((from, to), dir)
-        movePipe dir = await >>= \case PulseEvent -> yield (SendToServer dir) >> waitLocation
-                                       evt -> yield evt >> movePipe dir
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
-                                                                  _ -> waitLocation
--}
-
 openObstacle :: MonadIO m => World -> ServerEvent -> RoomDir -> Pipe Event Event m ()
 openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exits locEvt)
                                              then findObstacleName >>= removeObstacle
@@ -466,33 +450,6 @@ openObstacle world locEvt@LocationEvent{} dir = if L.elem (ClosedExit dir) (_exi
         obstaclesOnMap = _obstaclesOnMap world
         removeObstacle obstacle = await >>= \case PulseEvent -> yield (SendToServer $ "открыть " <> obstacle <> " " <> genericShowt dir)
                                                   evt -> yield evt >> removeObstacle obstacle
-
-travelAction :: MonadIO m => World -> Int -> Int -> Pipe Event Event m ()
-travelAction world from to = case M.lookup (from, to) (_directions world) of
-                                          Nothing -> return ()
-                                          (Just dir) -> yield (SendToServer . genericShowt $ dir)
-
-payOldGipsy :: Monad m => Pipe Event Event m ServerEvent
-payOldGipsy = move
-  where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
-                               evt -> yield evt >> move
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
-                                                                  _ -> waitLocation
-
-payYoungGipsy :: Monad m => Pipe Event Event m ServerEvent
-payYoungGipsy = move
-  where move = await >>= \case PulseEvent -> (yield $ SendToServer $ "дать 1 кун цыган") >> waitLocation
-                               evt -> yield evt >> move
-        waitLocation = await >>= \evt -> yield evt >> case evt of (ServerEvent locEvt@LocationEvent{}) -> return locEvt
-                                                                  _ -> waitLocation
-
-setupLadder :: Monad m => Pipe Event Event m ServerEvent
-setupLadder = (yield $ SendToServer "смотреть") >> waitLocEvt
-  where waitLocEvt = await >>= \evt -> yield evt >> checkItemRoomDescs evt
-        checkItemRoomDescs (ServerEvent locEvt@LocationEvent{}) = if elem (ObjRef "На полу лежит лестница.") (_objects locEvt)
-                                                                     then yield (SendToServer "приставить лестница") >> return locEvt
-                                                                     else return locEvt
-        checkItemRoomDescs _ = waitLocEvt
 
 binarizeServerLog :: IO ()
 binarizeServerLog =
@@ -587,3 +544,17 @@ renderLocation loc = showt id <> "\t" <> z <> "\t" <> title
         z = loc ^. zone
 
 mobData i = toListOf (ix i) . toList  <$> loadCachedMobData
+
+
+travelActions :: Monad m => Map (Int, Int) (Pipe Event Event m ())
+travelActions = M.fromList [ ((6201, 6202), ddo "откр дверца" *> ddo "восток")
+                           , ((5028, 5027), ddo "откр ворота" *> ddo "юг")
+                           , ((5027, 5028), ddo "откр ворота" *> ddo "север")
+                           , ((5102, 5107), ddo "откр дверь" *> ddo "север")
+                           , ((6219, 6223), ddo "отпер дверь" *> ddo "откр дверь" *> ddo "юг")
+                           , ((6053, 5054), ddo "держ свеч" *> ddo "дать 14 кун след" *> ddo "сн свеч")
+                           , ((5054, 6053), ddo "держ свеч" *> ddo "дать 14 кун след" *> ddo "сн свеч")
+                           ]
+
+ddo :: Monad m => Text -> Pipe Event Event m ()
+ddo = Pipes.yield . SendToServer

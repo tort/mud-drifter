@@ -47,15 +47,6 @@ showPath world (Just path) = render $ showDirection . lookupDir . toJust <$> nod
         toJust (Just left, Just right) = (left, right)
         lookupDir p = M.lookup p $ _directions world
 
-findTravelPath :: Int -> Int -> WorldMap -> Maybe Path
-findTravelPath (fromId) (toId) worldMap = (SP.sp fromId toId worldMap)
-
-findLocationsBy :: Text -> World -> [Int]
-findLocationsBy substr world = _locationId <$> locationsBy substr world
-
-locationsBy :: Text -> World -> [Location]
-locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . genericShowt) (_locationEvents world ^.. folded . zloc)
-
 sharePrefix :: Eq a => [a] -> [a] -> ([a], [a], [a])
 sharePrefix l1 l2 = let prefix = map fst $ takeWhile (uncurry (==)) $ zip l1 l2
                         f = drop $ length prefix
@@ -76,3 +67,13 @@ zonePath world anyZoneLocId = concat $  mergeTree $ listToPairs (reverse . fmap 
                                 privatePathBack [] = []
                                 privatePathBack (xs) = L.tail $ reverse $ lastCommonNode ++ xs
                                 in concat [ privatePathBack lPrivatePath, rPrivatePath ]
+
+
+findTravelPath :: Int -> Int -> WorldMap -> Maybe Path
+findTravelPath (fromId) (toId) worldMap = (SP.sp fromId toId worldMap)
+
+locationsBy :: Text -> World -> [Location]
+locationsBy substr world = filter (T.isInfixOf (T.toLower substr) . T.toLower . genericShowt) (_locationEvents world ^.. folded . zloc)
+
+findLocationsBy :: Text -> World -> [Int]
+findLocationsBy substr world = _locationId <$> locationsBy substr world
