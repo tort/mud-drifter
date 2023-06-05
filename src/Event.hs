@@ -77,6 +77,8 @@ instance Binary (ObjRef Mob Prepositional)
 instance Binary (ObjRef Mob InRoomDesc)
 instance Binary (ObjRef Mob Alias)
 instance Binary InventoryItem
+instance Binary GlanceDir
+instance Binary RoomView
 
 instance ToJSON (ObjRef Mob InRoomDesc)
 instance ToJSON (ObjRef Mob Nominative)
@@ -147,66 +149,87 @@ data Event = ConsoleInput ByteString
            deriving (Eq, Generic, Show)
 
 type EventBus = (Output Event, Input Event)
+data RoomView = Door Text | LocId Text [ObjRef Mob Nominative]
+  deriving (Eq, Show, Ord, Generic)
+  deriving TextShow  via FromGeneric RoomView
+data GlanceDir = GlanceDir { _roomDir :: RoomDir
+                           , _roomView :: RoomView
+                           }
+               deriving (Show, Eq, Generic, Ord)
+               deriving TextShow  via FromGeneric  GlanceDir
 
-data ServerEvent = CodepagePrompt
-                 | LoginPrompt
-                 | PasswordPrompt
-                 | WelcomePrompt
-                 | PostWelcome
-                 | LocationEvent { _location :: Location, _objects :: [ObjRef Item InRoomDesc], _mobs :: [ObjRef Mob InRoomDesc], _exits :: [RoomExit], _zone :: Maybe Text }
-                 | MoveEvent Text
-                 | DarknessEvent
-                 | UnknownServerEvent ByteString
-                 | ListEquipmentEvent [(EquippedItem, ItemState)]
-                 | ListInventoryEvent [(ObjRef Item Nominative, ItemState)]
-                 | ItemStatsEvent ItemStats
-                 | ShopListItemEvent (ObjRef Item Nominative) Price
-                 | PromptEvent Int Int
-                 | FightPromptEvent { _me :: ObjRef Mob Nominative, _target :: ObjRef Mob Nominative }
-                 | ObstacleEvent RoomDir Text
-                 | CantGoDir
-                 | CantSeeTarget
-                 | DarkInDirection RoomDir
-                 | GlanceEvent RoomDir Text [ObjRef Mob Nominative]
-                 | PickItemEvent (ObjRef Item Accusative)
-                 | ItemInTheRoom (ObjRef Item InRoomDesc)
-                 | LootItem (ObjRef Item Accusative) (ObjRef Mob Genitive)
-                 | LootMoney (ObjRef Mob Genitive)
-                 | TakeFromContainer (ObjRef Item Accusative) (ObjRef Item Genitive)
-                 | TakeInRightHand (ObjRef Item Accusative)
-                 | TakeInLeftHand (ObjRef Item Accusative)
-                 | TakeInBothHands (ObjRef Item Accusative)
-                 | MobGaveYouItem (ObjRef Mob Nominative) (ObjRef Item Accusative)
-                 | Drink Text Text
-                 | Eat Text
-                 | DrinkFromAbsentObject
-                 | ItemAbsent Text
-                 | NotHungry
-                 | NotThirsty
-                 | LiquidContainerIsEmpty
-                 | ExamineContainer { _name :: Text, _items :: [InventoryItem] }
-                 | MobRipEvent (ObjRef Mob Nominative)
-                 | ExpUpEvent
-                 | ImBashedEvent
-                 | MyStats Int Int
-                 | ParseError ByteString
-                 | IHitMobEvent (ObjRef Mob Accusative)
-                 | CheckNominative (ObjRef Mob Nominative)
-                 | CheckGenitive (ObjRef Mob Genitive)
-                 | CheckAccusative (ObjRef Mob Accusative)
-                 | CheckDative (ObjRef Mob Dative)
-                 | CheckInstrumental (ObjRef Mob Instrumental)
-                 | CheckPrepositional (ObjRef Mob Prepositional)
-                 | MobWentOut (ObjRef Mob Nominative)
-                 | MobWentIn (ObjRef Mob Nominative)
-                 | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
-                 | HitEventGenitive (ObjRef Mob Nominative) (ObjRef Mob Genitive)
-                 | HitEventDative (ObjRef Mob Nominative) (ObjRef Mob Dative)
-                 | MissEventNominative (ObjRef Mob Nominative) (ObjRef Mob Accusative)
-                 | MissEventGenitive (ObjRef Mob Nominative) (ObjRef Mob Genitive)
-                 | CastNominative (ObjRef Mob Nominative) (ObjRef Mob Genitive)
-                 | EndOfLogEvent
-                 deriving (Eq, Generic, Ord, Show)
+data ServerEvent
+  = CodepagePrompt
+  | LoginPrompt
+  | PasswordPrompt
+  | WelcomePrompt
+  | PostWelcome
+  | LocationEvent
+      { _location :: Location
+      , _objects :: [ObjRef Item InRoomDesc]
+      , _mobs :: [ObjRef Mob InRoomDesc]
+      , _exits :: [RoomExit]
+      , _zone :: Maybe Text
+      }
+  | MoveEvent Text
+  | DarknessEvent
+  | UnknownServerEvent ByteString
+  | ListEquipmentEvent [(EquippedItem, ItemState)]
+  | ListInventoryEvent [(ObjRef Item Nominative, ItemState)]
+  | ItemStatsEvent ItemStats
+  | ShopListItemEvent (ObjRef Item Nominative) Price
+  | PromptEvent Int Int
+  | FightPromptEvent
+      { _me :: ObjRef Mob Nominative
+      , _target :: ObjRef Mob Nominative
+      }
+  | ObstacleEvent RoomDir Text
+  | CantGoDir
+  | CantSeeTarget
+  | DarkInDirection RoomDir
+  | GlanceAround [GlanceDir]
+  | PickItemEvent (ObjRef Item Accusative)
+  | ItemInTheRoom (ObjRef Item InRoomDesc)
+  | LootItem (ObjRef Item Accusative) (ObjRef Mob Genitive)
+  | LootMoney (ObjRef Mob Genitive)
+  | TakeFromContainer (ObjRef Item Accusative) (ObjRef Item Genitive)
+  | TakeInRightHand (ObjRef Item Accusative)
+  | TakeInLeftHand (ObjRef Item Accusative)
+  | TakeInBothHands (ObjRef Item Accusative)
+  | MobGaveYouItem (ObjRef Mob Nominative) (ObjRef Item Accusative)
+  | Drink Text Text
+  | Eat Text
+  | DrinkFromAbsentObject
+  | ItemAbsent Text
+  | NotHungry
+  | NotThirsty
+  | LiquidContainerIsEmpty
+  | ExamineContainer
+      { _name :: Text
+      , _items :: [InventoryItem]
+      }
+  | MobRipEvent (ObjRef Mob Nominative)
+  | ExpUpEvent
+  | ImBashedEvent
+  | MyStats Int Int
+  | ParseError ByteString
+  | IHitMobEvent (ObjRef Mob Accusative)
+  | CheckNominative (ObjRef Mob Nominative)
+  | CheckGenitive (ObjRef Mob Genitive)
+  | CheckAccusative (ObjRef Mob Accusative)
+  | CheckDative (ObjRef Mob Dative)
+  | CheckInstrumental (ObjRef Mob Instrumental)
+  | CheckPrepositional (ObjRef Mob Prepositional)
+  | MobWentOut (ObjRef Mob Nominative)
+  | MobWentIn (ObjRef Mob Nominative)
+  | HitEvent (ObjRef Mob Nominative) (ObjRef Mob Accusative)
+  | HitEventGenitive (ObjRef Mob Nominative) (ObjRef Mob Genitive)
+  | HitEventDative (ObjRef Mob Nominative) (ObjRef Mob Dative)
+  | MissEventNominative (ObjRef Mob Nominative) (ObjRef Mob Accusative)
+  | MissEventGenitive (ObjRef Mob Nominative) (ObjRef Mob Genitive)
+  | CastNominative (ObjRef Mob Nominative) (ObjRef Mob Genitive)
+  | EndOfLogEvent
+  deriving (Eq, Generic, Ord, Show)
 
 data MobInTheRoom = MobDescRef { _unMobDescRef :: ObjRef Mob InRoomDesc } | MobNomRef { _unMobNomRef :: ObjRef Mob Nominative }
   deriving (Eq, Ord, Show, Generic)
@@ -323,3 +346,4 @@ makeLenses ''NameCases
 
 makePrisms ''ServerEvent
 makePrisms ''Event
+makePrisms ''RoomDir

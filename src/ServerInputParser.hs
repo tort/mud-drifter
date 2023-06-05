@@ -47,6 +47,7 @@ serverInputParser =
     , cantSeeTarget
     , mobWentIn
     , mobWentOut
+    , glanceAround
     {-
     , listEquipment
     , listInventory
@@ -881,21 +882,32 @@ postWelcome = do
     A.count 4 skipLine
     return PostWelcome
 
+glanceAround :: A.Parser ServerEvent
+glanceAround =
+  (string . encodeUtf8) "Вы посмотрели по сторонам." *> C.endOfLine *>
+  (GlanceAround <$> many glanceDir)
 
 
-glanceDir :: A.Parser ServerEvent
-glanceDir = do cs >> "0;33m"
-               dir <- direction
-               A.word8 _colon
-               cs >> "0;37m"
-               C.space
-               locTitle <- takeTill (C.isEndOfLine)
-               C.endOfLine
-               mobShortDescriptions <- (roomObjects "1;31m")
-               clearColors
-               let locationTitle = decodeUtf8 locTitle
-                   mobs = ObjRef <$> mobShortDescriptions
-                in return $ GlanceEvent dir locationTitle mobs
+glanceDir :: A.Parser GlanceDir
+glanceDir = do
+  cs *> C.string "0;33m"
+  dir <- direction
+  C.char ':'
+  cs *> C.string "0;37m"
+  C.space
+  door dir <|> neighborLoc dir
+  where
+    neighborLoc dir =
+      takeTill (C.isEndOfLine) >>= \locTitle ->
+        C.endOfLine *> cs *> string "1;31m" *> manyTill anyWord8 clearColors *>
+        pure (GlanceDir dir (LocId (decodeUtf8 locTitle) []))
+    door dir =
+      (string . encodeUtf8) " закрыто (" *>
+      many ((string . encodeUtf8) "вероятно ") *>
+      C.takeTill (== ')') >>= \doorName ->
+        C.char ')' *> C.char '.' *> C.endOfLine *>
+        (pure $ GlanceDir dir (Door . decodeUtf8 $ doorName))
+  --let locationTitle = decodeUtf8 neighborLoc
 
 locationParser :: A.Parser ServerEvent
 locationParser = do
@@ -1069,10 +1081,10 @@ move = do
 
 
 clearColors :: A.Parser ()
-clearColors = cs >> string "0;0m" >> return ()
+clearColors = cs *> string "0;0m" *> pure ()
 
 cs :: A.Parser ()
-cs = C.char '\ESC' >> C.char '[' >> return ()
+cs = C.char '\ESC' *> C.char '[' *> pure ()
 
 telnetEscape :: Word8
 telnetEscape = 0x1b

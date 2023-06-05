@@ -45,8 +45,11 @@ loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $
   fmap (preview (_Left . _2 . Control.Lens.to PP.toListM)) =<<
   PP.toListM'
     (PA.parsed
-    (hitEventGenitive)
-       (loadServerEvents "test/logs/miss-1.log"))
+    (
+      (string . encodeUtf8) "Вы посмотрели по сторонам." *> C.endOfLine *>
+      cs *> string "0;33m"
+    )
+       (loadServerEvents "test/logs/glanceAround.1.log"))
 :}
 
 :{
@@ -57,7 +60,7 @@ loadCachedMobAliases >>= \aliases -> loadCachedMobData >>= \knownMobs -> run g $
   PP.toListM'
     (PA.parsed
     (hitEventGenitive) 
-       (loadServerEvents "test/logs/hit-1.log"))
+       (loadServerEvents "test/logs/glanceAround.1.log"))
 :}
 
 runEffect (PP.mapM_ (pprint) <-< PA.parsed (serverInputParser) (loadServerEvents "test/logs/rent-location.log"))
