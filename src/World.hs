@@ -127,7 +127,7 @@ extractObjects :: Monad m => (ServerEvent -> a) -> Pipe ServerEvent a m ()
 extractObjects getter = PP.filter (has _LocationEvent) >-> PP.map getter
 
 isNominativeMob :: ObjRef Mob InRoomDesc -> Bool
-isNominativeMob (ObjRef mob) = 
+isNominativeMob (ObjRef mob) =
         (T.isSuffixOf " сражается с ВАМИ!") mob ||
         (T.isSuffixOf " отдыхает здесь.") mob ||
         (T.isSuffixOf " лежит здесь, при смерти.") mob ||
@@ -319,7 +319,7 @@ regroupTo :: (NameCases Mob -> ObjRef Mob b) -> Map (ObjRef Mob a) MobStats -> M
 regroupTo getter = groupByCase getter . fmap snd . M.toList
 
 nominativeToEverAttacked :: IO [(ObjRef Mob Nominative, Text)]
-nominativeToEverAttacked = 
+nominativeToEverAttacked =
   PP.toListM $
   PP.map fromJust <-<
   PP.filter isJust <-<
@@ -348,34 +348,33 @@ scanZone = PP.filter (\(evt, z) -> isJust evt && isJust z) <-< PP.scan action (N
 inRoomDescToMobCase :: Map Text Text -> Map Int ZonedLocation -> Set (ObjRef Mob Nominative, Text) -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
 inRoomDescToMobCase mobAliases locations everAttackedMobs =
   groupByCase _inRoomDesc <$>
-  (PP.toListM $ PP.map (fromJust) <-< PP.filter (isJust) <-<
-   PP.map windowToCases <-<
-   scanWindow 7 <-<
-   PP.filter isCheckCaseEvt <-<
-   archiveToServerEvents)
+  PP.toListM
+    (PP.map fromJust <-< PP.filter isJust <-< PP.map windowToCases <-<
+     scanWindow 7 <-<
+     PP.filter isCheckCaseEvt <-<
+     archiveToServerEvents)
   where
     windowToCases :: [ServerEvent] -> Maybe MobStats
     windowToCases [prep, instr, dat, acc, gen, nom, loc] =
-      (loc ^? _LocationEvent . _1 . locationId >>= \locId -> locations ^? at locId . traversed . zone) >>= \zone ->
-      MobStats <$>
-      (NameCases <$> (loc ^. mobs . to singleMob) <*> (nom ^? _CheckNominative) <*>
-       (gen ^? _CheckGenitive) <*>
-       (acc ^? _CheckAccusative) <*>
-       (dat ^? _CheckDative) <*>
-       (instr ^? _CheckInstrumental) <*>
-       (prep ^? _CheckPrepositional) <*>
-       (loc ^. mobs . to singleMob >>= \m -> mobAliases ^? at (unObjRef m) . traversed . to ObjRef)) <*>
-      (nom ^? _CheckNominative >>= \nom -> everAttackedMobs ^? contains (nom, zone)) <*>
-      (Just zone)
+      (loc ^? _LocationEvent . _1 . locationId >>= \locId ->
+         locations ^? at locId . traversed . zone) >>= \zone ->
+        MobStats <$>
+        (NameCases <$> (loc ^. mobs . to singleMob) <*>
+         (nom ^? _CheckNominative) <*>
+         (gen ^? _CheckGenitive) <*>
+         (acc ^? _CheckAccusative) <*>
+         (dat ^? _CheckDative) <*>
+         (instr ^? _CheckInstrumental) <*>
+         (prep ^? _CheckPrepositional) <*>
+         (loc ^. mobs . to singleMob >>= \m ->
+            mobAliases ^? at (unObjRef m) . traversed . to ObjRef)) <*>
+        (nom ^? _CheckNominative >>= \nom ->
+           everAttackedMobs ^? contains (nom, zone)) <*>
+        (Just zone)
     windowToCases _ = Nothing
     singleMob [] = Nothing
     singleMob [mob] = Just mob
     singleMob _ = Nothing
-    scanWindow n = PP.scan toWindow [] identity
-      where
-        toWindow acc event
-          | length acc < n = event : acc
-          | otherwise = event : take (n - 1) acc
     isCheckCaseEvt evt = has _LocationEvent evt || isCaseEvt evt
     isCaseEvt evt =
       has _CheckNominative evt || has _CheckGenitive evt ||
@@ -384,6 +383,26 @@ inRoomDescToMobCase mobAliases locations everAttackedMobs =
       has _CheckInstrumental evt ||
       has _CheckPrepositional evt
     defaultAlias = T.intercalate "." . T.words
+
+scanWindow n = PP.scan toWindow [] identity
+  where
+    toWindow acc event
+      | length acc < n = event : acc
+      | otherwise = event : take (n - 1) acc
+
+extractDoors =
+  PP.filter (isJust) <-< PP.map windowToLocWithGlance <-< scanWindow 2 <-<
+  PP.filter (\evt -> has _LocationEvent evt || has _GlanceAround evt) <-<
+  archiveToServerEvents
+  where
+    windowToLocWithGlance [locEvt, glanceAroundEvt] =
+      if anyOf (_GlanceAround . folded . roomView) (has _Door) glanceAroundEvt
+        then liftA2
+               (,)
+               (locEvt ^? _LocationEvent)
+               (glanceAroundEvt ^? _GlanceAround)
+        else Nothing
+    windowToLocWithGlance _ = Nothing
 
 mobsData :: Map Text Text -> Map Int ZonedLocation -> IO (Map (ObjRef Mob InRoomDesc) MobStats)
 mobsData mobsAliases locations = S.fromList <$> nominativeToEverAttacked >>= inRoomDescToMobCase mobsAliases locations

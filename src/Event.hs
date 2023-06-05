@@ -341,9 +341,12 @@ makeFieldsNoPrefix ''ServerEvent
 makeFieldsNoPrefix ''Event
 makeFieldsNoPrefix ''MobStats
 makeFieldsNoPrefix ''ZonedLocation
+makeFieldsNoPrefix ''GlanceDir
 
 makeLenses ''NameCases
 
 makePrisms ''ServerEvent
 makePrisms ''Event
 makePrisms ''RoomDir
+makePrisms ''RoomView
+makePrisms ''GlanceDir
